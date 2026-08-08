@@ -1830,24 +1830,85 @@ export default function StorePage() {
             {/* HERO SECTION */}
             <div className="relative bg-white pt-10 md:pt-16 pb-12 md:pb-20 border-b border-slate-100 overflow-hidden shrink-0">
                <div className="absolute inset-0 z-0 pointer-events-none">
-                  <div className="absolute -left-1/4 -top-1/4 w-[500px] h-[500px] bg-blue-100/40 rounded-full blur-3xl mix-blend-multiply" />
-                  <div className="absolute top-1/4 -right-1/4 w-[400px] h-[400px] bg-amber-100/40 rounded-full blur-3xl mix-blend-multiply" />
+                  <div className="absolute -left-1/4 -top-1/4 w-[500px] h-[500px] bg-blue-100/30 rounded-full blur-3xl mix-blend-multiply" />
+                  <div className="absolute top-1/4 -right-1/4 w-[400px] h-[400px] bg-amber-100/30 rounded-full blur-3xl mix-blend-multiply" />
                </div>
-               <div className="max-w-6xl mx-auto px-6 relative z-10 text-center">
-                  <span className="text-blue-600 bg-blue-50 px-3 py-1.5 rounded-full text-[10px] font-bold tracking-widest uppercase mb-4 inline-block">تألق ولمعان مستدام</span>
-                  <h2 className="text-3xl md:text-5xl font-black text-slate-900 mb-6 leading-tight max-w-3xl mx-auto">
-                    مرحباً بك في عالم <span className="text-amber-500 font-sans">GOLD CLEAN</span><br />لمواد التنظيف الفاخرة
-                  </h2>
-                  <p className="text-slate-500 text-sm md:text-base max-w-2xl mx-auto mb-8 leading-relaxed">
-                    خيارات متعددة وجودة عالية. نوفر لك كافة مستلزمات التنظيف والتعقيم للمنازل والمكاتب بأفضل الأسعار وأسرع طرق التوصيل في جميع الدول العربية.
-                  </p>
-                  <button 
-                    onClick={() => setCurrentTab('products')}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3.5 rounded-xl text-sm font-bold shadow-lg shadow-blue-600/20 transition-all hover:scale-105 cursor-pointer inline-flex items-center gap-2"
-                  >
-                    <span>تصفح منتجاتنا الآن</span>
-                    <span className="text-lg leading-none">&larr;</span>
-                  </button>
+               <div className="max-w-6xl mx-auto px-6 relative z-10">
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-8 md:gap-12 items-center">
+                    
+                    {/* Right Column: Text Content */}
+                    <div className="md:col-span-7 text-center md:text-right order-2 md:order-1">
+                      <motion.span 
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5 }}
+                        className="text-blue-600 bg-blue-50 px-3.5 py-1.5 rounded-full text-xs font-black tracking-wider mb-5 inline-block"
+                      >
+                        ✨ النظافة اللي تستاهليها.. بسهولة وأمان!
+                      </motion.span>
+                      
+                      <motion.h2 
+                        initial={{ opacity: 0, y: 15 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5, delay: 0.1 }}
+                        className="text-3xl md:text-5xl font-black text-slate-900 mb-6 leading-tight"
+                      >
+                        مرحباً بكِ في عالم <br />
+                        <span className="bg-gradient-to-r from-amber-500 to-yellow-600 bg-clip-text text-transparent font-sans">GOLD CLEAN</span>
+                        <br />
+                        للمنظفات الفاخرة وعالية الجودة
+                      </motion.h2>
+                      
+                      <motion.p 
+                        initial={{ opacity: 0, y: 15 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5, delay: 0.2 }}
+                        className="text-slate-600 text-sm md:text-base mb-8 leading-relaxed max-w-xl mx-auto md:mx-0 font-semibold"
+                      >
+                        نحن في <strong className="text-slate-800">جولد كلين</strong> نوفر لكِ خيارات متعددة وجودة استثنائية لجميع مستلزمات التنظيف والتعقيم للمنازل والمكاتب. تركيباتنا الفعالة تمنحكِ النظافة العميقة وحماية تدوم طويلاً وبأفضل الأسعار.
+                      </motion.p>
+                      
+                      <motion.div 
+                        initial={{ opacity: 0, y: 15 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5, delay: 0.3 }}
+                        className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start"
+                      >
+                        <button 
+                          onClick={() => setCurrentTab('products')}
+                          className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3.5 rounded-xl text-sm font-bold shadow-lg shadow-blue-600/20 transition-all hover:scale-105 cursor-pointer inline-flex items-center justify-center gap-2"
+                        >
+                          <span>تصفح منتجاتنا الآن</span>
+                          <span className="text-lg leading-none">&larr;</span>
+                        </button>
+                        
+                        <button 
+                          onClick={() => setCurrentTab('about')}
+                          className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-8 py-3.5 rounded-xl text-sm font-bold transition-all hover:scale-105 cursor-pointer inline-flex items-center justify-center gap-2"
+                        >
+                          <span>تعرّف على مصنعنا</span>
+                        </button>
+                      </motion.div>
+                    </div>
+
+                    {/* Left Column: Image Container */}
+                    <div className="md:col-span-5 order-1 md:order-2 flex justify-center">
+                      <motion.div 
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.6, delay: 0.2 }}
+                        className="relative max-w-[280px] sm:max-w-[320px] md:max-w-full rounded-3xl overflow-hidden shadow-xl border-4 border-white bg-slate-50 transition-all duration-500 hover:shadow-blue-200/50 group"
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900/10 via-transparent to-transparent opacity-60 z-10 pointer-events-none" />
+                        <img 
+                          src="/images/Halal.jpeg" 
+                          alt="جولد كلين - النظافة اللي تستاهليها" 
+                          className="w-full h-auto object-cover max-h-[420px] md:max-h-[500px] transition-transform duration-750 group-hover:scale-103"
+                        />
+                      </motion.div>
+                    </div>
+                    
+                  </div>
                </div>
             </div>
 

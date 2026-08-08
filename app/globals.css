@@ -1,7 +1,12 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap');
+
+:root {
+  --font-cairo: 'Cairo', system-ui, -apple-system, sans-serif;
+}
 
 html, body {
-  font-family: var(--font-cairo), system-ui, -apple-system, sans-serif;
+  font-family: var(--font-cairo);
   scroll-behavior: smooth;
   background-color: #F8FAFC;
 }
