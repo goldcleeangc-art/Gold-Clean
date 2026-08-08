@@ -688,7 +688,7 @@ export default function StorePage() {
           quantity: item.quantity,
           price: item.product.price
         })),
-        totalPrice: getSubtotal() + 15, // 15 EGP standard delivery
+        totalPrice: getSubtotal(), // Shipping cost determined by shipping company
         status: 'pending',
         createdAt: serverTimestamp(),
         userId: user.uid,
@@ -2530,13 +2530,9 @@ export default function StorePage() {
                       <span>إجمالي المنتجات ({cart.reduce((c, i) => c + i.quantity, 0)})</span>
                       <span>{getSubtotal().toFixed(2)} جنيه</span>
                     </div>
-                    <div className="flex justify-between text-slate-500">
-                      <span>الشحن والتوصيل للمنزل</span>
-                      <span>15.00 جنيه</span>
-                    </div>
                     <div className="flex justify-between text-slate-900 font-bold pt-2 border-t border-slate-200">
                       <span>المبلغ المستحق</span>
-                      <span className="text-blue-600 text-sm">{(getSubtotal() + 15).toFixed(2)} جنيه</span>
+                      <span className="text-blue-600 text-sm">{getSubtotal().toFixed(2)} جنيه</span>
                     </div>
                   </div>
 
@@ -2606,6 +2602,7 @@ export default function StorePage() {
                     <p><strong>اسم العميل:</strong> {successOrder.customerName}</p>
                     <p><strong>طريقة الدفع:</strong> نقدي عند التوصيل للمنزل (COD)</p>
                     <p><strong>المبلغ المستحق للدفع:</strong> {successOrder.totalPrice.toFixed(2)} جنيه</p>
+                    <p className="text-[10px] text-slate-400">لا تشمل مصاريف الشحن (تُحدد من شركة الشحن)</p>
                   </div>
 
                   <button 
@@ -2705,9 +2702,9 @@ export default function StorePage() {
                   <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 flex items-center justify-between">
                     <div>
                       <p className="font-extrabold text-blue-600 mb-0.5">القيمة الإجمالية للطلب:</p>
-                      <p className="text-[10px] text-slate-400">بما فيها رسوم التوصيل السريع للمنزل</p>
+                      <p className="text-[10px] text-slate-400">لا تشمل مصاريف الشحن (تُحدد من شركة الشحن)</p>
                     </div>
-                    <span className="text-base font-black text-slate-950">{(getSubtotal() + 15).toFixed(2)} جنيه</span>
+                    <span className="text-base font-black text-slate-950">{getSubtotal().toFixed(2)} جنيه</span>
                   </div>
 
                   <button 
