@@ -1,0 +1,1085 @@
+Interface Description
+
+Customers who have signed a contract with the platform can create/modify orders through this interface. The current order creation interface supports order modification, that is, if the customer order number (txlogisticId) already exists and the corresponding order has not been collected, directly modify the existing order. If the recipient address changes, get the latest three-segment code/big end return;
+
+Interface information
+
+Test address:https://demoopenapi.jtjms-eg.com/webopenplatformapi/api/order/addOrder?uuid=bf7d84474a0a42128fe4d2d5f15ee674
+
+Official address:https://openapi.jtjms-eg.com/webopenplatformapi/api/order/addOrder
+
+Test apiAccount:292508153084379141
+
+Test privateKey:a0a1047cce70493c9d5d29704f05d0d9
+
+Request method:POST
+
+type of data:X-WWW-FORM-URLENCODED
+
+Response type:JSON
+
+Parameter Description
+Headers
+apiAccount
+	
+Number
+	
+Y
+	
+	
+The api account ID of the access party on the platform
+digest
+	
+String
+	
+Y
+	
+	
+Signature string
+timestamp
+	
+Number
+	
+Y
+	
+	
+Timestamp, milliseconds
+Request parameter
+bizContent
+	
+String
+	
+Y
+	
+Business parameters
+	
+The string type in json format in the business parameter module
+Business parameters
+customerCode
+	
+String(30)
+	
+Y
+	
+J0086024138
+	
+Customer code (provided by contacting the shipping outlet)
+digest
+	
+String(50)
+	
+Y
+	
+Clear text password: KO6w29g2
+	
+Signature, Base64 (Md5 (customer number + cipher text + privateKey)), where the cipher text: MD5 (plain text password + jadada236t2) followed by uppercase
+network
+	
+String(30)
+	
+N
+	
+	
+Cooperation outlets
+txlogisticId
+	
+String(50)
+	
+Y
+	
+	
+Customer order number (pass the order number of the customer’s own system)
+expressType
+	
+String(30)
+	
+Y
+	
+	
+Express type: only supports "EZ"
+deliveryType
+	
+String(30)
+	
+Y
+	
+	
+Delivery type:
+04 home delivery
+payType
+	
+String(30)
+	
+N
+	
+	
+Payment method: PP_PM ("Send Payment Monthly"), PP_CASH ("Cash on post");
+sender
+	
+Object
+	
+Y
+	
+	
+Shipment information object
+receiver
+	
+Object
+	
+Y
+	
+	
+Receiving information object
+sendStartTime
+	
+String(30)
+	
+N
+	
+	
+Logistics company pick-up start time yyyy-MM-dd HH:mm:ss
+sendEndTime
+	
+String(30)
+	
+N
+	
+	
+Customer logistics company's door-to-door pick-up end time yyyy-MM-dd HH:mm:ss
+goodsType
+	
+String(30)
+	
+Y
+	
+	
+Item type (corresponding to the item type of the order master list):
+
+ITN1 Clothes
+
+ITN2 Document
+
+ITN3 Food
+
+ITN5 Digital product
+
+ITN6 Daily necessities
+
+ITN7 Fragile Items
+
+ITN8 Tools
+
+ITN9 Stationery
+
+ITN10 Furniture
+
+ITN11 Certificate
+
+ITN12 Machine Parts
+
+ITN13 handicraft
+
+ITN14 Production Materials
+
+ITN15 Books
+
+ITN16 Others
+weight
+	
+String(12)
+	
+Y
+	
+0.02
+	
+Weight, unit kg, range 0.01-30
+totalQuantity
+	
+int(4)
+	
+Y
+	
+	
+Total number of tickets for the package (must be 1)
+fodMoney
+	
+String(14)
+	
+N
+	
+	
+Freight on delivery amount (numeric type)
+itemsValue
+	
+String(12)
+	
+N
+	
+	
+Amount of payment (numeric)
+priceCurrency
+	
+String(32)
+	
+N
+	
+	
+The currency of the collection payment (default local currency, such as: EGP)
+offerFee
+	
+String(12)
+	
+N
+	
+	
+Insured amount (numerical type), unit: EGP
+remark
+	
+String(200)
+	
+N
+	
+	
+Remark
+items
+	
+Object
+	
+N
+	
+	
+Product information list
+customsInfo
+	
+Object
+	
+N
+	
+	
+Customer Information
+operateType
+	
+int(4)
+	
+Y
+	
+	
+In the event, the customer fills in "Add" to add an order; if the customer submits "Update", then an order is updated.
+
+1 Adding
+
+2 Modifying
+expectDeliveryStartTime
+	
+String(20)
+	
+N
+	
+	
+Expected delivery start time
+expectDeliveryEndTime
+	
+String(20)
+	
+N
+	
+	
+Expected delivery end time
+exdrDescription
+	
+String(500)
+	
+N
+	
+	
+EXDR Description
+pickInfo
+	
+String(500)
+	
+N
+	
+Iphone 15 pro max 512GB *1; Air pods *1; Bag *1
+	
+Pickup items information
+sender type description
+name
+	
+String(50)
+	
+Y
+	
+	
+Sender name
+company
+	
+String(100)
+	
+N
+	
+	
+Shipping company
+postCode
+	
+String(32)
+	
+N
+	
+	
+Shipping zip code
+mailBox
+	
+String(150)
+	
+N
+	
+	
+Sending mailbox
+mobile
+	
+String(11)
+	
+Y
+	
+	
+Sending mobile phone (required to choose one of mobile phone and phone)）
+phone
+	
+String(11)
+	
+Y
+	
+	
+Sending phone number (required to choose one of mobile phone and phone)
+countryCode
+	
+String(20)
+	
+Y
+	
+	
+Three-character country code of sending country ( Egypt =EGY, Indonesia=IDN, China=CHN)
+prov
+	
+String(60)
+	
+Y
+	
+	
+Sending province
+city
+	
+String(60)
+	
+Y
+	
+	
+Sending city
+area
+	
+String(60)
+	
+Y
+	
+	
+Shipping area
+street
+	
+String(200)
+	
+Y
+	
+	
+Sending street
+building
+	
+String(20)
+	
+N
+	
+	
+building No
+floor
+	
+String(20)
+	
+N
+	
+	
+floor
+flats
+	
+String(20)
+	
+N
+	
+	
+room number
+longitude
+	
+Number
+	
+N
+	
+	
+longitude
+latitude
+	
+Number
+	
+N
+	
+	
+latitude
+Receiver type description
+name
+	
+String(50)
+	
+Y
+	
+	
+The recipient's name
+company
+	
+String(100)
+	
+N
+	
+	
+receiver
+postCode
+	
+String(32)
+	
+N
+	
+	
+Receiving postal code
+mailBox
+	
+String(150)
+	
+N
+	
+	
+Receiving mailbox
+mobile
+	
+String(11)
+	
+Y
+	
+	
+Receiving mobile phone (required to choose one of mobile phone and phone)
+phone
+	
+String(11)
+	
+Y
+	
+	
+Receiving phone number (required to choose one of mobile phone and phone)
+countryCode
+	
+String(20)
+	
+Y
+	
+	
+Three-character code of recipient country ( Egypt =EGY, Indonesia=IDN, China=CHN)
+prov
+	
+String(60)
+	
+Y
+	
+	
+Receiving province
+city
+	
+String(60)
+	
+Y
+	
+	
+Receiving city
+area
+	
+String(60)
+	
+Y
+	
+	
+Receiving area
+street
+	
+String(200)
+	
+Y
+	
+	
+Receiving street
+building
+	
+String(20)
+	
+N
+	
+	
+building No
+floor
+	
+String(20)
+	
+N
+	
+	
+floor
+flats
+	
+String(20)
+	
+N
+	
+	
+room number
+longitude
+	
+Number
+	
+N
+	
+	
+longitude
+latitude
+	
+Number
+	
+N
+	
+	
+latitude
+Item type description
+itemType
+	
+String(30)
+	
+N
+	
+	
+Item type:
+
+ITN1 Clothes
+
+ITN2 Document
+
+ITN3 Food
+
+ITN5 Digital product
+
+ITN6 Daily necessities
+
+ITN7 Fragile Items
+
+ITN8 Tools
+
+ITN9 Stationery
+
+ITN10 Furniture
+
+ITN11 Certificate
+
+ITN12 Machine Parts
+
+ITN13 handicraft
+
+ITN14 Production Materials
+
+ITN15 Books
+
+ITN16 Others
+itemName
+	
+String(30)
+	
+N
+	
+	
+Item Name
+chineseName
+	
+String(60)
+	
+N
+	
+	
+Chinese name of the item
+englishName
+	
+String(60)
+	
+N
+	
+	
+English name of the item
+number
+	
+int(4)
+	
+N
+	
+	
+Number of cases, ≤ 1
+itemValue
+	
+String(20)
+	
+N
+	
+	
+Declared value (numerical type)
+priceCurrency
+	
+String(20)
+	
+N
+	
+	
+Declare the payment currency (default domestic currency, such as: EGP)
+desc
+	
+String(100)
+	
+N
+	
+	
+item description
+itemUrl
+	
+String(100)
+	
+N
+	
+	
+Product URL
+customsInfo type description
+count
+	
+Number(5)
+	
+N
+	
+	
+The quantity of goods needs to be filled in for cross-border customs declaration
+unit
+	
+String(30)
+	
+N
+	
+	
+Cargo unit, such as: unit, Taiwan, this, cross-border cargo declaration needs to be filled in
+sourceArea
+	
+String(5)
+	
+N
+	
+	
+Country of origin, cross-border customs declaration needs to be filled in
+productRecordNo
+	
+String(18)
+	
+N
+	
+	
+National inspection record number of goods and products, cross-border customs declaration needs to be filled in
+goodPrepardNo
+	
+String(100)
+	
+N
+	
+	
+Commodity customs record number
+taxNo
+	
+String(100)
+	
+N
+	
+	
+Commodity postal tax number is required for cross-border customs declaration
+hsCode
+	
+String(100)
+	
+N
+	
+	
+Customs code is required for cross-border customs declaration
+goodsCode
+	
+String(60)
+	
+N
+	
+	
+Commodity No. Cross-border customs declaration needs to be filled in
+brand
+	
+String(60)
+	
+N
+	
+	
+Cargo brand cross-border customs declaration needs to be filled in
+specifications
+	
+String(60)
+	
+N
+	
+	
+Cargo specifications and models, cross-border cargo declarations need to be filled in
+manufacturer
+	
+String(100)
+	
+N
+	
+	
+Manufacturers need to fill in cross-border customs declaration
+cargoDeclaredValue
+	
+Double (16,5)
+	
+N
+	
+	
+The declared value of the consignment is required for cross-border customs declaration
+declaredValueDeclaredCurrency
+	
+String(5)
+	
+N
+	
+	
+Consignment declared value currency, cross-border customs declaration needs to be filled in
+customerFreight
+	
+String(100)
+	
+N
+	
+	
+The freight paid by the customer is required for cross-border customs declaration
+
+Message description
+Response parameters
+code
+	
+String
+	
+Y
+	
+	
+Return code, see appendix
+msg
+	
+String
+	
+Y
+	
+	
+describe
+data
+	
+Object
+	
+Y
+	
+	
+Business data
+Data type description
+lastCenterName
+	
+String
+	
+N
+	
+	
+Collection land
+txlogisticId
+	
+String
+	
+Y
+	
+	
+Return customer order number
+createOrderTime
+	
+String
+	
+Y
+	
+	
+Order creation time yyyy-MM-dd HH:mm:ss
+sortingCode
+	
+String
+	
+Y
+	
+	
+Three-segment code (get the three-segment code first to return to the three-segment code, if there is no three-segment code, return to the big pen)
+sumFreight
+	
+String
+	
+N
+	
+	
+Refer to the total freight (numerical type)
+
+Request example
+"Header：
+apiAccount=292508153084379141
+digest=we0A7iThtk0558LsyDn3DQ==
+timestamp=1647413624337
+
+Body：
+bizContent={
+'customerCode': 'J0086024138',
+'digest': 'wapT8IYOjNeViOL5eZupEg==',
+'deliveryType': '04',
+'payType': 'PP_PM',
+'expressType': 'EZ',
+'network': '',
+'sendStartTime': '2022-03-17 14:53:44',
+'weight': 5.02,
+'remark': 'test',
+'invoceNumber': '231321354564654',
+'packingNumber': '1313213254564564df',
+'batchNumber': '',
+'txlogisticId': 'EGYUAT72504945102',
+'billCode': '',
+'operateType': 1,
+'goodsType': 'ITN1',
+'totalQuantity': '1',
+'receiver': {
+'area': 'الصبحه',
+'address':
+'sdfsacdscdscdsa',
+'addressBak': 'receivercdsfsafdsaf lkhdlksjlkfjkndskjfnhskjlkafdslkjdshflksjal',
+'town': '',
+'city': 'القوصية',
+'mobile': '1441234567843543543554311143',
+'mailBox': 'ant_li123@qq.com',
+'phone': '23423423423445',
+'countryCode': 'EGY',
+'name': 'test_receiverkjcbdskfk4kjcbdskfksdsfdsf',
+'alternateReceiverPhoneNo': '12-31321322',
+'company': 'guangdongshengshenzhenshizhuantayigeyidianzishiyeyouxianggongsi',
+'postCode': '54830',
+'prov': 'أسيوط',
+'areaCode': '2342343',
+'building': '13',
+'floor': '25',
+'flats': '47',
+},
+'sender': {
+'area': 'حي الزهور',
+'street': 'street122',
+'city': 'الزقازيق',
+'mobile': '1441234567843543543554311143',
+'mailBox': 'ant_li12345678901234567890@qq.com',
+'phone': '1441234567843543543554311143',
+'countryCode': 'MEX',
+'name': 'test_senderkjcbdskfksfks_sfjd4kjcbdskfksdsfdsf',
+'company': 'sendercompanyfhskafoiljsd fjsjfdsjldfsafdsf sdlcjldsjflsak7834793274ncllsdjfljfldsnnnnnnnnnnnnnnnnnnnnnnnnnnnkjchlksdfldscnsdlkfsklflsajlkfjlkdsjlajflkdcn,smdfnaskldlsdlfsalkanlflsajl fkjsdlcngjgjajdfhfkdscnbskfkjsahkcmnsutwuertuyewrabhdbsfskjfkbcsbfbkjsghkflald',
+'postCode': '16880',
+'prov': 'الشرقية',
+'areaCode': '324234',
+'building': '13',
+'floor': '25',
+'flats': '47'
+},
+'width': 10,
+'offerFee': 23,
+'items': [{
+'englishName': 'test',
+'number': 1,
+'itemType': 'ITN1',
+'itemName': 'file type',
+'priceCurrency': 'DHS',
+'itemValue': '2000',
+'chineseName': 'test_order',
+'itemUrl': 'http://www.baidu.com',
+'desc': 'test_order'},
+{
+'englishName': 'test',
+'number': 1,
+'itemType': 'ITN1',
+'itemName': 'file type',
+'priceCurrency': 'DHS',
+'itemValue': '2000',
+'chineseName': 'test_order',
+'itemUrl': 'http://www.baidu.com',
+'desc': 'test_order'
+}],
+'sendEndTime': '2022-03-18 14:53:44',
+'height': 60}"
+
+Return example
+{
+code:"1"
+msg:"success"
+data:{
+txlogisticId:"EGYUAT72504945102"
+billCode:"UEG000000191681"
+sortingCode:"20,J01-01,000"
+createOrderTime:"2022-03-16 08:53:45"
+lastCenterName:"10thRamadanCityHub"
+}
+}
+
+Error code
+1
+	
+success
+0
+	
+fail
+145003030
+	
+headers signature verification failed
+145003040
+	
+Internal call exception
+145003071
+	
+apiAccount is empty!
+145003052
+	
+digest is empty!
+145003053
+	
+timestamp is empty!
+145005000
+	
+System error
+145003050
+	
+Illegal parameters
+145003031
+	
+Business parameter signature verification failed
+145003042
+	
+Order modification failed
+145003060
+	
+Illegal region
+145003061
+	
+Illegal city
+145003062
+	
+Illegal province
+145003064
+	
+Data not found
+145003041
+	
+der placement failed
+145003083
+	
+Incomplete sender information
+145002001
+	
+Duplicate order, don't place the order repeatedly!
+145003084
+	
+Incomplete recipient information
+145003085
+	
+Phone number cannot be empty
+145003086
+	
+Incomplete address information
+145003087
+	
+Please check whether the order type, service type, delivery type, item type, shipment type and settlement method are legal
+145003200
+	
+Please check if the service type is legal with the value of 01 or 02
+145003088
+	
+Incomplete service time information
+145003092
+	
+The weight information is not legal
+145003093
+	
+Incomplete item information
+145003094
+	
+Incomplete item name
+145003095
+	
+Incomplete item type
+145003101
+	
+Customer order number already exists, cannot place an order!
+145003103
+	
+Illegal name information
+145003104
+	
+Company information is too long
+145003105
+	
+Contact information is too long
+145003106
+	
+Postcode or email address is illegal
+145003107
+	
+Price information is illegal
+145003108
+	
+Comments, descriptions, links are illegal
+145003109
+	
+Too much address information
+145003110
+	
+Street information is too long
+145003111
+	
+The total number of parcels is invalid
+145003112
+	
+Not yet open COD business
+145003113
+	
+The payment method does not match,PP_CASH,CC_CASH,PP_MM
+145003201
+	
+Picked up status can not be modified
+145003202
+	
+Cancelled status can not be modified
+145003203
+	
+Update order failed, please try again later!
+145003083
+	
+Incomplete information of origin
+145003084
+	
+Incomplete information of receiving place

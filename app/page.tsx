@@ -37,7 +37,9 @@ import {
   Users,
   Link2,
   Flame,
-  Percent
+  Percent,
+  Send,
+  RefreshCw
 } from 'lucide-react';
 import { db, auth, googleProvider } from '../lib/firebase';
 import { 
@@ -119,6 +121,16 @@ interface CartItem {
   };
 }
 
+interface ShippingInfo {
+  billCode?: string;
+  sortingCode?: string;
+  courier?: string;
+  status?: string;
+  txlogisticId?: string;
+  syncedAt?: any;
+  error?: string;
+}
+
 interface Order {
   id?: string;
   customerName: string;
@@ -138,6 +150,7 @@ interface Order {
   createdAt: any;
   userId?: string;
   customerEmail?: string;
+  shippingInfo?: ShippingInfo;
 }
 
 // Initial seed if Firebase collection is completely empt
@@ -252,6 +265,7 @@ export default function StorePage() {
     notes: ''
   });
   const [orderInProgress, setOrderInProgress] = useState<boolean>(false);
+  const [syncingOrderId, setSyncingOrderId] = useState<string | null>(null);
   const [successOrder, setSuccessOrder] = useState<Order | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -817,9 +831,44 @@ export default function StorePage() {
         customerEmail: user.email || ''
       };
 
+      // 1. Record order in Firestore
       const docRef = await addDoc(collection(db, 'orders'), orderPayload);
+
+      // 2. Transmit to J&T Express Shipping Logistics API
+      try {
+        const shippingRes = await fetch('/api/shipping/create-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId: docRef.id,
+            customerName: checkoutForm.name,
+            customerPhone: checkoutForm.phone,
+            customerCity: checkoutForm.city,
+            customerAddress: checkoutForm.address,
+            notes: checkoutForm.notes,
+            items: orderPayload.items,
+            totalPrice: orderPayload.totalPrice
+          })
+        });
+        const shippingData = await shippingRes.json();
+        if (shippingData && (shippingData.billCode || shippingData.success)) {
+          const shippingInfoData: ShippingInfo = {
+            billCode: shippingData.billCode || '',
+            sortingCode: shippingData.sortingCode || '',
+            courier: 'J&T Express',
+            status: 'created',
+            txlogisticId: shippingData.txlogisticId || docRef.id,
+            syncedAt: new Date().toISOString()
+          };
+          await updateDoc(doc(db, 'orders', docRef.id), {
+            shippingInfo: shippingInfoData
+          });
+          orderPayload.shippingInfo = shippingInfoData;
+        }
+      } catch (shippingErr) {
+        console.error('Shipping API sync during checkout error:', shippingErr);
+      }
       
-      // No longer tracking stock numerically
       setSuccessOrder({ ...orderPayload, id: docRef.id });
       saveCart([]);
       setCheckoutForm({
@@ -835,6 +884,50 @@ export default function StorePage() {
       alert('حدث خطأ أثناء رفع الطلب لقاعدة البيانات.');
     } finally {
       setOrderInProgress(false);
+    }
+  };
+
+  // Manual or Re-Sync order with J&T Express API
+  const handleSyncOrderWithShipping = async (order: Order) => {
+    if (!order.id) return;
+    setSyncingOrderId(order.id);
+    try {
+      const res = await fetch('/api/shipping/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: order.id,
+          customerName: order.customerName,
+          customerPhone: order.customerPhone,
+          customerCity: order.customerCity,
+          customerAddress: order.customerAddress,
+          notes: order.notes,
+          items: order.items,
+          totalPrice: order.totalPrice
+        })
+      });
+      const data = await res.json();
+      if (data && (data.billCode || data.success)) {
+        const shippingInfoData: ShippingInfo = {
+          billCode: data.billCode || '',
+          sortingCode: data.sortingCode || '',
+          courier: 'J&T Express',
+          status: 'created',
+          txlogisticId: data.txlogisticId || order.id,
+          syncedAt: new Date().toISOString()
+        };
+        await updateDoc(doc(db, 'orders', order.id), {
+          shippingInfo: shippingInfoData
+        });
+        alert(`تم إرسال الطلب لشركة الشحن J&T Express بنجاح!\nرقم بوليصة الشحن والتتبع: ${data.billCode || data.txlogisticId || 'مسجل'}`);
+      } else {
+        alert(`رد شركة الشحن J&T Express: ${data.msg || data.error || 'لم يتم إصدار البوليصة'}`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert('حدث خطأ أثناء الاتصال بواجهة شركة الشحن J&T Express');
+    } finally {
+      setSyncingOrderId(null);
     }
   };
 
@@ -1527,10 +1620,41 @@ export default function StorePage() {
                                     </li>
                                   ))}
                                 </ul>
-                                {ord.notes && (
+                               {ord.notes && (
                                   <div className="text-rose-600 mt-2 text-[10px] bg-rose-50/50 p-2 rounded-lg border border-rose-100/30">
                                     <strong>ملاحظة العميل:</strong> {ord.notes}
                                   </div>
+                                )}
+                              </div>
+
+                              {/* J&T Express Shipping Integration Section */}
+                              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-1.5 font-bold text-slate-800 text-[11px]">
+                                    <Truck className="w-3.5 h-3.5 text-blue-600" />
+                                    <span>شركة الشحن J&T Express</span>
+                                  </div>
+                                  <button
+                                    onClick={() => handleSyncOrderWithShipping(ord)}
+                                    disabled={syncingOrderId === ord.id}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[10px] rounded-lg border border-blue-200 transition-colors disabled:opacity-50 cursor-pointer"
+                                  >
+                                    <RefreshCw className={`w-3 h-3 ${syncingOrderId === ord.id ? 'animate-spin' : ''}`} />
+                                    <span>{ord.shippingInfo?.billCode ? 'إعادة الإرسال / تحديث' : 'إرسال لشركة الشحن'}</span>
+                                  </button>
+                                </div>
+                                {ord.shippingInfo?.billCode ? (
+                                  <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 p-2 rounded-lg text-[10px]">
+                                    <div className="space-y-0.5">
+                                      <span className="text-emerald-800 font-bold block">رقم بوليصة الشحن (Waybill):</span>
+                                      <span className="font-mono font-black text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200 inline-block">{ord.shippingInfo.billCode}</span>
+                                    </div>
+                                    {ord.shippingInfo.sortingCode && (
+                                      <span className="text-emerald-700 font-mono text-[9px] bg-emerald-100/60 px-1.5 py-0.5 rounded">كود الفرز: {ord.shippingInfo.sortingCode}</span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <p className="text-[10px] text-slate-400">لم يتم تأكيد بوليصة شحن لهذا الطلب بعد أو معلق للمزامنة.</p>
                                 )}
                               </div>
 
@@ -3728,8 +3852,26 @@ export default function StorePage() {
                     <p className="text-xs text-slate-400 mt-1">نشكرك لشرائك من متجرنا. تم إرسال المعلومات ومزامنتها بنجاح مع وكلاء التوصيل.</p>
                   </div>
 
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-right space-y-2 text-xs">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-right space-y-2.5 text-xs">
                     <p><strong>رقم المرجع للطلب:</strong> <span className="font-mono text-blue-600 text-sm">{successOrder.id}</span></p>
+                    
+                    {successOrder.shippingInfo?.billCode && (
+                      <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 space-y-1">
+                        <div className="flex items-center gap-1.5 font-black text-xs text-emerald-800">
+                          <Truck className="w-4 h-4 text-emerald-600" />
+                          <span>تم تسجيل الشحنة لدى J&T Express بنجاح</span>
+                        </div>
+                        <p className="text-[11px]">
+                          <strong>رقم بوليصة الشحن والتتبع:</strong> <span className="font-mono font-black text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200">{successOrder.shippingInfo.billCode}</span>
+                        </p>
+                        {successOrder.shippingInfo.sortingCode && (
+                          <p className="text-[10px] text-emerald-700">
+                            كود الفرز والتوزيع: {successOrder.shippingInfo.sortingCode}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
                     <p><strong>اسم العميل:</strong> {successOrder.customerName}</p>
                     <p><strong>طريقة الدفع:</strong> نقدي عند التوصيل للمنزل (COD)</p>
                     <p><strong>المبلغ المستحق للدفع:</strong> {successOrder.totalPrice.toFixed(2)} جنيه</p>
@@ -4033,6 +4175,20 @@ export default function StorePage() {
                                   ))}
                                 </div>
                               </div>
+
+                              {/* J&T Express Shipping info */}
+                              {order.shippingInfo?.billCode && (
+                                <div className="p-2.5 bg-emerald-50/80 border border-emerald-200 rounded-xl text-emerald-900 flex items-center justify-between text-xs">
+                                  <div className="flex items-center gap-1.5 font-bold">
+                                    <Truck className="w-3.5 h-3.5 text-emerald-600" />
+                                    <span>شحنة J&T Express:</span>
+                                    <span className="font-mono text-emerald-900 bg-white px-2 py-0.5 rounded border border-emerald-200 text-[11px]">{order.shippingInfo.billCode}</span>
+                                  </div>
+                                  {order.shippingInfo.sortingCode && (
+                                    <span className="text-[9px] text-emerald-700 font-mono bg-emerald-100/60 px-1.5 py-0.5 rounded">{order.shippingInfo.sortingCode}</span>
+                                  )}
+                                </div>
+                              )}
 
                               {/* Footer details */}
                               <div className="flex justify-between items-center pt-2.5 border-t border-slate-100 text-xs">
