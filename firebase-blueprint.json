@@ -61,12 +61,33 @@
         "key": { "type": "string", "description": "Unique category key slug" }
       },
       "required": ["name", "key"]
+    },
+    "Offer": {
+      "title": "Offer",
+      "description": "Discounted bundle offer composed of multiple products",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Offer bundle title" },
+        "description": { "type": "string", "description": "Offer description" },
+        "items": { "type": "array", "description": "List of products and quantities in the offer" },
+        "originalPrice": { "type": "number", "description": "Original sum of product prices" },
+        "offerPrice": { "type": "number", "description": "Discounted bundle price" },
+        "savings": { "type": "number", "description": "Savings amount" },
+        "image": { "type": "string", "description": "Optional custom offer image" },
+        "badge": { "type": "string", "description": "Promotional badge text" },
+        "isAvailable": { "type": "boolean", "description": "Availability state" }
+      },
+      "required": ["title", "items", "originalPrice", "offerPrice", "savings"]
     }
   },
   "firestore": {
     "/products/{productId}": {
       "schema": "Product",
       "description": "Detergent catalog products"
+    },
+    "/offers/{offerId}": {
+      "schema": "Offer",
+      "description": "Bundle offers and packages"
     },
     "/orders/{orderId}": {
       "schema": "Order",

@@ -35,7 +35,9 @@ import {
   LayoutGrid,
   Star,
   Users,
-  Link2
+  Link2,
+  Flame,
+  Percent
 } from 'lucide-react';
 import { db, auth, googleProvider } from '../lib/firebase';
 import { 
@@ -80,9 +82,41 @@ interface Product {
   seoKeywords?: string;
 }
 
+interface OfferItem {
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitPrice: number;
+  image?: string;
+  volume?: string;
+}
+
+interface Offer {
+  id: string;
+  title: string;
+  description: string;
+  items: OfferItem[];
+  originalPrice: number;
+  offerPrice: number;
+  savings: number;
+  image?: string;
+  badge?: string;
+  isAvailable: boolean;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
 interface CartItem {
   product: Product;
   quantity: number;
+  isOffer?: boolean;
+  offerDetails?: {
+    offerId: string;
+    items: OfferItem[];
+    originalPrice: number;
+    offerPrice: number;
+    savings: number;
+  };
 }
 
 interface Order {
@@ -201,7 +235,7 @@ export default function StorePage() {
   const [priceRange, setPriceRange] = useState<number>(0);
 
   // App Navigation View
-  const [currentTab, setCurrentTab] = useState<'home' | 'products' | 'about'>('home');
+  const [currentTab, setCurrentTab] = useState<'home' | 'products' | 'offers' | 'about'>('home');
 
   // Modals
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
@@ -231,6 +265,35 @@ export default function StorePage() {
   const [categoryForm, setCategoryForm] = useState({ name: '', key: '' });
   const [isCategoryFormOpen, setIsCategoryFormOpen] = useState<boolean>(false);
 
+  // Offers State
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [isOfferFormOpen, setIsOfferFormOpen] = useState<boolean>(false);
+  const [editingOffer, setEditingOffer] = useState<Offer | null>(null);
+  const [offerToDelete, setOfferToDelete] = useState<string | null>(null);
+  const [selectedProductForOffer, setSelectedProductForOffer] = useState<string>('');
+  const [selectedQuantityForOffer, setSelectedQuantityForOffer] = useState<number>(1);
+  const [offerForm, setOfferForm] = useState<{
+    title: string;
+    description: string;
+    badge: string;
+    image: string;
+    isAvailable: boolean;
+    items: OfferItem[];
+    originalPrice: number;
+    offerPrice: number;
+    savings: number;
+  }>({
+    title: '',
+    description: '',
+    badge: 'عرض توفير مميز',
+    image: '',
+    isAvailable: true,
+    items: [],
+    originalPrice: 0,
+    offerPrice: 0,
+    savings: 0
+  });
+
   // Deletion Custom Confirmation States (Avoid native confirm inside sandbox iframe)
   const [orderToDelete, setOrderToDelete] = useState<string | null>(null);
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
@@ -243,7 +306,7 @@ export default function StorePage() {
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [userSearchQuery, setUserSearchQuery] = useState<string>('');
-  const [adminTab, setAdminTab] = useState<'orders' | 'products' | 'categories' | 'stats' | 'users'>('orders');
+  const [adminTab, setAdminTab] = useState<'orders' | 'products' | 'offers' | 'categories' | 'stats' | 'users'>('orders');
 
   // New product editing/adding form
   const [isProductFormOpen, setIsProductFormOpen] = useState<boolean>(false);
@@ -335,7 +398,7 @@ export default function StorePage() {
       
       if (productId) {
         setCurrentTab('products');
-      } else if (tab === 'products' || tab === 'about') {
+      } else if (tab === 'products' || tab === 'offers' || tab === 'about') {
         setCurrentTab(tab);
       }
       
@@ -416,6 +479,25 @@ export default function StorePage() {
         console.error(e);
       }
     }
+
+    return () => unsubscribe();
+  }, []);
+
+  // Read Offers from Firestore
+  useEffect(() => {
+    const offersRef = collection(db, 'offers');
+    const unsubscribe = onSnapshot(offersRef, (snapshot) => {
+      const list: Offer[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<Offer, 'id'>)
+        });
+      });
+      setOffers(list);
+    }, (error) => {
+      console.error("Error listening to offers:", error);
+    });
 
     return () => unsubscribe();
   }, []);
@@ -513,6 +595,46 @@ export default function StorePage() {
 
     // Toast
     setAddedItemName(product.name);
+    setTimeout(() => setAddedItemName(null), 2500);
+  };
+
+  const handleAddOfferToCart = (offer: Offer) => {
+    const offerProductId = `offer-${offer.id}`;
+    const offerPseudoProduct: Product = {
+      id: offerProductId,
+      name: `باقة: ${offer.title}`,
+      description: offer.description,
+      price: offer.offerPrice,
+      category: 'offers',
+      image: offer.image || (offer.items && offer.items.length > 0 ? offer.items[0].image || '' : ''),
+      volume: `${offer.items.reduce((sum, it) => sum + it.quantity, 0)} قطع`,
+      isAvailable: offer.isAvailable,
+      rating: 5,
+      reviewsCount: 1
+    };
+
+    const existingIdx = cart.findIndex(item => item.product.id === offerProductId);
+    let newCart = [...cart];
+    if (existingIdx > -1) {
+      newCart[existingIdx].quantity += 1;
+    } else {
+      newCart.push({
+        product: offerPseudoProduct,
+        quantity: 1,
+        isOffer: true,
+        offerDetails: {
+          offerId: offer.id,
+          items: offer.items,
+          originalPrice: offer.originalPrice,
+          offerPrice: offer.offerPrice,
+          savings: offer.savings || Math.max(0, offer.originalPrice - offer.offerPrice)
+        }
+      });
+    }
+    saveCart(newCart);
+
+    // Toast
+    setAddedItemName(`باقة: ${offer.title}`);
     setTimeout(() => setAddedItemName(null), 2500);
   };
 
@@ -843,6 +965,173 @@ export default function StorePage() {
     }
   };
 
+  // Offer CRUD & Multi-Product Bundle Handlers
+  const handleAddProductToOfferDraft = () => {
+    if (!selectedProductForOffer) {
+      alert('يرجى اختيار منتج من القائمة أولاً');
+      return;
+    }
+    const product = products.find(p => p.id === selectedProductForOffer);
+    if (!product) return;
+
+    const qty = Math.max(1, selectedQuantityForOffer || 1);
+    const existingIndex = offerForm.items.findIndex(it => it.productId === product.id);
+    let updatedItems = [...offerForm.items];
+
+    if (existingIndex > -1) {
+      updatedItems[existingIndex].quantity += qty;
+    } else {
+      updatedItems.push({
+        productId: product.id,
+        productName: product.name,
+        quantity: qty,
+        unitPrice: product.price,
+        image: product.image,
+        volume: product.volume
+      });
+    }
+
+    const calculatedOriginalPrice = updatedItems.reduce((sum, it) => sum + (it.unitPrice * it.quantity), 0);
+    const calculatedOfferPrice = offerForm.offerPrice > 0 ? offerForm.offerPrice : Math.round(calculatedOriginalPrice * 0.84);
+    const calculatedSavings = Math.max(0, calculatedOriginalPrice - calculatedOfferPrice);
+
+    setOfferForm({
+      ...offerForm,
+      items: updatedItems,
+      originalPrice: calculatedOriginalPrice,
+      offerPrice: calculatedOfferPrice,
+      savings: calculatedSavings
+    });
+
+    setSelectedProductForOffer('');
+    setSelectedQuantityForOffer(1);
+  };
+
+  const handleUpdateDraftItemQty = (productId: string, diff: number) => {
+    const updatedItems = offerForm.items.map(it => {
+      if (it.productId === productId) {
+        const newQty = it.quantity + diff;
+        return { ...it, quantity: newQty < 1 ? 1 : newQty };
+      }
+      return it;
+    });
+
+    const calculatedOriginalPrice = updatedItems.reduce((sum, it) => sum + (it.unitPrice * it.quantity), 0);
+    const calculatedSavings = Math.max(0, calculatedOriginalPrice - offerForm.offerPrice);
+
+    setOfferForm({
+      ...offerForm,
+      items: updatedItems,
+      originalPrice: calculatedOriginalPrice,
+      savings: calculatedSavings
+    });
+  };
+
+  const handleRemoveDraftItem = (productId: string) => {
+    const updatedItems = offerForm.items.filter(it => it.productId !== productId);
+    const calculatedOriginalPrice = updatedItems.reduce((sum, it) => sum + (it.unitPrice * it.quantity), 0);
+    const calculatedSavings = Math.max(0, calculatedOriginalPrice - offerForm.offerPrice);
+
+    setOfferForm({
+      ...offerForm,
+      items: updatedItems,
+      originalPrice: calculatedOriginalPrice,
+      savings: calculatedSavings
+    });
+  };
+
+  const handleSaveOffer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (offerForm.items.length === 0) {
+      alert('يجب إضافة منتج واحد على الأقل في باقة العرض!');
+      return;
+    }
+    if (offerForm.offerPrice <= 0) {
+      alert('يرجى تحديد سعر العرض!');
+      return;
+    }
+
+    try {
+      const calculatedSavings = Math.max(0, offerForm.originalPrice - offerForm.offerPrice);
+      const payload = {
+        title: offerForm.title,
+        description: offerForm.description,
+        badge: offerForm.badge || 'عرض خاص',
+        image: offerForm.image || '',
+        isAvailable: Boolean(offerForm.isAvailable),
+        items: offerForm.items,
+        originalPrice: Number(offerForm.originalPrice),
+        offerPrice: Number(offerForm.offerPrice),
+        savings: Number(calculatedSavings),
+        updatedAt: serverTimestamp()
+      };
+
+      if (editingOffer) {
+        const ref = doc(db, 'offers', editingOffer.id);
+        await updateDoc(ref, payload);
+      } else {
+        await addDoc(collection(db, 'offers'), {
+          ...payload,
+          createdAt: serverTimestamp()
+        });
+      }
+
+      setIsOfferFormOpen(false);
+      setEditingOffer(null);
+      setOfferForm({
+        title: '',
+        description: '',
+        badge: 'عرض توفير مميز',
+        image: '',
+        isAvailable: true,
+        items: [],
+        originalPrice: 0,
+        offerPrice: 0,
+        savings: 0
+      });
+      setSelectedProductForOffer('');
+      setSelectedQuantityForOffer(1);
+    } catch (e) {
+      console.error(e);
+      alert('خطأ أثناء حفظ باقة العرض.');
+    }
+  };
+
+  const handleEditOffer = (offer: Offer) => {
+    setEditingOffer(offer);
+    setOfferForm({
+      title: offer.title,
+      description: offer.description,
+      badge: offer.badge || 'عرض خاص',
+      image: offer.image || '',
+      isAvailable: offer.isAvailable,
+      items: offer.items || [],
+      originalPrice: offer.originalPrice,
+      offerPrice: offer.offerPrice,
+      savings: offer.savings || Math.max(0, offer.originalPrice - offer.offerPrice)
+    });
+    setSelectedProductForOffer('');
+    setSelectedQuantityForOffer(1);
+    setIsOfferFormOpen(true);
+  };
+
+  const handleDeleteOffer = async (offerId: string) => {
+    try {
+      await deleteDoc(doc(db, 'offers', offerId));
+    } catch (e) {
+      console.error(e);
+      alert('خطأ أثناء حذف العرض');
+    }
+  };
+
+  const handleToggleOfferAvailability = async (offerId: string, currentStatus: boolean) => {
+    try {
+      await updateDoc(doc(db, 'offers', offerId), { isAvailable: !currentStatus });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleUpdateStatus = async (orderId: string, status: any) => {
     try {
       await updateDoc(doc(db, 'orders', orderId), { status });
@@ -953,18 +1242,31 @@ export default function StorePage() {
           
           <nav className="hidden md:flex gap-8 text-sm font-semibold text-slate-500">
             <button 
+              id="nav-home-btn"
               onClick={() => { setCurrentTab('home'); setIsMerchantOpen(false); }} 
               className={`${currentTab === 'home' && !isMerchantOpen ? 'text-blue-600 border-b-2 border-blue-600' : 'hover:text-blue-600 border-b-2 border-transparent'} pb-2.5 pt-1.5 transition-colors`}
             >
               الرئيسية
             </button>
             <button 
+              id="nav-products-btn"
               onClick={() => { setCurrentTab('products'); setIsMerchantOpen(false); setActiveCategory('all'); setSearchTerm(''); }} 
               className={`${currentTab === 'products' && !isMerchantOpen ? 'text-blue-600 border-b-2 border-blue-600' : 'hover:text-blue-600 border-b-2 border-transparent'} pb-2.5 pt-1.5 transition-colors`}
             >
               منتجاتنا
             </button>
             <button 
+              id="nav-offers-btn"
+              onClick={() => { setCurrentTab('offers'); setIsMerchantOpen(false); }} 
+              className={`relative flex items-center gap-1.5 ${currentTab === 'offers' && !isMerchantOpen ? 'text-rose-600 border-b-2 border-rose-600' : 'hover:text-rose-600 border-b-2 border-transparent'} pb-2.5 pt-1.5 transition-colors`}
+            >
+              <span>عروض التوفير</span>
+              <span className="bg-rose-500 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded-full shadow-xs animate-pulse">
+                خصومات 🔥
+              </span>
+            </button>
+            <button 
+              id="nav-about-btn"
               onClick={() => { 
                 setCurrentTab('about'); 
                 setIsMerchantOpen(false); 
@@ -974,9 +1276,9 @@ export default function StorePage() {
             >
               عن الشركة
             </button>
-            <button onClick={() => { setIsTrackerOpen(true); }} className="hover:text-slate-950 pt-1.5 pb-2.5 transition-colors">طلباتي ({userOrders.length})</button>
+            <button id="nav-tracker-btn" onClick={() => { setIsTrackerOpen(true); }} className="hover:text-slate-950 pt-1.5 pb-2.5 transition-colors">طلباتي ({userOrders.length})</button>
             {(userRole === 'manager' || userRole === 'admin') && (
-              <button onClick={() => { setIsMerchantOpen(true); }} className={`flex items-center gap-1.5 pt-1.5 pb-2.5 transition-colors ${isMerchantOpen ? 'text-amber-600 border-b-2 border-amber-600' : 'text-slate-400 hover:text-amber-600 border-b-2 border-transparent'}`}>
+              <button id="nav-admin-btn" onClick={() => { setIsMerchantOpen(true); }} className={`flex items-center gap-1.5 pt-1.5 pb-2.5 transition-colors ${isMerchantOpen ? 'text-amber-600 border-b-2 border-amber-600' : 'text-slate-400 hover:text-amber-600 border-b-2 border-transparent'}`}>
                 <Settings className="w-4 h-4" />
                 <span>إدارة المتجر ⚙️</span>
               </button>
@@ -1140,6 +1442,7 @@ export default function StorePage() {
                   {[
                     { id: 'orders', label: 'إدارة طلبات المشترين', icon: Notebook },
                     { id: 'products', label: 'المنظفات والقطع', icon: Package },
+                    { id: 'offers', label: 'إدارة العروض والباقات 🔥', icon: Sparkles },
                     { id: 'categories', label: 'إدارة الفئات والمقاطع', icon: LayoutGrid },
                     { id: 'stats', label: 'مؤشرات المبيعات', icon: TrendingUp },
                     ...(userRole === 'admin' ? [{ id: 'users', label: 'صلاحيات المستخدمين', icon: Users }] : [])
@@ -1563,6 +1866,459 @@ export default function StorePage() {
                     </div>
                   )}
 
+                  {adminTab === 'offers' && (
+                    <div className="space-y-6" id="admin-offers-tab">
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse" />
+                            <h4 className="font-extrabold text-slate-900 text-sm">إدارة العروض والباقات الترويجية (Multi-Product Bundles)</h4>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-1">
+                            قم بإنشاء وتجميع باقات عروض تتكون من عدة منتجات مع تحديد كمية كل منتج وحساب قيمة التوفير والخصم تلقائياً للعميل.
+                          </p>
+                        </div>
+                        <button 
+                          id="admin-new-offer-btn"
+                          onClick={() => {
+                            setEditingOffer(null);
+                            setOfferForm({
+                              title: '',
+                              description: '',
+                              badge: 'عرض توفير مميز 🔥',
+                              image: '',
+                              isAvailable: true,
+                              items: [],
+                              originalPrice: 0,
+                              offerPrice: 0,
+                              savings: 0
+                            });
+                            setSelectedProductForOffer('');
+                            setSelectedQuantityForOffer(1);
+                            setIsOfferFormOpen(!isOfferFormOpen);
+                          }}
+                          className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs flex items-center gap-2 cursor-pointer transition-all shadow-xs shrink-0"
+                        >
+                          <PlusCircle className="w-4 h-4" />
+                          <span>{isOfferFormOpen ? 'إغلاق النموذج' : '+ إضافة باقة عرض جديدة'}</span>
+                        </button>
+                      </div>
+
+                      {/* Offer Builder Form */}
+                      {isOfferFormOpen && (
+                        <form onSubmit={handleSaveOffer} className="p-6 bg-white border border-rose-100 rounded-3xl space-y-5 shadow-sm" id="offer-builder-form">
+                          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                            <div className="flex items-center gap-2">
+                              <Sparkles className="w-5 h-5 text-rose-500" />
+                              <h5 className="font-extrabold text-slate-900 text-sm">
+                                {editingOffer ? 'تعديل باقة العرض' : 'إنشاء وتكوين باقة عرض جديدة'}
+                              </h5>
+                            </div>
+                            <span className="text-[11px] text-slate-400 font-medium">كل عرض يتكون من عدة منتجات مع كمياتها</span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-slate-700 font-bold mb-1.5 text-xs">عنوان العرض / الباقة *</label>
+                              <input 
+                                id="offer-title-input"
+                                type="text"
+                                required
+                                value={offerForm.title}
+                                onChange={(e) => setOfferForm({ ...offerForm, title: e.target.value })}
+                                placeholder="مثال: باقة النظافة الشاملة للمنزل (4 قطع)"
+                                className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs focus:bg-white focus:ring-1 focus:ring-rose-500 focus:outline-none"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-slate-700 font-bold mb-1.5 text-xs">الشارة الترويجية (Badge)</label>
+                              <input 
+                                id="offer-badge-input"
+                                type="text"
+                                value={offerForm.badge}
+                                onChange={(e) => setOfferForm({ ...offerForm, badge: e.target.value })}
+                                placeholder="مثال: وفر 160 جنيه 🔥 أو أقوى توفير"
+                                className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs focus:bg-white focus:ring-1 focus:ring-rose-500 focus:outline-none"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-slate-700 font-bold mb-1.5 text-xs">وصف العرض ومميزاته *</label>
+                            <textarea 
+                              id="offer-desc-input"
+                              required
+                              rows={2}
+                              value={offerForm.description}
+                              onChange={(e) => setOfferForm({ ...offerForm, description: e.target.value })}
+                              placeholder="اكتب وصفاً جذاباً لمحتويات الباقة وكيف تساعد العميل في التوفير والحصول على أفضل نظافة..."
+                              className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs focus:bg-white focus:ring-1 focus:ring-rose-500 focus:outline-none"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-slate-700 font-bold mb-1.5 text-xs">رابط صورة العرض (اختياري - يترك فارغاً لاستخدام صور المنتجات)</label>
+                            <input 
+                              id="offer-image-input"
+                              type="url"
+                              value={offerForm.image}
+                              onChange={(e) => setOfferForm({ ...offerForm, image: e.target.value })}
+                              placeholder="https://..."
+                              className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs focus:bg-white focus:ring-1 focus:ring-rose-500 focus:outline-none"
+                            />
+                          </div>
+
+                          {/* MULTI-PRODUCT ITEM SELECTOR */}
+                          <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border border-slate-200 space-y-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                              <div>
+                                <h6 className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5">
+                                  <Package className="w-4 h-4 text-blue-600" />
+                                  <span>محتويات الباقة (إضافة المنتجات والكميات)</span>
+                                </h6>
+                                <p className="text-[10px] text-slate-500 mt-0.5">اختر المنتج ثم حدد الكمية واضغط إضافة للمجموعة</p>
+                              </div>
+                              <span className="text-[10px] font-bold text-slate-600 bg-white px-2.5 py-1 rounded-lg border border-slate-200 self-start sm:self-auto">
+                                عدد المنتجات المضافة: {offerForm.items.length}
+                              </span>
+                            </div>
+
+                            {/* Dropdown + Qty Row */}
+                            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                              <div className="flex-1">
+                                <select
+                                  id="offer-product-select"
+                                  value={selectedProductForOffer}
+                                  onChange={(e) => setSelectedProductForOffer(e.target.value)}
+                                  className="w-full bg-white border border-slate-200 p-2.5 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 font-medium"
+                                >
+                                  <option value="">-- اختر منتجاً لإضافته للباقة --</option>
+                                  {products.map((p) => (
+                                    <option key={p.id} value={p.id}>
+                                      {p.name} ({p.volume}) - {p.price} جنيه
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <div className="flex items-center bg-white border border-slate-200 rounded-xl px-2 py-1">
+                                  <span className="text-[10px] text-slate-500 ml-2 font-bold">الكمية:</span>
+                                  <input 
+                                    id="offer-product-qty"
+                                    type="number"
+                                    min="1"
+                                    max="50"
+                                    value={selectedQuantityForOffer}
+                                    onChange={(e) => setSelectedQuantityForOffer(Math.max(1, parseInt(e.target.value) || 1))}
+                                    className="w-14 text-center font-bold text-xs p-1 focus:outline-none"
+                                  />
+                                </div>
+
+                                <button
+                                  id="add-item-to-offer-btn"
+                                  type="button"
+                                  onClick={handleAddProductToOfferDraft}
+                                  className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shrink-0"
+                                >
+                                  <Plus className="w-4 h-4" />
+                                  <span>إضافة للباقة</span>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* List of draft bundle items */}
+                            {offerForm.items.length === 0 ? (
+                              <div className="p-4 bg-white rounded-xl border border-dashed border-slate-300 text-center text-[11px] text-slate-400">
+                                لم تقم بإضافة أي منتجات للباقة بعد. يرجى اختيار منتجات أعلاه.
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                {offerForm.items.map((it) => (
+                                  <div key={it.productId} className="flex items-center justify-between p-3 bg-white rounded-xl border border-slate-200 text-xs">
+                                    <div className="flex items-center gap-3">
+                                      {it.image && (
+                                        <img src={it.image} alt={it.productName} className="w-10 h-10 object-contain rounded-lg bg-slate-50 border border-slate-100 p-1" />
+                                      )}
+                                      <div>
+                                        <h6 className="font-bold text-slate-800">{it.productName}</h6>
+                                        <span className="text-[10px] text-slate-400">
+                                          سعر القطعة: {it.unitPrice} جنيه {it.volume ? `• ${it.volume}` : ''}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-3">
+                                      <div className="flex items-center bg-slate-50 rounded-lg border border-slate-200">
+                                        <button 
+                                          type="button" 
+                                          onClick={() => handleUpdateDraftItemQty(it.productId, -1)}
+                                          className="p-1 text-slate-500 hover:text-slate-900"
+                                        >
+                                          <Minus className="w-3 h-3" />
+                                        </button>
+                                        <span className="px-2 font-bold text-xs">{it.quantity}</span>
+                                        <button 
+                                          type="button" 
+                                          onClick={() => handleUpdateDraftItemQty(it.productId, 1)}
+                                          className="p-1 text-slate-500 hover:text-slate-900"
+                                        >
+                                          <Plus className="w-3 h-3" />
+                                        </button>
+                                      </div>
+
+                                      <div className="text-left font-bold text-slate-700 min-w-[70px]">
+                                        {(it.unitPrice * it.quantity).toFixed(2)} ج
+                                      </div>
+
+                                      <button 
+                                        type="button"
+                                        onClick={() => handleRemoveDraftItem(it.productId)}
+                                        className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                                        title="حذف من الباقة"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* PRICING & SAVINGS CALCULATION ENGINE */}
+                          <div className="p-5 bg-gradient-to-br from-amber-50/70 to-orange-50/40 rounded-2xl border border-amber-200/80 space-y-4">
+                            <div className="flex items-center gap-2">
+                              <Banknote className="w-4 h-4 text-amber-700" />
+                              <h6 className="font-extrabold text-slate-900 text-xs">حساب الأسعار والتوفير للباقة</h6>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-slate-700 font-bold mb-1 text-xs">
+                                  السعر الأصلي الإجمالي (Original Price) *
+                                </label>
+                                <div className="relative">
+                                  <input 
+                                    id="offer-original-price-input"
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    required
+                                    value={offerForm.originalPrice}
+                                    onChange={(e) => {
+                                      const orig = Number(e.target.value) || 0;
+                                      const sav = Math.max(0, orig - offerForm.offerPrice);
+                                      setOfferForm({ ...offerForm, originalPrice: orig, savings: sav });
+                                    }}
+                                    className="w-full bg-white border border-slate-300 p-2.5 rounded-xl text-xs font-mono font-bold pr-3 pl-14"
+                                  />
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">جنيه</span>
+                                </div>
+                                <span className="text-[10px] text-slate-500 mt-1 block">يُحسب تلقائياً من مجموع أسعار المنتجات المضافة</span>
+                              </div>
+
+                              <div>
+                                <label className="block text-slate-700 font-bold mb-1 text-xs">
+                                  سعر العرض المخفض للعميل (Offer Price) *
+                                </label>
+                                <div className="relative">
+                                  <input 
+                                    id="offer-discounted-price-input"
+                                    type="number"
+                                    min="0"
+                                    step="1"
+                                    required
+                                    value={offerForm.offerPrice}
+                                    onChange={(e) => {
+                                      const off = Number(e.target.value) || 0;
+                                      const sav = Math.max(0, offerForm.originalPrice - off);
+                                      setOfferForm({ ...offerForm, offerPrice: off, savings: sav });
+                                    }}
+                                    className="w-full bg-white border border-rose-300 p-2.5 rounded-xl text-xs font-mono font-extrabold text-rose-600 pr-3 pl-14 focus:ring-2 focus:ring-rose-500 focus:outline-none"
+                                  />
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-rose-600">جنيه</span>
+                                </div>
+                                <span className="text-[10px] text-slate-500 mt-1 block">مثال: لو السعر الأصلي 1000 وسعر العرض 840</span>
+                              </div>
+                            </div>
+
+                            {/* SAVINGS HIGHLIGHT BAR */}
+                            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3" id="savings-calculation-preview">
+                              <div className="flex items-center gap-2.5 text-emerald-900">
+                                <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+                                <div>
+                                  <span className="text-xs font-extrabold block">قيمة التوفير المحسوبة للعميل:</span>
+                                  <span className="text-[11px] text-emerald-700">
+                                    العميل سيوفر <strong className="font-extrabold text-sm">{Math.max(0, offerForm.originalPrice - offerForm.offerPrice)} جنيه</strong> عند شراء هذا العرض
+                                    {offerForm.originalPrice > 0 && offerForm.offerPrice > 0 && (
+                                      <span> (خصم {Math.round(((offerForm.originalPrice - offerForm.offerPrice) / offerForm.originalPrice) * 100)}%)</span>
+                                    )}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="bg-emerald-600 text-white font-extrabold text-xs px-3 py-1.5 rounded-lg shrink-0 shadow-xs">
+                                وفر {Math.max(0, offerForm.originalPrice - offerForm.offerPrice)} ج
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <input 
+                              type="checkbox"
+                              id="offer-available-check"
+                              checked={offerForm.isAvailable}
+                              onChange={(e) => setOfferForm({ ...offerForm, isAvailable: e.target.checked })}
+                              className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500"
+                            />
+                            <label htmlFor="offer-available-check" className="text-xs font-bold text-slate-700 cursor-pointer">
+                              العرض متاح للطلب الفوري في واجهة المتجر
+                            </label>
+                          </div>
+
+                          <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                            <button 
+                              type="button"
+                              onClick={() => { setIsOfferFormOpen(false); setEditingOffer(null); }}
+                              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs cursor-pointer transition-colors"
+                            >
+                              إلغاء
+                            </button>
+                            <button 
+                              id="save-offer-submit-btn"
+                              type="submit"
+                              className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs cursor-pointer transition-all shadow-sm flex items-center gap-2"
+                            >
+                              <Check className="w-4 h-4" />
+                              <span>{editingOffer ? 'تحديث وحفظ باقة العرض' : 'حفظ ونشر العرض بالمتجر'}</span>
+                            </button>
+                          </div>
+                        </form>
+                      )}
+
+                      {/* Display Existing Offers Grid */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h5 className="font-extrabold text-slate-900 text-xs">قائمة العروض المسجلة ({offers.length})</h5>
+                          <span className="text-[10px] text-slate-400">تظهر هذه العروض في قسم &quot;عروض التوفير&quot; للعملاء</span>
+                        </div>
+
+                        {offers.length === 0 ? (
+                          <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200">
+                            <Sparkles className="w-10 h-10 text-rose-300 mx-auto mb-2" />
+                            <h5 className="font-bold text-slate-800 text-xs">لا توجد عروض مضافة بعد</h5>
+                            <p className="text-[11px] text-slate-400 mt-1 max-w-sm mx-auto">
+                              قم بالضغط على &quot;+ إضافة باقة عرض جديدة&quot; لتكوين عروض حصرية وتحديد الخصومات وقيم التوفير.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" id="admin-offers-grid">
+                            {offers.map((off) => {
+                              const savingsVal = off.savings || Math.max(0, off.originalPrice - off.offerPrice);
+                              const discountPercent = off.originalPrice > 0 ? Math.round((savingsVal / off.originalPrice) * 100) : 0;
+                              return (
+                                <div key={off.id} className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between hover:border-rose-200 transition-all">
+                                  <div>
+                                    <div className="flex items-start justify-between gap-2 mb-2">
+                                      <span className="bg-rose-50 text-rose-700 text-[10px] font-extrabold px-2.5 py-0.5 rounded-md border border-rose-100">
+                                        {off.badge || 'عرض خاص'}
+                                      </span>
+                                      <button
+                                        onClick={() => handleToggleOfferAvailability(off.id, off.isAvailable)}
+                                        className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                                          off.isAvailable 
+                                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                                            : 'bg-slate-100 text-slate-500'
+                                        }`}
+                                      >
+                                        {off.isAvailable ? 'متاح الآن' : 'غير متوفر'}
+                                      </button>
+                                    </div>
+
+                                    <h5 className="font-extrabold text-slate-900 text-sm mb-1">{off.title}</h5>
+                                    <p className="text-[11px] text-slate-500 line-clamp-2 mb-3">{off.description}</p>
+
+                                    {/* Bundle items list */}
+                                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 mb-3 space-y-1">
+                                      <span className="text-[9px] font-bold text-slate-400 block">المنتجات في الباقة:</span>
+                                      <ul className="text-[10px] text-slate-600 space-y-0.5">
+                                        {off.items.map((it, idx) => (
+                                          <li key={idx} className="flex items-center justify-between">
+                                            <span>• {it.quantity}× {it.productName}</span>
+                                            <span className="text-slate-400 font-mono">({it.unitPrice * it.quantity} ج)</span>
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  </div>
+
+                                  <div>
+                                    {/* Price & Savings Display */}
+                                    <div className="p-2.5 bg-rose-50/50 rounded-xl border border-rose-100/80 mb-3">
+                                      <div className="flex items-baseline justify-between">
+                                        <div>
+                                          <span className="text-[10px] text-slate-400 line-through ml-1">{off.originalPrice} ج</span>
+                                          <span className="text-sm font-extrabold text-rose-600">{off.offerPrice} جنيه</span>
+                                        </div>
+                                        <span className="bg-emerald-600 text-white text-[9px] font-bold px-2 py-0.5 rounded-md">
+                                          خصم {discountPercent}%
+                                        </span>
+                                      </div>
+                                      <div className="mt-1 pt-1 border-t border-rose-100 text-[10px] font-bold text-emerald-700">
+                                        💰 قيمة التوفير: وفر {savingsVal} جنيه
+                                      </div>
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                                      <button
+                                        onClick={() => handleEditOffer(off)}
+                                        className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200 transition-colors"
+                                        title="تعديل العرض"
+                                      >
+                                        <Edit className="w-3.5 h-3.5" />
+                                      </button>
+
+                                      {offerToDelete === off.id ? (
+                                        <div className="flex items-center gap-1 bg-rose-50 border border-rose-200 p-1 rounded-lg">
+                                          <button
+                                            onClick={async () => {
+                                              await handleDeleteOffer(off.id);
+                                              setOfferToDelete(null);
+                                            }}
+                                            className="px-2 py-1 bg-rose-600 text-white rounded text-[8px] font-bold cursor-pointer"
+                                          >
+                                            تأكيد الحذف
+                                          </button>
+                                          <button
+                                            onClick={() => setOfferToDelete(null)}
+                                            className="px-2 py-1 bg-slate-200 text-slate-700 rounded text-[8px] font-bold cursor-pointer"
+                                          >
+                                            إلغاء
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <button
+                                          onClick={() => setOfferToDelete(off.id)}
+                                          className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg border border-rose-200 transition-colors"
+                                          title="حذف العرض"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {adminTab === 'categories' && (
                     <div className="space-y-4">
                       <div className="flex justify-between items-center mb-1">
@@ -1933,6 +2689,89 @@ export default function StorePage() {
               </div>
             </div>
 
+            {/* FEATURED OFFERS SECTION ON HOMEPAGE */}
+            {offers.length > 0 && (
+              <div className="bg-gradient-to-r from-rose-500/10 via-amber-500/10 to-rose-500/10 border-y border-rose-200/60 py-12 shrink-0">
+                <div className="max-w-6xl mx-auto px-6">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 mb-6">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Flame className="w-5 h-5 text-rose-600 animate-bounce" />
+                        <span className="text-rose-700 text-xs font-black bg-rose-100 px-2.5 py-0.5 rounded-md">أقوى التخفيضات</span>
+                      </div>
+                      <h3 className="text-xl font-black text-slate-900">عروض وباقات التوفير الحصرية</h3>
+                    </div>
+                    <button 
+                      onClick={() => setCurrentTab('offers')}
+                      className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span>تصفح جميع باقات العروض ({offers.length})</span>
+                      <span>&larr;</span>
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {offers.slice(0, 3).map((off) => {
+                      const savingsVal = off.savings || Math.max(0, off.originalPrice - off.offerPrice);
+                      const discountPercent = off.originalPrice > 0 ? Math.round((savingsVal / off.originalPrice) * 100) : 0;
+                      return (
+                        <div 
+                          key={`home-offer-${off.id}`} 
+                          onClick={() => setCurrentTab('offers')} 
+                          className="bg-white rounded-3xl p-5 border border-rose-150/80 shadow-xs hover:shadow-md hover:border-rose-300 transition-all flex flex-col justify-between cursor-pointer group"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <span className="bg-rose-50 text-rose-700 text-[10px] font-extrabold px-2.5 py-0.5 rounded-md border border-rose-100">
+                                {off.badge || 'عرض توفير'}
+                              </span>
+                              <span className="bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-md">
+                                خصم {discountPercent}%
+                              </span>
+                            </div>
+
+                            <h4 className="font-extrabold text-slate-900 text-sm mb-1.5 group-hover:text-rose-600 transition-colors">{off.title}</h4>
+                            <p className="text-slate-500 text-[11px] line-clamp-2 mb-3">{off.description}</p>
+                            
+                            <div className="text-[10px] text-slate-600 bg-slate-50 p-2 rounded-xl border border-slate-100 mb-3 space-y-0.5">
+                              {off.items.map((it, idx) => (
+                                <div key={idx} className="flex justify-between">
+                                  <span>• {it.quantity}× {it.productName}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="pt-2 border-t border-slate-100">
+                            <div className="flex items-baseline justify-between mb-1.5">
+                              <div>
+                                <span className="text-xs text-slate-400 line-through ml-1">{off.originalPrice} ج</span>
+                                <span className="text-base font-black text-rose-600 font-mono">{off.offerPrice} جنيه</span>
+                              </div>
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                                وفر {savingsVal} جنيه
+                              </span>
+                            </div>
+
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAddOfferToCart(off);
+                              }}
+                              className="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                            >
+                              <ShoppingCart className="w-3.5 h-3.5" />
+                              <span>أضف الباقة للسلة</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* BEST SELLING PRODUCTS */}
             <div className="bg-white border-y border-slate-100 py-12 shrink-0">
               <div className="max-w-6xl mx-auto px-6">
@@ -2057,6 +2896,224 @@ export default function StorePage() {
                   </p>
                 </section>
               </div>
+            </div>
+          </div>
+        ) : currentTab === 'offers' ? (
+          <div className="flex-1 overflow-y-auto bg-slate-50 relative pb-16" dir="rtl" id="offers-view">
+            {/* OFFERS HERO HEADER */}
+            <div className="relative bg-gradient-to-b from-rose-50/70 via-white to-slate-50 pt-8 pb-10 border-b border-rose-100/60 overflow-hidden shrink-0">
+              <div className="max-w-6xl mx-auto px-6 relative z-10">
+                <div className="flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-right">
+                  <div>
+                    <div className="inline-flex items-center gap-2 bg-rose-100/80 text-rose-700 px-3.5 py-1.5 rounded-full text-xs font-black mb-3 border border-rose-200">
+                      <Sparkles className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                      <span>عروض وباقات التوفير الحصرية من مصنع جولد كلين</span>
+                    </div>
+                    <h2 className="text-2xl md:text-4xl font-black text-slate-900 mb-2 leading-tight">
+                      وفّر أكثر مع باقات التوفير المتكاملة 🔥
+                    </h2>
+                    <p className="text-slate-600 text-xs md:text-sm max-w-xl font-medium leading-relaxed">
+                      اختر باقتك المفضلة المكونة من أشهر منتجات العناية والمنظفات بخصومات حقيقية وتوفير مضمون مقارنة بالشراء الفردي!
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3 bg-white p-4 rounded-2xl border border-rose-100 shadow-sm shrink-0">
+                    <div className="w-12 h-12 rounded-xl bg-rose-50 flex items-center justify-center text-rose-600 border border-rose-100">
+                      <Percent className="w-6 h-6" />
+                    </div>
+                    <div className="text-right">
+                      <span className="text-[10px] text-slate-400 font-bold block">مجموع الباقات المتاحة</span>
+                      <span className="text-xl font-black text-rose-600 font-mono">
+                        {offers.filter(o => o.isAvailable).length} باقة توفير
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* OFFERS GRID */}
+            <div className="max-w-6xl mx-auto px-6 py-8">
+              {offers.length === 0 ? (
+                <div className="text-center py-16 bg-white rounded-3xl border border-dashed border-slate-200 shadow-xs">
+                  <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-rose-100">
+                    <Sparkles className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-900 mb-1">لا توجد باقات عروض متاحة حالياً</h3>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto mb-6">
+                    يقوم فريق جولد كلين بتجهيز باقات توفير جديدة قريباً. يمكنك تصفح المنتجات الفردية الآن.
+                  </p>
+                  <button
+                    onClick={() => setCurrentTab('products')}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-2.5 rounded-xl text-xs transition-colors shadow-sm cursor-pointer"
+                  >
+                    تصفح المنتجات
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="storefront-offers-grid">
+                  {offers.map((offer) => {
+                    const savingsVal = offer.savings || Math.max(0, offer.originalPrice - offer.offerPrice);
+                    const discountPercent = offer.originalPrice > 0 ? Math.round((savingsVal / offer.originalPrice) * 100) : 0;
+                    const totalPieces = offer.items.reduce((sum, item) => sum + item.quantity, 0);
+                    
+                    return (
+                      <motion.div
+                        key={offer.id}
+                        initial={{ opacity: 0, y: 15 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-white rounded-3xl border border-slate-200/80 shadow-xs hover:shadow-md hover:border-rose-300 transition-all flex flex-col justify-between overflow-hidden group"
+                      >
+                        <div>
+                          {/* Card Header & Visual Media */}
+                          <div className="relative bg-slate-50 p-4 border-b border-slate-100 overflow-hidden">
+                            {/* Promo Badge */}
+                            <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
+                              <span className="bg-rose-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg shadow-xs flex items-center gap-1">
+                                <Flame className="w-3 h-3" />
+                                <span>{offer.badge || 'عرض خاص'}</span>
+                              </span>
+                              {discountPercent > 0 && (
+                                <span className="bg-amber-500 text-white text-[10px] font-black px-2 py-1 rounded-lg shadow-xs">
+                                  خصم {discountPercent}%
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Offer Image or Product Collage */}
+                            <div className="h-48 rounded-2xl bg-white border border-slate-100 flex items-center justify-center overflow-hidden p-3 relative">
+                              {offer.image ? (
+                                <img 
+                                  src={offer.image} 
+                                  alt={offer.title} 
+                                  className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300" 
+                                />
+                              ) : offer.items.length > 0 ? (
+                                <div className="grid grid-cols-2 gap-2 w-full h-full p-2 items-center justify-center">
+                                  {offer.items.slice(0, 4).map((it, idx) => (
+                                    <div key={idx} className="h-full bg-slate-50 rounded-xl p-1 flex flex-col items-center justify-center border border-slate-100 overflow-hidden">
+                                      <img 
+                                        src={it.image || 'https://images.unsplash.com/photo-1563453392212-326f518500b1?auto=format&fit=crop&q=80&w=300'} 
+                                        alt={it.productName} 
+                                        className="max-h-14 object-contain"
+                                      />
+                                      <span className="text-[9px] font-bold text-slate-700 truncate w-full text-center mt-0.5">
+                                        {it.quantity}× {it.productName}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <Sparkles className="w-12 h-12 text-rose-300" />
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Content Section */}
+                          <div className="p-5 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
+                                باقة تحتوي على {totalPieces} قطع
+                              </span>
+                              {!offer.isAvailable && (
+                                <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-100">
+                                  غير متوفر حالياً
+                                </span>
+                              )}
+                            </div>
+
+                            <h3 className="font-extrabold text-slate-900 text-base leading-snug group-hover:text-rose-600 transition-colors">
+                              {offer.title}
+                            </h3>
+
+                            <p className="text-slate-600 text-xs leading-relaxed line-clamp-2">
+                              {offer.description}
+                            </p>
+
+                            {/* Detailed Items in Bundle */}
+                            <div className="bg-slate-50/80 rounded-2xl p-3 border border-slate-100 space-y-1.5">
+                              <span className="text-[10px] font-extrabold text-slate-700 block">
+                                محتويات الباقة:
+                              </span>
+                              <div className="space-y-1">
+                                {offer.items.map((it, idx) => (
+                                  <div key={idx} className="flex items-center justify-between text-xs text-slate-700">
+                                    <div className="flex items-center gap-1.5 truncate">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                                      <span className="font-bold text-slate-800">{it.quantity}×</span>
+                                      <span className="truncate">{it.productName}</span>
+                                      {it.volume && <span className="text-[10px] text-slate-400">({it.volume})</span>}
+                                    </div>
+                                    <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                                      {(it.unitPrice * it.quantity).toFixed(0)} ج
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Card Footer: Pricing, Prominent Savings Box & Add Button */}
+                        <div className="p-5 pt-0 space-y-3">
+                          {/* Price Display */}
+                          <div className="flex items-baseline justify-between pt-3 border-t border-slate-100">
+                            <div>
+                              <span className="text-[11px] text-slate-400 font-bold block mb-0.5">سعر الباقة</span>
+                              <div className="flex items-baseline gap-2">
+                                <span className="text-2xl font-black text-rose-600 font-mono">
+                                  {offer.offerPrice.toFixed(0)}
+                                </span>
+                                <span className="text-xs font-bold text-slate-500">جنيه</span>
+                                {offer.originalPrice > offer.offerPrice && (
+                                  <span className="text-xs text-slate-400 line-through font-mono">
+                                    {offer.originalPrice.toFixed(0)} ج
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {discountPercent > 0 && (
+                              <div className="text-left">
+                                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100 inline-block">
+                                  وفرت {discountPercent}% خصم
+                                </span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* PROMINENT SAVINGS BADGE UNDER PRICE (User requirement: لازم كمان قيمة التوفير تتكتب تحت المنتح) */}
+                          <div className="p-2.5 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-xl border border-emerald-200 flex items-center justify-between gap-2 shadow-2xs">
+                            <div className="flex items-center gap-1.5">
+                              <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <span className="text-[11px] font-bold text-emerald-900">
+                                قيمة التوفير:
+                              </span>
+                            </div>
+                            <div className="text-xs font-extrabold text-emerald-700 font-mono bg-white px-2 py-0.5 rounded-md border border-emerald-100">
+                              وفر {savingsVal} جنيه 💰
+                            </div>
+                          </div>
+
+                          {/* CTA Button */}
+                          <button
+                            disabled={!offer.isAvailable}
+                            onClick={() => handleAddOfferToCart(offer)}
+                            className={`w-full py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs ${
+                              !offer.isAvailable
+                                ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                : 'bg-rose-600 hover:bg-rose-700 text-white hover:shadow-rose-600/20 hover:scale-[1.02]'
+                            }`}
+                          >
+                            <ShoppingCart className="w-4 h-4" />
+                            <span>{!offer.isAvailable ? 'الباقة غير متوفرة' : 'أضف باقة العرض إلى السلة'}</span>
+                          </button>
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -2306,6 +3363,80 @@ export default function StorePage() {
           </>
         )}
       </main>
+
+      {/* MOBILE BOTTOM NAVIGATION BAR */}
+      {!isMerchantOpen && (
+        <nav className="md:hidden bg-white/95 backdrop-blur border-t border-slate-200 fixed bottom-0 inset-x-0 z-40 px-2 py-1.5 flex items-center justify-around text-[10px] font-bold shadow-lg" dir="rtl" id="mobile-bottom-nav">
+          <button
+            onClick={() => { setCurrentTab('home'); setIsMerchantOpen(false); }}
+            className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-colors ${
+              currentTab === 'home' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>الرئيسية</span>
+          </button>
+
+          <button
+            onClick={() => { setCurrentTab('products'); setIsMerchantOpen(false); }}
+            className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-colors ${
+              currentTab === 'products' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <Package className="w-4 h-4" />
+            <span>المنتجات</span>
+          </button>
+
+          <button
+            onClick={() => { setCurrentTab('offers'); setIsMerchantOpen(false); }}
+            className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-colors relative ${
+              currentTab === 'offers' ? 'text-rose-600' : 'text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <span className="absolute -top-1 -left-1 bg-rose-500 text-white text-[8px] px-1 rounded-full animate-pulse font-extrabold">
+              🔥
+            </span>
+            <Flame className="w-4 h-4 text-rose-500" />
+            <span className="text-rose-600">العروض</span>
+          </button>
+
+          <button
+            onClick={() => setIsTrackerOpen(true)}
+            className="flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl text-slate-500 hover:text-slate-900 transition-colors relative"
+          >
+            {userOrders.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-[8px] w-3.5 h-3.5 flex items-center justify-center rounded-full">
+                {userOrders.length}
+              </span>
+            )}
+            <Notebook className="w-4 h-4" />
+            <span>طلباتي</span>
+          </button>
+
+          <button
+            onClick={() => setIsCartOpen(true)}
+            className="flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl text-slate-500 hover:text-slate-900 transition-colors relative"
+          >
+            {cart.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-amber-500 text-white text-[8px] w-3.5 h-3.5 flex items-center justify-center rounded-full font-bold">
+                {cart.reduce((cnt, it) => cnt + it.quantity, 0)}
+              </span>
+            )}
+            <ShoppingCart className="w-4 h-4" />
+            <span>السلة</span>
+          </button>
+
+          {(userRole === 'manager' || userRole === 'admin') && (
+            <button
+              onClick={() => setIsMerchantOpen(true)}
+              className="flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl text-amber-700 bg-amber-50 border border-amber-200"
+            >
+              <Settings className="w-4 h-4 text-amber-600" />
+              <span>الإدارة</span>
+            </button>
+          )}
+        </nav>
+      )}
 
       {/* PRODUCT DETAILS MODAL */}
       <AnimatePresence>
