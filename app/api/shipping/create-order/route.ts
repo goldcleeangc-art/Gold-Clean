@@ -22,14 +22,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Config credentials with fallbacks to test environment from official documentation
+    // Config credentials with fallbacks to production environment from official documentation
     const apiUrl =
       process.env.JT_EXPRESS_API_URL ||
-      'https://demoopenapi.jtjms-eg.com/webopenplatformapi/api/order/addOrder?uuid=bf7d84474a0a42128fe4d2d5f15ee674';
+      'https://openapi.jtjms-eg.com/webopenplatformapi/api/order/addOrder';
     const apiAccount = process.env.JT_EXPRESS_API_ACCOUNT || '959461393646497854';
     const privateKey = process.env.JT_EXPRESS_PRIVATE_KEY || 'ae860e1e8620446d81953b780b600b6d';
     const customerCode = process.env.JT_EXPRESS_CUSTOMER_CODE || 'J0086010315';
-    const plainTextPassword = process.env.JT_EXPRESS_PASSWORD || 'clW&58u4';
+    const plainTextPassword = process.env.JT_EXPRESS_PASSWORD || 'KO6w29g2';
 
     // 1. Calculate cipher text: MD5(plain text password + 'jadada236t2').toUpperCase()
     const cipherText = crypto
@@ -109,11 +109,11 @@ export async function POST(req: NextRequest) {
         prov: 'القاهرة',
         city: 'القاهرة',
         area: 'مدينة بدر',
-        street: 'المنطقة الصناعية - مصنع جولد كلين',
+        street: 'المنطقة الصناعي -  مخزن J&T',
         name: 'مصنع جولد كلين Gold Clean',
         company: 'شركة جولد كلين للمنظفات',
-        mobile: '01000000000',
-        phone: '01000000000',
+        mobile: '01050981039',
+        phone: '01050981039',
         countryCode: 'EGY'
       },
       items: formattedItems
