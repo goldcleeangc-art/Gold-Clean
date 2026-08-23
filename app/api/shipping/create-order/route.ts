@@ -26,10 +26,10 @@ export async function POST(req: NextRequest) {
     const apiUrl =
       process.env.JT_EXPRESS_API_URL ||
       'https://demoopenapi.jtjms-eg.com/webopenplatformapi/api/order/addOrder?uuid=bf7d84474a0a42128fe4d2d5f15ee674';
-    const apiAccount = process.env.JT_EXPRESS_API_ACCOUNT || '292508153084379141';
-    const privateKey = process.env.JT_EXPRESS_PRIVATE_KEY || 'a0a1047cce70493c9d5d29704f05d0d9';
-    const customerCode = process.env.JT_EXPRESS_CUSTOMER_CODE || 'J0086024138';
-    const plainTextPassword = process.env.JT_EXPRESS_PASSWORD || 'KO6w29g2';
+    const apiAccount = process.env.JT_EXPRESS_API_ACCOUNT || '959461393646497854';
+    const privateKey = process.env.JT_EXPRESS_PRIVATE_KEY || 'ae860e1e8620446d81953b780b600b6d';
+    const customerCode = process.env.JT_EXPRESS_CUSTOMER_CODE || 'J0086010315';
+    const plainTextPassword = process.env.JT_EXPRESS_PASSWORD || 'clW&58u4';
 
     // 1. Calculate cipher text: MD5(plain text password + 'jadada236t2').toUpperCase()
     const cipherText = crypto
