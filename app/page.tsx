@@ -3835,15 +3835,12 @@ export default function StorePage() {
                   </div>
 
                   <button 
+                    id="drawer-proceed-checkout-btn"
                     onClick={() => { 
                       setIsCartOpen(false); 
-                      if (!user) {
-                        setIsAuthModalOpen(true);
-                      } else {
-                        setIsCheckoutOpen(true); 
-                      }
+                      setIsCheckoutOpen(true); 
                     }}
-                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-xl text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
                   >
                     <span>التوجه لتحديد تفاصيل العنوان والدفع</span>
                   </button>
