@@ -2824,8 +2824,9 @@ export default function StorePage() {
                       >
                         <div className="absolute inset-0 bg-gradient-to-t from-slate-900/10 via-transparent to-transparent opacity-60 z-10 pointer-events-none" />
                         <img 
-                          src="/images/Halal.jpeg" 
+                          src="https://ik.imagekit.io/gxrz55knx/Halal.jpeg" 
                           alt="جولد كلين - النظافة اللي تستاهليها" 
+                          referrerPolicy="no-referrer"
                           className="w-full h-auto object-cover max-h-[420px] md:max-h-[500px] transition-transform duration-750 group-hover:scale-103"
                         />
                       </motion.div>
@@ -2877,42 +2878,105 @@ export default function StorePage() {
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                     {offers.slice(0, 3).map((off) => {
                       const savingsVal = off.savings || Math.max(0, off.originalPrice - off.offerPrice);
                       const discountPercent = off.originalPrice > 0 ? Math.round((savingsVal / off.originalPrice) * 100) : 0;
+                      const totalPieces = off.items ? off.items.reduce((sum, item) => sum + item.quantity, 0) : 0;
+                      
+                      // Resolve main image or items images
+                      const directImage = off.image && off.image.trim() !== '' ? off.image : null;
+                      const resolvedItemImages = (off.items || []).map((it) => {
+                        if (it.image && it.image.trim() !== '') return { name: it.productName, qty: it.quantity, img: it.image };
+                        const matchedProd = products.find(p => p.id === it.productId || p.name === it.productName);
+                        return { 
+                          name: it.productName, 
+                          qty: it.quantity, 
+                          img: matchedProd?.image || 'https://images.unsplash.com/photo-1563453392212-326f518500b1?auto=format&fit=crop&q=80&w=300' 
+                        };
+                      });
+                      const primaryFallbackImage = resolvedItemImages[0]?.img || 'https://images.unsplash.com/photo-1585421514738-01798e348b17?auto=format&fit=crop&q=80&w=600';
+
                       return (
                         <div 
                           key={`home-offer-${off.id}`} 
                           onClick={() => setCurrentTab('offers')} 
-                          className="bg-white rounded-3xl p-5 border border-rose-150/80 shadow-xs hover:shadow-md hover:border-rose-300 transition-all flex flex-col justify-between cursor-pointer group"
+                          className="bg-white rounded-3xl p-4 sm:p-5 border border-rose-150/80 shadow-xs hover:shadow-md hover:border-rose-300 transition-all flex flex-col justify-between cursor-pointer group overflow-hidden"
                         >
                           <div>
-                            <div className="flex items-center justify-between gap-2 mb-2">
-                              <span className="bg-rose-50 text-rose-700 text-[10px] font-extrabold px-2.5 py-0.5 rounded-md border border-rose-100">
-                                {off.badge || 'عرض توفير'}
-                              </span>
-                              <span className="bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-md">
-                                خصم {discountPercent}%
-                              </span>
+                            {/* Offer Visual Media Box */}
+                            <div className="h-48 bg-gradient-to-b from-slate-50/80 to-rose-50/40 rounded-2xl mb-3.5 flex items-center justify-center overflow-hidden border border-slate-100 p-2.5 relative group-hover:border-rose-200 transition-all">
+                              {/* Badges on top */}
+                              <div className="absolute top-2.5 right-2.5 z-10 flex items-center gap-1.5 flex-wrap">
+                                <span className="bg-rose-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-lg shadow-xs flex items-center gap-1">
+                                  <Flame className="w-3 h-3" />
+                                  <span>{off.badge || 'عرض توفير'}</span>
+                                </span>
+                                {discountPercent > 0 && (
+                                  <span className="bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-lg shadow-xs">
+                                    خصم {discountPercent}%
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="absolute bottom-2.5 right-2.5 z-10">
+                                <span className="bg-slate-900/80 backdrop-blur-xs text-white text-[9px] font-bold px-2 py-0.5 rounded-md">
+                                  باقة {totalPieces} قطع
+                                </span>
+                              </div>
+
+                              {/* Images Display: Direct Banner or Multi-Product Composite */}
+                              {directImage ? (
+                                <img 
+                                  src={directImage} 
+                                  alt={off.title} 
+                                  referrerPolicy="no-referrer"
+                                  className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500" 
+                                />
+                              ) : resolvedItemImages.length > 1 ? (
+                                <div className="grid grid-cols-2 gap-2 w-full h-full items-center justify-center">
+                                  {resolvedItemImages.slice(0, 4).map((itImg, idx) => (
+                                    <div key={idx} className="h-full bg-white/90 rounded-xl p-1.5 flex flex-col items-center justify-center border border-slate-100 shadow-2xs overflow-hidden">
+                                      <img 
+                                        src={itImg.img} 
+                                        alt={itImg.name} 
+                                        referrerPolicy="no-referrer"
+                                        className="max-h-12 object-contain group-hover:scale-105 transition-transform" 
+                                      />
+                                      <span className="text-[8px] font-extrabold text-slate-700 truncate w-full text-center mt-0.5">
+                                        {itImg.qty}× {itImg.name}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <img 
+                                  src={primaryFallbackImage} 
+                                  alt={off.title} 
+                                  referrerPolicy="no-referrer"
+                                  className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500 p-2" 
+                                />
+                              )}
                             </div>
 
-                            <h4 className="font-extrabold text-slate-900 text-sm mb-1.5 group-hover:text-rose-600 transition-colors">{off.title}</h4>
-                            <p className="text-slate-500 text-[11px] line-clamp-2 mb-3">{off.description}</p>
+                            <h4 className="font-extrabold text-slate-900 text-sm mb-1 group-hover:text-rose-600 transition-colors line-clamp-1">{off.title}</h4>
+                            <p className="text-slate-500 text-[11px] line-clamp-2 mb-3 leading-relaxed">{off.description}</p>
                             
-                            <div className="text-[10px] text-slate-600 bg-slate-50 p-2 rounded-xl border border-slate-100 mb-3 space-y-0.5">
-                              {off.items.map((it, idx) => (
-                                <div key={idx} className="flex justify-between">
-                                  <span>• {it.quantity}× {it.productName}</span>
+                            {/* Mini Items Checklist */}
+                            <div className="text-[10px] text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100 mb-3 space-y-1">
+                              {(off.items || []).map((it, idx) => (
+                                <div key={idx} className="flex justify-between items-center text-[10px]">
+                                  <span className="font-semibold truncate">• {it.quantity}× {it.productName}</span>
+                                  <span className="text-slate-400 font-mono text-[9px] shrink-0 mr-2">({it.unitPrice * it.quantity} ج)</span>
                                 </div>
                               ))}
                             </div>
                           </div>
 
-                          <div className="pt-2 border-t border-slate-100">
-                            <div className="flex items-baseline justify-between mb-1.5">
+                          <div className="pt-2.5 border-t border-slate-100">
+                            <div className="flex items-baseline justify-between mb-2">
                               <div>
-                                <span className="text-xs text-slate-400 line-through ml-1">{off.originalPrice} ج</span>
+                                <span className="text-xs text-slate-400 line-through ml-1.5">{off.originalPrice} ج</span>
                                 <span className="text-base font-black text-rose-600 font-mono">{off.offerPrice} جنيه</span>
                               </div>
                               <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
@@ -2921,11 +2985,12 @@ export default function StorePage() {
                             </div>
 
                             <button
+                              id={`home-offer-add-btn-${off.id}`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleAddOfferToCart(off);
                               }}
-                              className="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                              className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                             >
                               <ShoppingCart className="w-3.5 h-3.5" />
                               <span>أضف الباقة للسلة</span>
@@ -3149,29 +3214,48 @@ export default function StorePage() {
 
                             {/* Offer Image or Product Collage */}
                             <div className="h-48 rounded-2xl bg-white border border-slate-100 flex items-center justify-center overflow-hidden p-3 relative">
-                              {offer.image ? (
+                              {offer.image && offer.image.trim() !== '' ? (
                                 <img 
                                   src={offer.image} 
                                   alt={offer.title} 
+                                  referrerPolicy="no-referrer"
                                   className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300" 
                                 />
-                              ) : offer.items.length > 0 ? (
-                                <div className="grid grid-cols-2 gap-2 w-full h-full p-2 items-center justify-center">
-                                  {offer.items.slice(0, 4).map((it, idx) => (
-                                    <div key={idx} className="h-full bg-slate-50 rounded-xl p-1 flex flex-col items-center justify-center border border-slate-100 overflow-hidden">
-                                      <img 
-                                        src={it.image || 'https://images.unsplash.com/photo-1563453392212-326f518500b1?auto=format&fit=crop&q=80&w=300'} 
-                                        alt={it.productName} 
-                                        className="max-h-14 object-contain"
-                                      />
-                                      <span className="text-[9px] font-bold text-slate-700 truncate w-full text-center mt-0.5">
-                                        {it.quantity}× {it.productName}
-                                      </span>
-                                    </div>
-                                  ))}
+                              ) : offer.items && offer.items.length > 1 ? (
+                                <div className="grid grid-cols-2 gap-2 w-full h-full p-1 items-center justify-center">
+                                  {offer.items.slice(0, 4).map((it, idx) => {
+                                    const itImg = it.image && it.image.trim() !== '' 
+                                      ? it.image 
+                                      : (products.find(p => p.id === it.productId || p.name === it.productName)?.image || 'https://images.unsplash.com/photo-1563453392212-326f518500b1?auto=format&fit=crop&q=80&w=300');
+                                    return (
+                                      <div key={idx} className="h-full bg-slate-50 rounded-xl p-1 flex flex-col items-center justify-center border border-slate-100 overflow-hidden">
+                                        <img 
+                                          src={itImg} 
+                                          alt={it.productName} 
+                                          referrerPolicy="no-referrer"
+                                          className="max-h-12 object-contain"
+                                        />
+                                        <span className="text-[9px] font-bold text-slate-700 truncate w-full text-center mt-0.5">
+                                          {it.quantity}× {it.productName}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
+                              ) : offer.items && offer.items.length === 1 ? (
+                                <img 
+                                  src={offer.items[0].image || products.find(p => p.id === offer.items[0].productId || p.name === offer.items[0].productName)?.image || 'https://images.unsplash.com/photo-1585421514738-01798e348b17?auto=format&fit=crop&q=80&w=600'} 
+                                  alt={offer.title} 
+                                  referrerPolicy="no-referrer"
+                                  className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300" 
+                                />
                               ) : (
-                                <Sparkles className="w-12 h-12 text-rose-300" />
+                                <img 
+                                  src="https://images.unsplash.com/photo-1585421514738-01798e348b17?auto=format&fit=crop&q=80&w=600" 
+                                  alt={offer.title} 
+                                  referrerPolicy="no-referrer"
+                                  className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300" 
+                                />
                               )}
                             </div>
                           </div>
