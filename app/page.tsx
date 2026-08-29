@@ -679,38 +679,73 @@ export default function StorePage() {
     return cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
   };
 
-  // Real-time listener for the logged-in user's orders
+  // Real-time listener for the logged-in user's or guest device orders
   useEffect(() => {
-    if (!user) {
-      setUserOrders([]);
-      return;
-    }
     setIsTrackingLoading(true);
-    const ordersRef = collection(db, 'orders');
-    const q = query(ordersRef, where('userId', '==', user.uid));
-    
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const list: Order[] = [];
-      snapshot.forEach((docSnap) => {
-        list.push({
-          id: docSnap.id,
-          ...(docSnap.data() as Omit<Order, 'id'>)
+    if (user) {
+      const ordersRef = collection(db, 'orders');
+      const q = query(ordersRef, where('userId', '==', user.uid));
+      
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const list: Order[] = [];
+        snapshot.forEach((docSnap) => {
+          list.push({
+            id: docSnap.id,
+            ...(docSnap.data() as Omit<Order, 'id'>)
+          });
         });
+        list.sort((a, b) => {
+          const dateA = a.createdAt?.seconds || 0;
+          const dateB = b.createdAt?.seconds || 0;
+          return dateB - dateA;
+        });
+        setUserOrders(list);
+        setIsTrackingLoading(false);
+      }, (error) => {
+        console.error("Error listening to user orders:", error);
+        setIsTrackingLoading(false);
       });
-      list.sort((a, b) => {
-        const dateA = a.createdAt?.seconds || 0;
-        const dateB = b.createdAt?.seconds || 0;
-        return dateB - dateA;
-      });
-      setUserOrders(list);
-      setIsTrackingLoading(false);
-    }, (error) => {
-      console.error("Error listening to user orders:", error);
-      setIsTrackingLoading(false);
-    });
 
-    return () => unsubscribe();
-  }, [user]);
+      return () => unsubscribe();
+    } else {
+      // For guest visitors, load their local saved orders from Firestore
+      const loadGuestOrders = async () => {
+        try {
+          const guestOrderIds: string[] = JSON.parse(localStorage.getItem('goldclean_guest_orders') || '[]');
+          if (guestOrderIds.length === 0) {
+            setUserOrders([]);
+            setIsTrackingLoading(false);
+            return;
+          }
+          const loaded: Order[] = [];
+          for (const orderId of guestOrderIds) {
+            try {
+              const snap = await getDoc(doc(db, 'orders', orderId));
+              if (snap.exists()) {
+                loaded.push({
+                  id: snap.id,
+                  ...(snap.data() as Omit<Order, 'id'>)
+                });
+              }
+            } catch (err) {
+              console.warn("Could not fetch guest order:", orderId);
+            }
+          }
+          loaded.sort((a, b) => {
+            const dateA = a.createdAt?.seconds || 0;
+            const dateB = b.createdAt?.seconds || 0;
+            return dateB - dateA;
+          });
+          setUserOrders(loaded);
+        } catch (e) {
+          console.error("Error loading guest orders:", e);
+        } finally {
+          setIsTrackingLoading(false);
+        }
+      };
+      loadGuestOrders();
+    }
+  }, [user, successOrder, isTrackerOpen]);
 
   // Google Auth Sign-In and Sign-Out Handlers
   const handleGoogleSignIn = async () => {
@@ -768,16 +803,16 @@ export default function StorePage() {
   };
 
   const handleRateProduct = async (product: Product, ratingValue: number) => {
-    if (!user) {
-      alert('يجب تسجيل الدخول لتقييم المنتجات');
-      setIsAuthModalOpen(true);
-      return;
-    }
-    
     try {
+      const raterId = user ? user.uid : (typeof window !== 'undefined' ? (localStorage.getItem('goldclean_device_id') || (() => {
+        const newId = 'dev_' + Math.random().toString(36).substring(2, 9);
+        localStorage.setItem('goldclean_device_id', newId);
+        return newId;
+      })()) : 'guest_rater');
+      
       const productRef = doc(db, 'products', product.id);
       const newMap = { ...(product.ratingsMap || {}) };
-      newMap[user.uid] = ratingValue;
+      newMap[raterId] = ratingValue;
       
       const values = Object.values(newMap);
       const newCount = values.length;
@@ -800,17 +835,14 @@ export default function StorePage() {
     }
   };
 
-  // Submit checkout order
+  // Submit checkout order (open to both guests and admins seamlessly)
   const handleCheckoutSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cart.length === 0) return;
-    if (!user) {
-      setIsAuthModalOpen(true);
-      return;
-    }
     setOrderInProgress(true);
 
     try {
+      const guestEmail = user?.email || (checkoutForm.phone ? `${checkoutForm.phone.replace(/[^0-9]/g, '')}@guest.store` : 'guest@goldclean.store');
       const orderPayload: Order = {
         customerName: checkoutForm.name,
         customerPhone: checkoutForm.phone,
@@ -827,12 +859,21 @@ export default function StorePage() {
         totalPrice: getSubtotal(), // Shipping cost determined by shipping company
         status: 'pending',
         createdAt: serverTimestamp(),
-        userId: user.uid,
-        customerEmail: user.email || ''
+        userId: user ? user.uid : 'guest',
+        customerEmail: guestEmail
       };
 
       // 1. Record order in Firestore
       const docRef = await addDoc(collection(db, 'orders'), orderPayload);
+
+      // Save order reference in localStorage for guest tracking
+      if (!user && typeof window !== 'undefined') {
+        const guestOrders: string[] = JSON.parse(localStorage.getItem('goldclean_guest_orders') || '[]');
+        if (!guestOrders.includes(docRef.id)) {
+          guestOrders.unshift(docRef.id);
+          localStorage.setItem('goldclean_guest_orders', JSON.stringify(guestOrders.slice(0, 30)));
+        }
+      }
 
       // 2. Transmit to J&T Express Shipping Logistics API
       try {
@@ -872,7 +913,7 @@ export default function StorePage() {
       setSuccessOrder({ ...orderPayload, id: docRef.id });
       saveCart([]);
       setCheckoutForm({
-        name: user.displayName || '',
+        name: user?.displayName || '',
         phone: '',
         country: '',
         city: '',
@@ -1394,7 +1435,7 @@ export default function StorePage() {
             />
           </div>
 
-          {/* User Sign In / Profile status on Header */}
+          {/* Admin Sign In / Profile status on Header */}
           <div className="flex items-center gap-2 border-r border-slate-200 pr-3 mr-1" dir="rtl">
             {checkingAuth ? (
               <span className="text-[10px] text-slate-400">جاري التحقق...</span>
@@ -1404,29 +1445,31 @@ export default function StorePage() {
                   <img src={user.photoURL} alt={user.displayName || ''} referrerPolicy="no-referrer" className="w-7 h-7 rounded-full object-cover border border-slate-200/50" />
                 ) : (
                   <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-xs font-bold font-mono">
-                    {user.displayName ? user.displayName.charAt(0) : 'U'}
+                    {user.displayName ? user.displayName.charAt(0) : 'A'}
                   </div>
                 )}
                 <div className="hidden lg:flex flex-col text-right">
                   <div className="flex items-center gap-1 text-[11px] font-bold text-slate-800 leading-tight">
                     <span>{user.displayName?.split(' ')[0]}</span>
                     {userRole === 'admin' ? (
-                      <span className="bg-rose-100 text-rose-800 text-[8px] px-1.5 py-0.2 rounded-md font-bold">المدير</span>
+                      <span className="bg-rose-100 text-rose-800 text-[8px] px-1.5 py-0.2 rounded-md font-bold">المدير العام</span>
                     ) : userRole === 'manager' ? (
-                      <span className="bg-amber-100 text-amber-800 text-[8px] px-1.5 py-0.2 rounded-md font-bold">المشرف</span>
+                      <span className="bg-amber-100 text-amber-800 text-[8px] px-1.5 py-0.2 rounded-md font-bold">مشرف المتجر</span>
                     ) : null}
                   </div>
-                  <button onClick={handleSignOut} className="text-[9px] text-rose-500 hover:underline text-right leading-none mt-0.5">تسجيل الخروج</button>
+                  <button onClick={handleSignOut} className="text-[9px] text-rose-500 hover:underline text-right leading-none mt-0.5 cursor-pointer">تسجيل الخروج</button>
                 </div>
-                <button onClick={handleSignOut} className="lg:hidden text-[10px] text-rose-400 font-bold hover:underline">خروج</button>
+                <button onClick={handleSignOut} className="lg:hidden text-[10px] text-rose-400 font-bold hover:underline cursor-pointer">خروج</button>
               </div>
             ) : (
               <button 
+                id="admin-portal-login-btn"
                 onClick={() => setIsAuthModalOpen(true)}
-                className="flex items-center gap-1.5 bg-slate-900 hover:bg-blue-600 text-white font-bold py-1.5 px-3 rounded-xl text-xs transition-colors shrink-0"
+                className="flex items-center gap-1.5 bg-slate-900 hover:bg-amber-600 text-white font-bold py-1.5 px-3 rounded-xl text-xs transition-colors shrink-0 cursor-pointer shadow-xs"
+                title="بوابة دخول الإدارة والمشرفين"
               >
-                <User className="w-3.5 h-3.5" />
-                <span>تسجيل الدخول</span>
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                <span>دخول الإدارة</span>
               </button>
             )}
           </div>
@@ -3888,15 +3931,17 @@ export default function StorePage() {
               ) : (
                 // Form window
                 <form onSubmit={handleCheckoutSubmit} className="space-y-4 text-xs">
-                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between" dir="rtl">
-                    <span className="text-slate-500 text-[10px]">حساب المشتري المعتمد بالجيميل:</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-slate-800 font-bold text-[11px] font-mono">{user?.email}</span>
-                      {user?.photoURL && (
-                        <img src={user.photoURL} alt="" referrerPolicy="no-referrer" className="w-5 h-5 rounded-full object-cover border border-slate-300" />
-                      )}
+                  {user && (
+                    <div className="bg-amber-50/70 p-3 rounded-xl border border-amber-200/80 flex items-center justify-between" dir="rtl">
+                      <span className="text-amber-800 text-[10px] font-bold">الحساب الحالي ({userRole === 'admin' ? 'المدير' : userRole === 'manager' ? 'المشرف' : 'مستخدم'}):</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-800 font-bold text-[11px] font-mono">{user.email}</span>
+                        {user.photoURL && (
+                          <img src={user.photoURL} alt="" referrerPolicy="no-referrer" className="w-5 h-5 rounded-full object-cover border border-amber-300" />
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <div>
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">اسم المستلم رباعي *</label>
@@ -4033,31 +4078,30 @@ export default function StorePage() {
               </div>
 
               {/* Body */}
-              {!user ? (
-                // Logged-out state
+              {userOrders.length === 0 && !isTrackingLoading ? (
+                // Empty state for guest or user
                 <div className="py-12 text-center max-w-md mx-auto space-y-5">
                   <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto">
-                    <Clock className="w-8 h-8" />
+                    <ShoppingBag className="w-8 h-8" />
                   </div>
                   <div className="space-y-2">
-                    <h4 className="font-bold text-slate-900 text-sm">لم تقم بتسجيل الدخول بعد</h4>
+                    <h4 className="font-bold text-slate-900 text-sm">لا توجد طلبات مسجلة حالياً</h4>
                     <p className="text-xs text-slate-500 leading-relaxed">
-                      يرجى تسجيل الدخول باستخدام حساب جوجل الخاص بك لعرض وتتبع طلباتك، ومستجدات التجهيز والشحن مباشرة من قاعدة البيانات بالوقت الحقيقي.
+                      عندما تقوم بطلب أي منظفات من المتجر، ستظهر طلبياتك وحالة الشحن وبوالص التوصيل هنا تلقائياً دون الحاجة لتسجيل أي حساب.
                     </p>
                   </div>
                   <button 
                     onClick={() => {
                       setIsTrackerOpen(false);
-                      setIsAuthModalOpen(true);
+                      setCurrentTab('products');
                     }}
-                    className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-xl text-xs transition-transform hover:scale-102"
+                    className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-xl text-xs transition-transform hover:scale-102 cursor-pointer shadow-xs"
                   >
-                    <User className="w-4 h-4" />
-                    <span>تسجيل الدخول بجوجل الآن</span>
+                    <span>تصفح المنتجات والتسوق الآن</span>
                   </button>
                 </div>
               ) : (
-                // Logged-in view with 3 tabs
+                // Orders view with 3 tabs
                 <div className="flex-1 flex flex-col min-h-0 space-y-4">
                   
                   {/* Tabs matching requested structure */}
@@ -4250,7 +4294,7 @@ export default function StorePage() {
         )}
       </AnimatePresence>
 
-      {/* GOOGLE SIGN IN MODAL (CHANNELS AUTH REQUIREMENT) */}
+      {/* GOOGLE SIGN IN MODAL (ADMIN & MANAGER ACCESS) */}
       <AnimatePresence>
         {isAuthModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -4271,18 +4315,22 @@ export default function StorePage() {
               id="auth-modal-window"
             >
               <div className="flex justify-between items-start">
-                <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
+                <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center text-amber-600">
                   <ShieldCheck className="w-5 h-5" />
                 </div>
-                <button onClick={() => setIsAuthModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <button onClick={() => setIsAuthModalOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors cursor-pointer">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               <div className="space-y-2 text-right" dir="rtl">
-                <h3 className="font-black text-slate-900 text-lg">بوابة تسجيل الدخول الآمن بالجيميل</h3>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-bold">
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+                  <span>خاص بالإدارة والمشرفين</span>
+                </div>
+                <h3 className="font-black text-slate-900 text-lg">بوابة تسجيل دخول الإدارة</h3>
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  أهلاً بك في متجر Gold Clean الفاخر للمنظفات. تفادياً للطلبات العشوائية، نعتمد حسابات Google/Gmail كطريقة مصادقة رسمية لمتابعة طلباتك وتتبع شحنتك حياً بالثانية.
+                  هذه البوابة مخصصة حصرياً لمدراء ومشرفي متجر Gold Clean لمتابعة الطلبات، تعديل المنتجات، الأسعار، العروض، ومزامنة بوالص الشحن.
                 </p>
               </div>
 
@@ -4303,12 +4351,12 @@ export default function StorePage() {
                     <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22c-.87-2.6-2.12-4.53-1.19-7.06z" fill="#FBBC05"/>
                     <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
                   </svg>
-                  <span>تسجيل الدخول السريع باستخدام جوجل</span>
+                  <span>تسجيل الدخول كمسؤول / مدير (Google)</span>
                 </button>
               </div>
 
-              <div className="bg-amber-50 p-3.5 rounded-xl border border-amber-100 text-right text-[10px] text-amber-800" dir="rtl">
-                <strong>💡 للمدراء والمشرفين:</strong> بمجرد تسجيل الدخول ببريدك المشرف المعتمد، يمكنك التوجه إلى "إدارة المتجر" لتعديل المنتجات والأسعار والطلبات مباشرة بدون باسكود.
+              <div className="bg-blue-50 p-3.5 rounded-xl border border-blue-100 text-right text-[11px] text-blue-950" dir="rtl">
+                <strong>🛍️ للعملاء والزبائن:</strong> يمكنك إضافة أي منتجات إلى سلتك وتأكيد طلبك مباشرة بالدفع عند الاستلام دون الحاجة لتسجيل الدخول.
               </div>
             </motion.div>
           </div>
