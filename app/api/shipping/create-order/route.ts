@@ -70,33 +70,76 @@ export async function POST(req: NextRequest) {
           items.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 1) * 0.5, 0)
         );
 
-    // Prepare items list for J&T using product/offer code as primary identifier
-    const formattedItems = items.length > 0
-      ? items.map((it: any) => {
-          const itemCodeOrName = String(it.productCode || it.code || it.itemName || it.productName || 'منظفات جولد كلين').trim();
-          return {
-            itemName: itemCodeOrName.slice(0, 30),
-            englishName: itemCodeOrName.slice(0, 60),
-            chineseName: 'Gold Clean',
-            number: Number(it.quantity) || 1,
-            itemType: 'ITN6', // Daily necessities
-            itemValue: String(it.price || 0),
-            priceCurrency: 'EGP',
-            desc: String(it.productName || it.itemName || 'منظفات عالية الجودة من مصنع جولد كلين').slice(0, 50)
-          };
-        })
-      : [
-          {
-            itemName: 'منظفات جولد كلين',
-            englishName: 'Gold Clean Detergents',
-            chineseName: 'Gold Clean',
-            number: 1,
-            itemType: 'ITN6',
-            itemValue: String(totalPrice || 100),
-            priceCurrency: 'EGP',
-            desc: 'منظفات منزلية وصناعية'
-          }
-        ];
+    // Calculate total quantity of items
+    const totalItemQuantity = items && items.length > 0
+      ? items.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 1), 0)
+      : 1;
+
+    // Prepare aggregated single item for J&T Express
+    // J&T Express's web portal and printed waybill label only display the first item of the array.
+    // By aggregating all items into a single combined item entry, all ordered items and quantities are displayed together.
+    let aggregatedItemName = 'منظفات جولد كلين';
+    let aggregatedDesc = 'منظفات عالية الجودة من مصنع جولد كلين';
+    let contentSummary = '';
+
+    if (items && items.length > 0) {
+      // 1. Code-based or short identifier summary: e.g. "2x GC01 + 1x GC02"
+      const shortParts = items.map((it: any) => {
+        const code = String(it.productCode || it.code || '').trim();
+        const rawName = String(it.productName || it.itemName || '').trim();
+        const shortName = rawName.length > 20 ? rawName.slice(0, 20) : rawName;
+        const qty = Number(it.quantity) || 1;
+        const identifier = code || shortName || 'منتج';
+        return `${qty}x ${identifier}`;
+      });
+
+      // 2. Full descriptive summary: e.g. "2x GC01 (منظف أرضيات) + 1x GC02 (جل غسيل)"
+      const detailedParts = items.map((it: any) => {
+        const code = String(it.productCode || it.code || '').trim();
+        const name = String(it.productName || it.itemName || '').trim();
+        const qty = Number(it.quantity) || 1;
+        if (code && name && code !== name) {
+          return `${qty}x ${code} (${name.slice(0, 25)})`;
+        }
+        return `${qty}x ${code || name || 'منتج'}`;
+      });
+
+      const shortSummary = shortParts.join(' + ');
+      const detailedSummary = detailedParts.join(' + ');
+
+      // Use detailedSummary if it fits within 60 chars, otherwise use shortSummary (up to 60 chars)
+      if (detailedSummary.length <= 60) {
+        aggregatedItemName = detailedSummary;
+      } else {
+        aggregatedItemName = shortSummary.length <= 60 ? shortSummary : shortSummary.slice(0, 60);
+      }
+
+      aggregatedDesc = detailedSummary.slice(0, 100);
+      contentSummary = shortSummary;
+    }
+
+    const formattedItems = [
+      {
+        itemName: aggregatedItemName,
+        englishName: aggregatedItemName.slice(0, 60),
+        chineseName: 'Gold Clean',
+        number: totalItemQuantity,
+        itemType: 'ITN6', // Daily necessities
+        itemValue: String(totalPrice || 0),
+        priceCurrency: 'EGP',
+        desc: aggregatedDesc
+      }
+    ];
+
+    // Combine customer notes with items summary in remark for the delivery courier
+    let finalRemark = 'طلب منتجات من متجر مصنع جولد كلين';
+    if (contentSummary && notes) {
+      finalRemark = `المحتويات: ${contentSummary} | ملاحظات: ${String(notes).slice(0, 100)}`;
+    } else if (contentSummary) {
+      finalRemark = `المحتويات: ${contentSummary}`;
+    } else if (notes) {
+      finalRemark = String(notes).slice(0, 200);
+    }
 
     // Build bizContent JSON object
     const bizContentObj = {
@@ -107,11 +150,11 @@ export async function POST(req: NextRequest) {
       expressType: 'EZ',
       network: '',
       weight: Number(calculatedWeight.toFixed(2)),
-      remark: notes ? String(notes).slice(0, 200) : 'طلب منتجات من متجر مصنع جولد كلين',
+      remark: finalRemark.slice(0, 200),
       txlogisticId: txlogisticId,
       operateType: 1, // 1 Adding
       goodsType: 'ITN6', // Daily necessities
-      totalQuantity: 1,
+      totalQuantity: totalItemQuantity,
       itemsValue: Number(totalPrice) || 0,
       priceCurrency: 'EGP',
       receiver: {
