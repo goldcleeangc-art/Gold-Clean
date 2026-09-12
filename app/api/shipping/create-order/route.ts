@@ -22,14 +22,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Config credentials with fallbacks to production environment from official documentation
+    // Config credentials from environment variables
     const apiUrl =
       process.env.JT_EXPRESS_API_URL ||
       'https://openapi.jtjms-eg.com/webopenplatformapi/api/order/addOrder';
-    const apiAccount = process.env.JT_EXPRESS_API_ACCOUNT || '959461393646497854';
-    const privateKey = process.env.JT_EXPRESS_PRIVATE_KEY || 'ae860e1e8620446d81953b780b600b6d';
-    const customerCode = process.env.JT_EXPRESS_CUSTOMER_CODE || 'J0086010315';
-    const plainTextPassword = process.env.JT_EXPRESS_PASSWORD || 'KO6w29g2';
+    const apiAccount = process.env.JT_EXPRESS_API_ACCOUNT;
+    const privateKey = process.env.JT_EXPRESS_PRIVATE_KEY;
+    const customerCode = process.env.JT_EXPRESS_CUSTOMER_CODE;
+    const plainTextPassword = process.env.JT_EXPRESS_PASSWORD;
+
+    if (!apiAccount || !privateKey || !customerCode || !plainTextPassword) {
+      console.error('Missing J&T Express credentials:', {
+        apiAccount: !!apiAccount,
+        privateKey: !!privateKey,
+        customerCode: !!customerCode,
+        plainTextPassword: !!plainTextPassword
+      });
+      return NextResponse.json(
+        { success: false, error: 'إعدادات وبيانات الاتصال بشركة الشحن غير متوفرة في متغيرات البيئة (Environment Variables)' },
+        { status: 500 }
+      );
+    }
 
     // 1. Calculate cipher text: MD5(plain text password + 'jadada236t2').toUpperCase()
     const cipherText = crypto
@@ -106,14 +119,14 @@ export async function POST(req: NextRequest) {
         countryCode: 'EGY'
       },
       sender: {
-        prov: 'القاهرة',
-        city: 'القاهرة',
-        area: 'مدينة بدر',
-        street: 'المنطقة الصناعي -  مخزن J&T',
-        name: 'مصنع جولد كلين Gold Clean',
-        company: 'شركة جولد كلين للمنظفات',
-        mobile: '01050981039',
-        phone: '01050981039',
+        prov: process.env.JT_EXPRESS_SENDER_PROV || 'القاهرة',
+        city: process.env.JT_EXPRESS_SENDER_CITY || 'القاهرة',
+        area: process.env.JT_EXPRESS_SENDER_AREA || 'مدينة بدر',
+        street: process.env.JT_EXPRESS_SENDER_STREET || 'المنطقة الصناعي -  مخزن J&T',
+        name: process.env.JT_EXPRESS_SENDER_NAME || 'مصنع جولد كلين Gold Clean',
+        company: process.env.JT_EXPRESS_SENDER_COMPANY || 'شركة جولد كلين للمنظفات',
+        mobile: process.env.JT_EXPRESS_SENDER_PHONE || '01050981039',
+        phone: process.env.JT_EXPRESS_SENDER_PHONE || '01050981039',
         countryCode: 'EGY'
       },
       items: formattedItems
