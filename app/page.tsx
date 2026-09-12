@@ -365,6 +365,17 @@ export default function StorePage() {
   const [selectedProductDetails, setSelectedProductDetails] = useState<Product | null>(null);
   const [isProductDetailsOpen, setIsProductDetailsOpen] = useState<boolean>(false);
 
+  // Promo Welcome Modal (GC01 & GC02)
+  const [isPromoModalOpen, setIsPromoModalOpen] = useState<boolean>(false);
+
+  // Auto-open promotional popup shortly after visitor lands on the website
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsPromoModalOpen(true);
+    }, 750);
+    return () => clearTimeout(timer);
+  }, []);
+
   // ----------------------------------------------------
   // URL Routing Sync
   // ----------------------------------------------------
@@ -705,7 +716,7 @@ export default function StorePage() {
       price: offer.offerPrice,
       category: 'offers',
       image: offer.image || (offer.items && offer.items.length > 0 ? offer.items[0].image || '' : ''),
-      volume: `${offer.items.reduce((sum, it) => sum + it.quantity, 0)} قطع`,
+      volume: `${(offer.items || []).reduce((sum, it) => sum + it.quantity, 0)} قطع`,
       isAvailable: offer.isAvailable,
       rating: 5,
       reviewsCount: 1
@@ -1512,6 +1523,55 @@ export default function StorePage() {
       }
     }))
   };
+
+  // Matched Promo Product (GC02) and Promo Offer (GC01)
+  const matchedPromoProduct = products.find(p => 
+    (p.code && p.code.trim().toUpperCase() === 'GC02') ||
+    (p.id && p.id.trim().toUpperCase() === 'GC02') ||
+    (p.name && p.name.includes('GC02'))
+  );
+
+  const targetPromoProduct: Product = matchedPromoProduct || (products.length > 0 ? {
+    ...products[0],
+    code: products[0].code || 'GC02'
+  } : {
+    id: 'prod-gc02',
+    name: 'منظف ومطهر جولد كلين الفاخر',
+    code: 'GC02',
+    description: 'تركيبة مركزة فائقة الفعالية تقضي على أصعب الدهون والأوساخ مع لمعان ناصع ورائحة انتعاش تدوم طويلاً.',
+    price: 45.00,
+    category: 'kitchen',
+    image: 'https://images.unsplash.com/photo-1563453392212-326f518500b1?auto=format&fit=crop&q=80&w=600',
+    volume: '1 لتر',
+    isAvailable: true,
+    rating: 5,
+    reviewsCount: 148
+  });
+
+  const matchedPromoOffer = offers.find(o => 
+    (o.code && o.code.trim().toUpperCase() === 'GC01') ||
+    (o.id && o.id.trim().toUpperCase() === 'GC01') ||
+    (o.title && o.title.includes('GC01'))
+  );
+
+  const targetPromoOffer: Offer = matchedPromoOffer || (offers.length > 0 ? {
+    ...offers[0],
+    code: offers[0].code || 'GC01'
+  } : {
+    id: 'offer-gc01',
+    title: 'باقة التوفير الذهبية الشاملة',
+    code: 'GC01',
+    description: 'مجموعة التوفير المتكاملة لنظافة منزلية فائقة الجودة لكافة الأسطح والمفروشات مع خصم مباشر وسعر حصري.',
+    items: [
+      { productId: targetPromoProduct.id, productName: targetPromoProduct.name, quantity: 2, unitPrice: targetPromoProduct.price }
+    ],
+    originalPrice: 160,
+    offerPrice: 119,
+    savings: 41,
+    image: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&q=80&w=600',
+    badge: 'خصم خاص 🔥',
+    isAvailable: true
+  });
 
   return (
     <>
@@ -4854,6 +4914,236 @@ export default function StorePage() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* PROMOTIONAL WELCOME MODAL (GC01 & GC02) */}
+      <AnimatePresence>
+        {isPromoModalOpen && (
+          <div className="fixed inset-0 z-[9990] flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsPromoModalOpen(false)}
+              className="fixed inset-0 bg-slate-950/80 backdrop-blur-md cursor-pointer"
+            />
+
+            {/* Modal Card */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 25 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 20 }}
+              transition={{ type: "spring", duration: 0.5, bounce: 0.2 }}
+              dir="rtl"
+              className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-amber-300/60 overflow-hidden z-10 flex flex-col my-auto max-h-[92vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-amber-950 text-white p-5 md:p-6 relative overflow-hidden shrink-0">
+                <div className="absolute -right-10 -top-10 w-40 h-40 bg-amber-500/20 rounded-full blur-2xl pointer-events-none" />
+                <div className="absolute -left-10 -bottom-10 w-40 h-40 bg-rose-500/20 rounded-full blur-2xl pointer-events-none" />
+
+                {/* Close Button */}
+                <button
+                  onClick={() => setIsPromoModalOpen(false)}
+                  className="absolute top-4 left-4 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white flex items-center justify-center transition-all cursor-pointer z-10"
+                  title="إغلاق النافذة"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+
+                <div className="relative z-10 pr-1 pl-10">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500/25 to-rose-500/25 border border-amber-400/40 text-amber-300 text-[11px] font-bold mb-2">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                    <span>مفاجأة ترحيبية خاصة لزوار متجر Gold Clean اليوم 🔥</span>
+                  </div>
+                  <h2 className="text-lg sm:text-xl md:text-2xl font-black text-white leading-tight">
+                    أقوى باقة توفير والمنتج الأكثر طلباً
+                  </h2>
+                  <p className="text-xs md:text-sm text-slate-300 mt-1 leading-relaxed">
+                    اخترنا لك أفضل باقة توفير والمنتج الأكثر مبيعاً بأفضل سعر مع توصيل سريع حتى باب بيتك
+                  </p>
+                </div>
+              </div>
+
+              {/* Cards Grid */}
+              <div className="p-4 md:p-6 overflow-y-auto flex-1 space-y-4 bg-slate-50/70">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+                  
+                  {/* CARD 1: OFFER GC01 */}
+                  <div className="bg-white rounded-2xl border border-rose-200/80 shadow-xs p-4 sm:p-5 flex flex-col justify-between relative hover:border-rose-400 transition-all hover:shadow-md">
+                    <div>
+                      {/* Top Badges */}
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">
+                          <Flame className="w-3.5 h-3.5 text-rose-600" />
+                          <span>باقة التوفير الذهبي</span>
+                        </span>
+                        <span className="text-[10px] font-mono font-extrabold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                          كود العرض: {targetPromoOffer.code || 'GC01'}
+                        </span>
+                      </div>
+
+                      {/* Image Box */}
+                      <div className="h-40 sm:h-44 w-full rounded-xl bg-slate-50 p-2 border border-slate-100 relative overflow-hidden flex items-center justify-center mb-3">
+                        <img
+                          src={targetPromoOffer.image || 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&q=80&w=600'}
+                          alt={targetPromoOffer.title}
+                          className="w-full h-full object-contain"
+                        />
+                        <div className="absolute top-2.5 right-2.5 bg-emerald-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg shadow-sm flex items-center gap-1">
+                          <span>وفر {targetPromoOffer.savings || (targetPromoOffer.originalPrice - targetPromoOffer.offerPrice)} ج.م 💰</span>
+                        </div>
+                      </div>
+
+                      {/* Title & Description */}
+                      <h3 className="font-black text-slate-900 text-sm sm:text-base leading-snug line-clamp-1">
+                        {targetPromoOffer.title}
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
+                        {targetPromoOffer.description}
+                      </p>
+
+                      {/* Pricing */}
+                      <div className="mt-3.5 flex items-baseline gap-2">
+                        <span className="text-xl sm:text-2xl font-black text-rose-600 font-mono">
+                          {targetPromoOffer.offerPrice} ج.م
+                        </span>
+                        {targetPromoOffer.originalPrice > targetPromoOffer.offerPrice && (
+                          <span className="text-xs text-slate-400 line-through font-mono">
+                            {targetPromoOffer.originalPrice} ج.م
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Action Button */}
+                    <button
+                      onClick={(e) => handleAddOfferToCart(targetPromoOffer, e)}
+                      className="w-full mt-4 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-xs cursor-pointer hover:shadow-rose-600/20"
+                    >
+                      <ShoppingCart className="w-4 h-4" />
+                      <span>أضف باقة العرض للسلة</span>
+                    </button>
+                  </div>
+
+                  {/* CARD 2: PRODUCT GC02 */}
+                  <div className="bg-white rounded-2xl border border-blue-200/80 shadow-xs p-4 sm:p-5 flex flex-col justify-between relative hover:border-blue-400 transition-all hover:shadow-md">
+                    <div>
+                      {/* Top Badges */}
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
+                          <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                          <span>المنتج الأكثر طلباً</span>
+                        </span>
+                        <span className="text-[10px] font-mono font-extrabold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                          كود المنتج: {targetPromoProduct.code || 'GC02'}
+                        </span>
+                      </div>
+
+                      {/* Image Box */}
+                      <div className="h-40 sm:h-44 w-full rounded-xl bg-slate-50 p-2 border border-slate-100 relative overflow-hidden flex items-center justify-center mb-3">
+                        <img
+                          src={targetPromoProduct.image || 'https://images.unsplash.com/photo-1563453392212-326f518500b1?auto=format&fit=crop&q=80&w=600'}
+                          alt={targetPromoProduct.name}
+                          className="w-full h-full object-contain"
+                        />
+                        {targetPromoProduct.volume && (
+                          <div className="absolute top-2.5 right-2.5 bg-slate-900/80 text-white backdrop-blur text-[10px] font-bold px-2 py-0.5 rounded-md">
+                            {targetPromoProduct.volume}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Title & Description */}
+                      <h3 className="font-black text-slate-900 text-sm sm:text-base leading-snug line-clamp-1">
+                        {targetPromoProduct.name}
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
+                        {targetPromoProduct.description}
+                      </p>
+
+                      {/* Pricing & Rating */}
+                      <div className="mt-3.5 flex items-center justify-between">
+                        <span className="text-xl sm:text-2xl font-black text-slate-900 font-mono">
+                          {targetPromoProduct.price} ج.م
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <div className="flex items-center text-amber-400">
+                            {[1, 2, 3, 4, 5].map((s) => (
+                              <Star key={s} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                            ))}
+                          </div>
+                          <span className="text-[11px] font-bold text-slate-500 font-mono">(4.9)</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Action Button */}
+                    <button
+                      onClick={(e) => handleAddToCart(targetPromoProduct, e)}
+                      className="w-full mt-4 py-2.5 px-4 bg-slate-900 hover:bg-blue-600 active:scale-[0.98] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-xs cursor-pointer hover:shadow-blue-600/20"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>أضف المنتج للسلة</span>
+                    </button>
+                  </div>
+
+                </div>
+              </div>
+
+              {/* Bottom Footer / Combined Bundle CTA */}
+              <div className="p-3.5 sm:p-4 bg-white border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+                <button
+                  onClick={(e) => {
+                    triggerFlyAnimation(e);
+                    handleAddOfferToCart(targetPromoOffer, e);
+                    handleAddToCart(targetPromoProduct, e);
+                    setAddedItemName('باقة GC01 + منتج GC02 معاً');
+                    setTimeout(() => setAddedItemName(null), 2500);
+                    setIsPromoModalOpen(false);
+                  }}
+                  className="w-full sm:w-auto flex-1 py-3 px-5 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-[0.99] text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-md shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer transition-all border border-amber-300"
+                >
+                  <Sparkles className="w-4 h-4 text-slate-950 fill-slate-950" />
+                  <span>أضف العرض والمنتج معاً بضغطة واحدة ⚡</span>
+                  <span className="bg-slate-950/10 px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold">
+                    {(targetPromoOffer.offerPrice + targetPromoProduct.price)} ج.م
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => setIsPromoModalOpen(false)}
+                  className="w-full sm:w-auto py-2.5 px-4 text-slate-500 hover:text-slate-800 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  متابعة التصفح في المتجر
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating Re-open Promo Button */}
+      {!isPromoModalOpen && (
+        <motion.button
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          whileHover={{ scale: 1.04 }}
+          whileTap={{ scale: 0.96 }}
+          onClick={() => setIsPromoModalOpen(true)}
+          className="fixed bottom-16 md:bottom-6 right-4 md:right-6 z-40 bg-gradient-to-r from-slate-950 via-slate-900 to-amber-950 text-white font-bold text-xs py-2.5 px-3.5 sm:px-4 rounded-full shadow-xl shadow-amber-950/20 flex items-center gap-2 border border-amber-400/40 cursor-pointer hover:border-amber-400 transition-all"
+          title="عروض اليوم الخاصة"
+          dir="rtl"
+        >
+          <span className="flex h-2.5 w-2.5 relative">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+          </span>
+          <Sparkles className="w-4 h-4 text-amber-300" />
+          <span className="text-[11px] sm:text-xs">عروض اليوم المميزة (GC01 + GC02)</span>
+        </motion.button>
+      )}
 
       {/* FLY TO CART ANIMATED PARTICLES */}
       <div className="fixed inset-0 pointer-events-none z-[99999] overflow-hidden">
