@@ -4531,7 +4531,7 @@ export default function StorePage() {
                         <span className="font-mono font-bold text-slate-800">{(successOrder.subtotal ?? (successOrder.totalPrice - (successOrder.shippingCost || 0))).toFixed(2)} جنيه</span>
                       </div>
                       <div className="flex justify-between items-center text-slate-600">
-                        <span>تكلفة الشحن والتوصيل {successOrder.shippingWeight ? `(${successOrder.shippingWeight} كجم)` : ''}:</span>
+                        <span>تكلفة الشحن والتوصيل {successOrder.shippingZone ? `(${successOrder.shippingZone})` : ''}:</span>
                         <span className="font-mono font-bold text-emerald-700">{(successOrder.shippingCost || 0).toFixed(2)} جنيه</span>
                       </div>
                       <div className="flex justify-between items-center text-slate-900 font-extrabold pt-1.5 border-t border-slate-200">
@@ -4623,7 +4623,7 @@ export default function StorePage() {
                       {SHIPPING_ZONES.map((zone) => (
                         <optgroup 
                           key={zone.id} 
-                          label={`${zone.name} (${zone.baseRate} ج لأول كجم • ${zone.extraKgRate} ج لكل كجم إضافي)`}
+                          label={`${zone.name} (شحن ${zone.baseRate} ج)`}
                         >
                           {zone.cities.map((city) => (
                             <option key={city} value={city}>
@@ -4652,19 +4652,16 @@ export default function StorePage() {
                           <div key={z.id} className="bg-white p-2 rounded-lg border border-blue-100 space-y-1">
                             <div className="flex justify-between items-center">
                               <span className="font-extrabold text-blue-950">{z.name}</span>
-                              <span className="font-mono font-black text-emerald-700">{z.baseRate} ج / أول كجم</span>
+                              <span className="font-mono font-black text-emerald-700">{z.baseRate} ج ثابت</span>
                             </div>
                             <p className="text-[10px] text-slate-500 line-clamp-2">
                               {z.cities.join('، ')}
                             </p>
-                            <span className="text-[9px] text-slate-400 block font-medium">
-                              +{z.extraKgRate} ج لكل كجم إضافي
-                            </span>
                           </div>
                         ))}
                       </div>
                       <p className="text-[10px] text-blue-700 pt-1">
-                        • يتم احتساب الوزن الإجمالي تلقائياً وإضافته لقيمة الطلب بشفافية تامة.
+                        • سعر الشحن ثابت وموحد للمحافظة بغض النظر عن وزن وحجم الطلب.
                       </p>
                     </motion.div>
                   )}
@@ -4705,7 +4702,7 @@ export default function StorePage() {
                         <span>تكلفة الشحن والتوصيل:</span>
                         {shippingCalculation && (
                           <span className="text-[10px] text-slate-400">
-                            ({shippingCalculation.zone.name} • وزن {cartTotalWeight} كجم)
+                            ({shippingCalculation.zone.name})
                           </span>
                         )}
                       </div>
@@ -4719,12 +4716,6 @@ export default function StorePage() {
                         </span>
                       )}
                     </div>
-
-                    {shippingCalculation && shippingCalculation.extraKg > 0 && (
-                      <div className="text-[10px] text-slate-400 pr-5">
-                        * يشمل {shippingCalculation.baseRate} ج لأول كجم + {shippingCalculation.extraKg * shippingCalculation.extraKgRate} ج لـ {shippingCalculation.extraKg} كجم إضافي.
-                      </div>
-                    )}
 
                     <div className="border-t border-slate-200 pt-2 flex justify-between items-center">
                       <div>

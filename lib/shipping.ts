@@ -1,8 +1,8 @@
 export interface ShippingZone {
   id: string;
   name: string;
-  baseRate: number; // For first 1 kg (in EGP)
-  extraKgRate: number; // For each additional kg (in EGP)
+  baseRate: number; // Flat shipping rate (in EGP)
+  extraKgRate: number; // Extra kg rate (0 = fixed flat rate)
   cities: string[];
 }
 
@@ -11,14 +11,14 @@ export const SHIPPING_ZONES: ShippingZone[] = [
     id: 'zone_1',
     name: 'المنطقة الأولى',
     baseRate: 60,
-    extraKgRate: 3,
+    extraKgRate: 0,
     cities: ['القاهرة', 'الجيزة', 'الإسكندرية']
   },
   {
     id: 'zone_2',
     name: 'المنطقة الثانية',
     baseRate: 80,
-    extraKgRate: 5,
+    extraKgRate: 0,
     cities: [
       'القليوبية',
       'المنوفية',
@@ -37,7 +37,7 @@ export const SHIPPING_ZONES: ShippingZone[] = [
     id: 'zone_3',
     name: 'المنطقة الثالثة',
     baseRate: 90,
-    extraKgRate: 7,
+    extraKgRate: 0,
     cities: [
       'بني سويف',
       'الفيوم',
@@ -54,7 +54,7 @@ export const SHIPPING_ZONES: ShippingZone[] = [
     id: 'zone_4',
     name: 'المنطقة الرابعة',
     baseRate: 140,
-    extraKgRate: 10,
+    extraKgRate: 0,
     cities: ['مطروح', 'الوادي الجديد', 'جنوب سيناء', 'شمال سيناء']
   }
 ];
@@ -195,7 +195,7 @@ export interface ShippingCostResult {
   zone: ShippingZone;
 }
 
-// Calculate shipping cost based on city and cart total weight
+// Calculate shipping cost based on city (fixed flat rate per zone)
 export function calculateShipping(
   cityName: string,
   totalWeightKg: number
@@ -204,16 +204,16 @@ export function calculateShipping(
   if (!zone) return null;
 
   const totalWeight = Math.max(0.5, totalWeightKg);
-  // Base rate covers up to 1 kg. Additional kg is rounded up to next full kg.
-  const extraKg = totalWeight > 1.0 ? Math.ceil(totalWeight - 1.0) : 0;
-  const billableWeight = 1.0 + extraKg;
-  const shippingCost = zone.baseRate + extraKg * zone.extraKgRate;
+  // Fixed flat shipping cost per zone - no extra weight surcharges
+  const extraKg = 0;
+  const billableWeight = totalWeight;
+  const shippingCost = zone.baseRate;
 
   return {
     shippingCost,
     baseRate: zone.baseRate,
-    extraKgRate: zone.extraKgRate,
-    extraKg,
+    extraKgRate: 0,
+    extraKg: 0,
     totalWeight,
     billableWeight,
     zone
