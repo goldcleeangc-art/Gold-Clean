@@ -351,6 +351,16 @@ export default function StorePage() {
   const [addedItemName, setAddedItemName] = useState<string | null>(null);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
 
+  // Fly-to-cart Star Animation State
+  const [flyingParticles, setFlyingParticles] = useState<Array<{
+    id: number;
+    startX: number;
+    startY: number;
+    targetX: number;
+    targetY: number;
+  }>>([]);
+  const [isCartBouncing, setIsCartBouncing] = useState<boolean>(false);
+
   // Product Details Modal
   const [selectedProductDetails, setSelectedProductDetails] = useState<Product | null>(null);
   const [isProductDetailsOpen, setIsProductDetailsOpen] = useState<boolean>(false);
@@ -611,7 +621,47 @@ export default function StorePage() {
     localStorage.setItem('clean_minimal_cart', JSON.stringify(newCart));
   };
 
-  const handleAddToCart = (product: Product) => {
+  const triggerFlyAnimation = (e?: React.MouseEvent) => {
+    if (typeof window === 'undefined') return;
+
+    let startX = window.innerWidth / 2;
+    let startY = window.innerHeight / 2;
+
+    if (e && typeof e.clientX === 'number' && e.clientX > 0) {
+      startX = e.clientX;
+      startY = e.clientY;
+    } else if (e && e.currentTarget && typeof (e.currentTarget as HTMLElement).getBoundingClientRect === 'function') {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      startX = rect.left + rect.width / 2;
+      startY = rect.top + rect.height / 2;
+    }
+
+    const cartEl = document.getElementById('cart-trigger-btn');
+    let targetX = window.innerWidth - 45;
+    let targetY = 35;
+    if (cartEl) {
+      const rect = cartEl.getBoundingClientRect();
+      targetX = rect.left + rect.width / 2;
+      targetY = rect.top + rect.height / 2;
+    }
+
+    const particleId = Date.now() + Math.random();
+    setFlyingParticles(prev => [...prev, { id: particleId, startX, startY, targetX, targetY }]);
+
+    // Trigger cart bounce upon particle arrival
+    setTimeout(() => {
+      setIsCartBouncing(true);
+      setTimeout(() => setIsCartBouncing(false), 450);
+    }, 600);
+
+    // Clean up particle
+    setTimeout(() => {
+      setFlyingParticles(prev => prev.filter(p => p.id !== particleId));
+    }, 850);
+  };
+
+  const handleAddToCart = (product: Product, e?: React.MouseEvent) => {
+    triggerFlyAnimation(e);
     const wasCartEmpty = cart.length === 0;
     const existingIdx = cart.findIndex(item => item.product.id === product.id);
     let newCart = [...cart];
@@ -643,7 +693,8 @@ export default function StorePage() {
     }
   };
 
-  const handleAddOfferToCart = (offer: Offer) => {
+  const handleAddOfferToCart = (offer: Offer, e?: React.MouseEvent) => {
+    triggerFlyAnimation(e);
     const wasCartEmpty = cart.length === 0;
     const offerProductId = `offer-${offer.id}`;
     const offerPseudoProduct: Product = {
@@ -1603,17 +1654,24 @@ export default function StorePage() {
             )}
           </div>
 
-          {/* Cart Icon in pure clean minimalist style */}
-          <button 
+          {/* Cart Icon in pure clean minimalist style with bounce animation */}
+          <motion.button 
             id="cart-trigger-btn"
             onClick={() => setIsCartOpen(true)}
-            className="w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center relative cursor-pointer border border-slate-200/50 transition-all"
+            animate={isCartBouncing ? { scale: [1, 1.35, 0.9, 1.15, 1], rotate: [0, -8, 8, -4, 0] } : { scale: 1, rotate: 0 }}
+            transition={{ duration: 0.4 }}
+            className={`w-10 h-10 rounded-full bg-slate-50 hover:bg-slate-100 flex items-center justify-center relative cursor-pointer border border-slate-200/50 transition-all ${
+              isCartBouncing ? 'ring-4 ring-amber-300 ring-offset-2' : ''
+            }`}
           >
-            <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full border-2 border-white font-bold">
+            <motion.span 
+              animate={isCartBouncing ? { scale: [1, 1.45, 1] } : { scale: 1 }}
+              className="absolute -top-1 -right-1 bg-blue-600 text-white text-[10px] w-5 h-5 flex items-center justify-center rounded-full border-2 border-white font-bold shadow-xs"
+            >
               {cart.reduce((cnt, item) => cnt + item.quantity, 0)}
-            </span>
-            <ShoppingCart className="w-4.5 h-4.5 text-slate-700" />
-          </button>
+            </motion.span>
+            <ShoppingCart className={`w-4.5 h-4.5 transition-colors ${isCartBouncing ? 'text-amber-600' : 'text-slate-700'}`} />
+          </motion.button>
         </div>
       </header>
 
@@ -3252,7 +3310,7 @@ export default function StorePage() {
                               id={`home-offer-add-btn-${off.id}`}
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleAddOfferToCart(off);
+                                handleAddOfferToCart(off, e);
                               }}
                               className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                             >
@@ -3613,7 +3671,7 @@ export default function StorePage() {
                           {/* CTA Button */}
                           <button
                             disabled={!offer.isAvailable}
-                            onClick={() => handleAddOfferToCart(offer)}
+                            onClick={(e) => handleAddOfferToCart(offer, e)}
                             className={`w-full py-3 px-4 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs ${
                               !offer.isAvailable
                                 ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
@@ -3856,7 +3914,7 @@ export default function StorePage() {
                               <button 
                                 id={`add-btn-${product.id}`}
                                 disabled={isOut}
-                                onClick={() => handleAddToCart(product)}
+                                onClick={(e) => handleAddToCart(product, e)}
                                 className={`p-2.5 rounded-xl flex items-center justify-center transition-colors ${
                                   isOut 
                                     ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
@@ -4072,8 +4130,8 @@ export default function StorePage() {
                 </div>
                 <button
                   disabled={!selectedProductDetails.isAvailable}
-                  onClick={() => {
-                    handleAddToCart(selectedProductDetails);
+                  onClick={(e) => {
+                    handleAddToCart(selectedProductDetails, e);
                     // Don't close logic to let user add multiple if they want, but optionally close:
                     // setIsProductDetailsOpen(false);
                   }}
@@ -4796,6 +4854,41 @@ export default function StorePage() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* FLY TO CART ANIMATED PARTICLES */}
+      <div className="fixed inset-0 pointer-events-none z-[99999] overflow-hidden">
+        <AnimatePresence>
+          {flyingParticles.map((particle) => (
+            <motion.div
+              key={particle.id}
+              initial={{ 
+                position: 'fixed', 
+                left: particle.startX, 
+                top: particle.startY, 
+                scale: 0.2, 
+                opacity: 1 
+              }}
+              animate={{ 
+                left: particle.targetX, 
+                top: particle.targetY, 
+                scale: [0.2, 1.4, 1, 0.2], 
+                opacity: [1, 1, 1, 0], 
+                rotate: [0, 180, 360, 540] 
+              }}
+              exit={{ opacity: 0, scale: 0 }}
+              transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
+              className="fixed -translate-x-1/2 -translate-y-1/2 flex items-center justify-center pointer-events-none"
+            >
+              <div className="relative flex items-center justify-center">
+                <div className="absolute w-12 h-12 rounded-full bg-amber-400/60 blur-md animate-pulse" />
+                <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-300 flex items-center justify-center shadow-[0_0_18px_rgba(245,158,11,1)] border-2 border-white ring-2 ring-amber-300/80">
+                  <Star className="w-5 h-5 text-white fill-white drop-shadow-sm" />
+                </div>
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
 
     </div>
     </>
