@@ -61,11 +61,14 @@ export async function POST(req: NextRequest) {
     const sanitizedOrderId = orderId ? String(orderId).replace(/[^a-zA-Z0-9_-]/g, '') : `ORD${Date.now()}`;
     const txlogisticId = sanitizedOrderId.length > 50 ? sanitizedOrderId.slice(0, 50) : sanitizedOrderId;
 
-    // Calculate approximate parcel weight (min 0.5kg)
-    const calculatedWeight = Math.max(
-      0.5,
-      items.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 1) * 0.5, 0)
-    );
+    // Calculate parcel weight (min 0.5kg)
+    const incomingWeight = Number(body.weight);
+    const calculatedWeight = incomingWeight > 0
+      ? Math.max(0.5, incomingWeight)
+      : Math.max(
+          0.5,
+          items.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 1) * 0.5, 0)
+        );
 
     // Prepare items list for J&T using product/offer code as primary identifier
     const formattedItems = items.length > 0

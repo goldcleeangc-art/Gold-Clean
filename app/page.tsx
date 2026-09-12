@@ -39,9 +39,16 @@ import {
   Flame,
   Percent,
   Send,
-  RefreshCw
+  RefreshCw,
+  Info
 } from 'lucide-react';
 import { db, auth, googleProvider } from '../lib/firebase';
+import {
+  calculateShipping,
+  calculateCartTotalWeight,
+  SHIPPING_ZONES,
+  getZoneByCity
+} from '../lib/shipping';
 import { 
   collection, 
   getDocs, 
@@ -148,6 +155,10 @@ interface Order {
     quantity: number;
     price: number;
   }>;
+  subtotal?: number;
+  shippingCost?: number;
+  shippingZone?: string;
+  shippingWeight?: number;
   totalPrice: number;
   status: 'pending' | 'preparing' | 'shipping' | 'delivered' | 'cancelled';
   createdAt: any;
@@ -262,11 +273,12 @@ export default function StorePage() {
   const [checkoutForm, setCheckoutForm] = useState({
     name: '',
     phone: '',
-    country: '',
+    country: 'مصر',
     city: '',
     address: '',
     notes: ''
   });
+  const [isShippingRatesOpen, setIsShippingRatesOpen] = useState<boolean>(false);
   const [orderInProgress, setOrderInProgress] = useState<boolean>(false);
   const [syncingOrderId, setSyncingOrderId] = useState<string | null>(null);
   const [successOrder, setSuccessOrder] = useState<Order | null>(null);
@@ -790,6 +802,14 @@ export default function StorePage() {
     return cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
   };
 
+  // Dynamic shipping cost calculation based on chosen city and parcel weight
+  const cartTotalWeight = calculateCartTotalWeight(cart);
+  const shippingCalculation = checkoutForm.city
+    ? calculateShipping(checkoutForm.city, cartTotalWeight)
+    : null;
+  const currentShippingCost = shippingCalculation ? shippingCalculation.shippingCost : 0;
+  const checkoutGrandTotal = getSubtotal() + currentShippingCost;
+
   // Real-time listener for the logged-in user's or guest device orders
   useEffect(() => {
     setIsTrackingLoading(true);
@@ -950,14 +970,24 @@ export default function StorePage() {
   const handleCheckoutSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (cart.length === 0) return;
+    if (!checkoutForm.city) {
+      alert('يرجى اختيار المحافظة / المدينة لتحديد قيمة الشحن بدقة قبل تأكيد الطلب.');
+      return;
+    }
     setOrderInProgress(true);
 
     try {
       const guestEmail = user?.email || (checkoutForm.phone ? `${checkoutForm.phone.replace(/[^0-9]/g, '')}@guest.store` : 'guest@goldclean.store');
+      const itemsSubtotal = getSubtotal();
+      const currentCartWeight = calculateCartTotalWeight(cart);
+      const shipCalc = calculateShipping(checkoutForm.city, currentCartWeight);
+      const calculatedShipCost = shipCalc ? shipCalc.shippingCost : 0;
+      const finalGrandTotal = itemsSubtotal + calculatedShipCost;
+
       const orderPayload: Order = {
         customerName: checkoutForm.name,
         customerPhone: checkoutForm.phone,
-        customerCountry: checkoutForm.country,
+        customerCountry: checkoutForm.country || 'مصر',
         customerCity: checkoutForm.city,
         customerAddress: checkoutForm.address,
         notes: checkoutForm.notes,
@@ -968,7 +998,11 @@ export default function StorePage() {
           quantity: item.quantity,
           price: item.product.price
         })),
-        totalPrice: getSubtotal(), // Shipping cost determined by shipping company
+        subtotal: itemsSubtotal,
+        shippingCost: calculatedShipCost,
+        shippingZone: shipCalc?.zone.name || '',
+        shippingWeight: currentCartWeight,
+        totalPrice: finalGrandTotal,
         status: 'pending',
         createdAt: serverTimestamp(),
         userId: user ? user.uid : 'guest',
@@ -1000,7 +1034,8 @@ export default function StorePage() {
             customerAddress: checkoutForm.address,
             notes: checkoutForm.notes,
             items: orderPayload.items,
-            totalPrice: orderPayload.totalPrice
+            totalPrice: orderPayload.totalPrice,
+            weight: currentCartWeight
           })
         });
         const shippingData = await shippingRes.json();
@@ -1042,7 +1077,7 @@ export default function StorePage() {
       setCheckoutForm({
         name: user?.displayName || '',
         phone: '',
-        country: '',
+        country: 'مصر',
         city: '',
         address: '',
         notes: ''
@@ -1081,7 +1116,8 @@ export default function StorePage() {
           customerAddress: order.customerAddress,
           notes: order.notes,
           items: enrichedItems,
-          totalPrice: order.totalPrice
+          totalPrice: order.totalPrice,
+          weight: order.shippingWeight || 1
         })
       });
       const data = await res.json();
@@ -2046,7 +2082,14 @@ export default function StorePage() {
                               </div>
 
                               <div className="flex justify-between items-center text-[11px] pt-1 border-t border-slate-50">
-                                <span className="font-extrabold text-blue-600 bg-blue-50/30 px-3 py-1 rounded-lg">الحساب الإجمالي: {ord.totalPrice.toFixed(2)} جنيه</span>
+                                <div>
+                                  <span className="font-extrabold text-blue-600 bg-blue-50/30 px-3 py-1 rounded-lg">الحساب الإجمالي: {ord.totalPrice.toFixed(2)} جنيه</span>
+                                  {typeof ord.shippingCost === 'number' && (
+                                    <span className="text-[10px] text-slate-400 block mt-1 pr-1">
+                                      (المنتجات: {(ord.subtotal ?? (ord.totalPrice - ord.shippingCost)).toFixed(2)} ج + الشحن: {ord.shippingCost.toFixed(2)} ج {ord.shippingZone ? `• ${ord.shippingZone}` : ''})
+                                    </span>
+                                  )}
+                                </div>
                                 <div>
                                   {orderToDelete === ord.id ? (
                                     <div className="flex items-center gap-1.5 bg-rose-50/80 p-1.5 rounded-lg border border-rose-100 duration-200">
@@ -4468,9 +4511,27 @@ export default function StorePage() {
                     )}
 
                     <p><strong>اسم العميل:</strong> {successOrder.customerName}</p>
+                    <p><strong>المحافظة والمدينة:</strong> {successOrder.customerCity} {successOrder.shippingZone ? `(${successOrder.shippingZone})` : ''}</p>
+                    <p><strong>العنوان بالتفصيل:</strong> {successOrder.customerAddress}</p>
                     <p><strong>طريقة الدفع:</strong> نقدي عند التوصيل للمنزل (COD)</p>
-                    <p><strong>المبلغ المستحق للدفع:</strong> {successOrder.totalPrice.toFixed(2)} جنيه</p>
-                    <p className="text-[10px] text-slate-400">لا تشمل مصاريف الشحن (تُحدد من شركة الشحن)</p>
+
+                    <div className="pt-2.5 border-t border-slate-200 space-y-1.5 text-[11px]">
+                      <div className="flex justify-between items-center text-slate-600">
+                        <span>إجمالي المنتجات:</span>
+                        <span className="font-mono font-bold text-slate-800">{(successOrder.subtotal ?? (successOrder.totalPrice - (successOrder.shippingCost || 0))).toFixed(2)} جنيه</span>
+                      </div>
+                      <div className="flex justify-between items-center text-slate-600">
+                        <span>تكلفة الشحن والتوصيل {successOrder.shippingWeight ? `(${successOrder.shippingWeight} كجم)` : ''}:</span>
+                        <span className="font-mono font-bold text-emerald-700">{(successOrder.shippingCost || 0).toFixed(2)} جنيه</span>
+                      </div>
+                      <div className="flex justify-between items-center text-slate-900 font-extrabold pt-1.5 border-t border-slate-200">
+                        <span>المبلغ المستحق للدفع عند الاستلام:</span>
+                        <span className="font-mono text-blue-700 text-sm">{successOrder.totalPrice.toFixed(2)} جنيه</span>
+                      </div>
+                      <p className="text-[10px] text-emerald-600 text-center pt-1 font-medium">
+                        ✓ المبلغ شامل كافة مصاريف الشحن والتوصيل لباب منزلك
+                      </p>
+                    </div>
                   </div>
 
                   <button 
@@ -4502,49 +4563,101 @@ export default function StorePage() {
                       required 
                       value={checkoutForm.name}
                       onChange={(e) => setCheckoutForm({ ...checkoutForm, name: e.target.value })}
-                      placeholder="امجد عسيري..."
+                      placeholder="محمد أحمد علي..."
                       className="w-full bg-slate-50 border border-slate-200 py-2.5 px-3 rounded-lg focus:ring-1 focus:ring-blue-500 outline-none"
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-600 mb-1">رقم الجوال لتتبع الطلب (مع رمز الدولة) *</label>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">رقم الهاتف لتأكيد الشحن والتسليم *</label>
                       <input 
                         type="tel" 
                         required 
                         value={checkoutForm.phone}
                         onChange={(e) => setCheckoutForm({ ...checkoutForm, phone: e.target.value })}
-                        placeholder="+966xxxxxxxxx"
-                        className="w-full bg-slate-50 border border-slate-200 py-2.5 px-3 rounded-lg focus:ring-1 focus:ring-blue-500 outline-none text-left flex-1"
+                        placeholder="01012345678"
+                        className="w-full bg-slate-50 border border-slate-200 py-2.5 px-3 rounded-lg focus:ring-1 focus:ring-blue-500 outline-none text-left flex-1 font-mono"
                         dir="ltr"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-600 mb-1">الدولة *</label>
-                      <input 
-                        type="text" 
-                        required 
-                        value={checkoutForm.country}
-                        onChange={(e) => setCheckoutForm({ ...checkoutForm, country: e.target.value })}
-                        placeholder="السعودية، الإمارات..."
-                        className="w-full bg-slate-50 border border-slate-200 py-2.5 px-3 rounded-lg focus:ring-1 focus:ring-blue-500 outline-none"
-                      />
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">الدولة</label>
+                      <div className="w-full bg-slate-100 border border-slate-200 py-2.5 px-3 rounded-lg text-slate-700 font-bold flex items-center justify-between">
+                        <span>جمهورية مصر العربية</span>
+                        <span>🇪🇬</span>
+                      </div>
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">المدينة *</label>
-                    <input 
-                      type="text"
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-[11px] font-bold text-slate-600">المحافظة / المدينة *</label>
+                      <button
+                        type="button"
+                        onClick={() => setIsShippingRatesOpen(!isShippingRatesOpen)}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 cursor-pointer"
+                      >
+                        <Info className="w-3 h-3" />
+                        <span>{isShippingRatesOpen ? 'إخفاء جدول المناطق' : 'جدول أسعار ومناطق الشحن'}</span>
+                      </button>
+                    </div>
+                    <select
                       required
                       value={checkoutForm.city}
                       onChange={(e) => setCheckoutForm({ ...checkoutForm, city: e.target.value })}
-                      placeholder="الرياض، دبي، القاهرة..."
-                      className="w-full bg-slate-50 border border-slate-200 py-2.5 px-3 rounded-lg focus:ring-1 focus:ring-blue-500 outline-none"
-                    />
+                      className="w-full bg-slate-50 border border-slate-200 py-2.5 px-3 rounded-lg focus:ring-1 focus:ring-blue-500 outline-none font-medium text-slate-800 cursor-pointer"
+                    >
+                      <option value="">-- اضغط هنا لاختيار المحافظة لتحديد تكلفة الشحن --</option>
+                      {SHIPPING_ZONES.map((zone) => (
+                        <optgroup 
+                          key={zone.id} 
+                          label={`${zone.name} (${zone.baseRate} ج لأول كجم • ${zone.extraKgRate} ج لكل كجم إضافي)`}
+                        >
+                          {zone.cities.map((city) => (
+                            <option key={city} value={city}>
+                              {city} (شحن {zone.baseRate} ج)
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
                   </div>
+
+                  {/* Collapsible Shipping Rate Guide */}
+                  {isShippingRatesOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="bg-blue-50/70 border border-blue-200 rounded-xl p-3 space-y-2 text-[11px] overflow-hidden"
+                    >
+                      <div className="flex items-center gap-1.5 font-bold text-blue-900">
+                        <Truck className="w-3.5 h-3.5 text-blue-600" />
+                        <span>أسعار الشحن الرسمية حسب المحافظات (عبر J&T Express):</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {SHIPPING_ZONES.map(z => (
+                          <div key={z.id} className="bg-white p-2 rounded-lg border border-blue-100 space-y-1">
+                            <div className="flex justify-between items-center">
+                              <span className="font-extrabold text-blue-950">{z.name}</span>
+                              <span className="font-mono font-black text-emerald-700">{z.baseRate} ج / أول كجم</span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 line-clamp-2">
+                              {z.cities.join('، ')}
+                            </p>
+                            <span className="text-[9px] text-slate-400 block font-medium">
+                              +{z.extraKgRate} ج لكل كجم إضافي
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-blue-700 pt-1">
+                        • يتم احتساب الوزن الإجمالي تلقائياً وإضافته لقيمة الطلب بشفافية تامة.
+                      </p>
+                    </motion.div>
+                  )}
 
                   <div>
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">تفاصيل العنوان والشارع *</label>
@@ -4553,7 +4666,7 @@ export default function StorePage() {
                       required 
                       value={checkoutForm.address}
                       onChange={(e) => setCheckoutForm({ ...checkoutForm, address: e.target.value })}
-                      placeholder="حي المروج، شارع رقم 15، فيلا 22"
+                      placeholder="اسم المنطقة/الحي، اسم الشارع، رقم العمارة، رقم الشقة"
                       className="w-full bg-slate-50 border border-slate-200 py-2.5 px-3 rounded-lg focus:ring-1 focus:ring-blue-500 outline-none"
                     />
                   </div>
@@ -4569,20 +4682,57 @@ export default function StorePage() {
                     />
                   </div>
 
-                  <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 flex items-center justify-between">
-                    <div>
-                      <p className="font-extrabold text-blue-600 mb-0.5">القيمة الإجمالية للطلب:</p>
-                      <p className="text-[10px] text-slate-400">لا تشمل مصاريف الشحن (تُحدد من شركة الشحن)</p>
+                  {/* Order & Shipping Cost Breakdown */}
+                  <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-2 text-[11px]">
+                    <div className="flex justify-between items-center text-slate-600">
+                      <span>إجمالي سعر المنتجات ({cart.reduce((s, it) => s + it.quantity, 0)} قطعة):</span>
+                      <span className="font-mono font-bold text-slate-800">{getSubtotal().toFixed(2)} جنيه</span>
                     </div>
-                    <span className="text-base font-black text-slate-950">{getSubtotal().toFixed(2)} جنيه</span>
+
+                    <div className="flex justify-between items-center text-slate-600">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Truck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        <span>تكلفة الشحن والتوصيل:</span>
+                        {shippingCalculation && (
+                          <span className="text-[10px] text-slate-400">
+                            ({shippingCalculation.zone.name} • وزن {cartTotalWeight} كجم)
+                          </span>
+                        )}
+                      </div>
+                      {shippingCalculation ? (
+                        <span className="font-mono font-bold text-emerald-700">
+                          +{shippingCalculation.shippingCost.toFixed(2)} جنيه
+                        </span>
+                      ) : (
+                        <span className="text-amber-600 font-bold text-[10px]">
+                          اختر المحافظة لحساب الشحن
+                        </span>
+                      )}
+                    </div>
+
+                    {shippingCalculation && shippingCalculation.extraKg > 0 && (
+                      <div className="text-[10px] text-slate-400 pr-5">
+                        * يشمل {shippingCalculation.baseRate} ج لأول كجم + {shippingCalculation.extraKg * shippingCalculation.extraKgRate} ج لـ {shippingCalculation.extraKg} كجم إضافي.
+                      </div>
+                    )}
+
+                    <div className="border-t border-slate-200 pt-2 flex justify-between items-center">
+                      <div>
+                        <span className="font-extrabold text-slate-900 block text-xs">الإجمالي المطلوب دفعه:</span>
+                        <span className="text-[10px] text-slate-400 font-medium">نقداً عند الاستلام للمنزل (COD)</span>
+                      </div>
+                      <span className="text-base font-black text-blue-700 font-mono">
+                        {checkoutGrandTotal.toFixed(2)} جنيه
+                      </span>
+                    </div>
                   </div>
 
                   <button 
                     type="submit"
                     disabled={orderInProgress}
-                    className="w-full py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-colors"
+                    className="w-full py-3.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-colors cursor-pointer shadow-xs disabled:opacity-50"
                   >
-                    {orderInProgress ? 'يرجى الانتظار جاري إرسال الطلب لقاعدة البيانات...' : 'تأكيد الطلب'}
+                    {orderInProgress ? 'يرجى الانتظار جاري إرسال الطلب...' : `تأكيد الطلب بمبلغ ${checkoutGrandTotal.toFixed(2)} جنيه`}
                   </button>
                 </form>
               )}
@@ -4796,8 +4946,10 @@ export default function StorePage() {
                                   )}
                                 </div>
                                 <div className="text-left">
-                                  <span className="block text-[9px] text-slate-400 leading-none">إجمالي الحساب (COD)</span>
-                                   <span className="text-sm font-black text-blue-600 font-mono inline-block mt-1">{order.totalPrice.toFixed(2)} جنيه</span>
+                                  <span className="block text-[9px] text-slate-400 leading-none">
+                                    {typeof order.shippingCost === 'number' ? `شامل الشحن (${order.shippingCost} ج)` : 'إجمالي الحساب (COD)'}
+                                  </span>
+                                  <span className="text-sm font-black text-blue-600 font-mono inline-block mt-1">{order.totalPrice.toFixed(2)} جنيه</span>
                                 </div>
                               </div>
 
