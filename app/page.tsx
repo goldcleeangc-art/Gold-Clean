@@ -321,6 +321,8 @@ export default function StorePage() {
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [userSearchQuery, setUserSearchQuery] = useState<string>('');
   const [adminTab, setAdminTab] = useState<'orders' | 'products' | 'offers' | 'categories' | 'stats' | 'users'>('orders');
+  const [adminOrderFilter, setAdminOrderFilter] = useState<'all' | 'pending' | 'preparing' | 'shipping' | 'delivered' | 'cancelled'>('all');
+  const [adminOrderSearch, setAdminOrderSearch] = useState<string>('');
 
   // New product editing/adding form
   const [isProductFormOpen, setIsProductFormOpen] = useState<boolean>(false);
@@ -556,9 +558,15 @@ export default function StorePage() {
         });
         // Sort latest orders first
         list.sort((a, b) => {
-          const dateA = a.createdAt?.seconds || 0;
-          const dateB = b.createdAt?.seconds || 0;
-          return dateB - dateA;
+          const getMillis = (item: Order) => {
+            if (!item.createdAt) return 0;
+            if (typeof item.createdAt?.toDate === 'function') return item.createdAt.toDate().getTime();
+            if (item.createdAt?.seconds) return item.createdAt.seconds * 1000;
+            if (item.createdAt?._seconds) return item.createdAt._seconds * 1000;
+            const parsed = new Date(item.createdAt).getTime();
+            return isNaN(parsed) ? 0 : parsed;
+          };
+          return getMillis(b) - getMillis(a);
         });
         setAllOrders(list);
       }, (error) => {
@@ -1295,6 +1303,54 @@ export default function StorePage() {
     }
   };
 
+  const formatOrderDate = (createdAt: any) => {
+    if (!createdAt) return 'تاريخ غير محدد';
+    try {
+      let date: Date;
+      if (typeof createdAt?.toDate === 'function') {
+        date = createdAt.toDate();
+      } else if (createdAt?.seconds) {
+        date = new Date(createdAt.seconds * 1000);
+      } else if (createdAt?._seconds) {
+        date = new Date(createdAt._seconds * 1000);
+      } else {
+        date = new Date(createdAt);
+      }
+      if (isNaN(date.getTime())) return 'تاريخ غير محدد';
+      return date.toLocaleDateString('ar-EG', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return 'تاريخ غير محدد';
+    }
+  };
+
+  // Order status counts for Admin
+  const orderCounts = {
+    all: allOrders.length,
+    pending: allOrders.filter(o => o.status === 'pending').length,
+    preparing: allOrders.filter(o => o.status === 'preparing').length,
+    shipping: allOrders.filter(o => o.status === 'shipping').length,
+    delivered: allOrders.filter(o => o.status === 'delivered').length,
+    cancelled: allOrders.filter(o => o.status === 'cancelled').length,
+  };
+
+  // Admin filtered orders by status and search query
+  const filteredOrders = allOrders.filter((ord) => {
+    const statusMatch = adminOrderFilter === 'all' || ord.status === adminOrderFilter;
+    const query = adminOrderSearch.trim().toLowerCase();
+    if (!query) return statusMatch;
+    const nameMatch = ord.customerName?.toLowerCase().includes(query);
+    const phoneMatch = ord.customerPhone?.includes(query);
+    const idMatch = ord.id?.toLowerCase().includes(query);
+    const billCodeMatch = ord.shippingInfo?.billCode?.toLowerCase().includes(query);
+    return statusMatch && (nameMatch || phoneMatch || idMatch || billCodeMatch);
+  });
+
   // Filter computation
   const filteredProducts = products.filter((prod) => {
     const searchMatch = prod.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -1612,13 +1668,75 @@ export default function StorePage() {
                   
                   {adminTab === 'orders' && (
                     <div className="space-y-4">
-                      <div className="flex justify-between items-center mb-1">
+                      {/* Header info */}
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-1">
                         <div>
                           <h4 className="font-extrabold text-sm text-slate-900">الطلبات الواردة من العملاء</h4>
+                          <p className="text-[11px] text-slate-400 mt-0.5">متابعة وتحديث حالات الطلبات وتواريخها والمزامنة مع شركة الشحن</p>
                         </div>
-                        <span className="bg-blue-50 text-blue-700 font-bold px-2.5 py-1 rounded-lg text-[10px] border border-blue-100">
-                          الإجمالي: {allOrders.length} طلبية
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="bg-blue-50 text-blue-700 font-bold px-2.5 py-1 rounded-lg text-[10px] border border-blue-100">
+                            المعروض: {filteredOrders.length} من إجمالي {allOrders.length} طلبية
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Filter & Search Toolbar */}
+                      <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
+                        {/* Search */}
+                        <div className="relative max-w-md">
+                          <Search className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="بحث باسم العميل، الهاتف، أو رقم الطلب..."
+                            value={adminOrderSearch}
+                            onChange={(e) => setAdminOrderSearch(e.target.value)}
+                            className="w-full pl-8 pr-9 py-1.5 rounded-xl border border-slate-200 text-xs bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                          />
+                          {adminOrderSearch && (
+                            <button
+                              onClick={() => setAdminOrderSearch('')}
+                              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Status Filter Buttons */}
+                        <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100">
+                          <span className="text-[11px] font-bold text-slate-500 ml-1">تصفية حسب الحالة:</span>
+                          {[
+                            { id: 'all', label: 'الكل', count: orderCounts.all },
+                            { id: 'pending', label: '⏳ معلق', count: orderCounts.pending },
+                            { id: 'preparing', label: '⚙️ جاري التجهيز', count: orderCounts.preparing },
+                            { id: 'shipping', label: '🛵 بالشحن', count: orderCounts.shipping },
+                            { id: 'delivered', label: '✅ تم الاستلام', count: orderCounts.delivered },
+                            { id: 'cancelled', label: '❌ ملغي', count: orderCounts.cancelled },
+                          ].map((tab) => {
+                            const isActive = adminOrderFilter === tab.id;
+                            return (
+                              <button
+                                key={tab.id}
+                                onClick={() => setAdminOrderFilter(tab.id as any)}
+                                className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1.5 border cursor-pointer ${
+                                  isActive
+                                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                                }`}
+                              >
+                                <span>{tab.label}</span>
+                                <span
+                                  className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${
+                                    isActive ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-600'
+                                  }`}
+                                >
+                                  {tab.count}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
 
                       {allOrders.length === 0 ? (
@@ -1626,21 +1744,39 @@ export default function StorePage() {
                           <ShoppingBag className="w-10 h-10 text-slate-200 mx-auto mb-2 animate-bounce" />
                           <p className="text-slate-400">لا يوجد برقيات أو طلبات لغسيل أو معقمات حتى الآن بقاعدة البيانات.</p>
                         </div>
+                      ) : filteredOrders.length === 0 ? (
+                        <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 space-y-2">
+                          <p className="text-xs text-slate-500 font-bold">لا توجد طلبات تطابق الفلتر أو البحث الحالي.</p>
+                          <button
+                            onClick={() => {
+                              setAdminOrderFilter('all');
+                              setAdminOrderSearch('');
+                            }}
+                            className="text-xs text-blue-600 hover:underline font-bold cursor-pointer"
+                          >
+                            إعادة ضبط الفلاتر وعرض جميع الطلبات
+                          </button>
+                        </div>
                       ) : (
                         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                          {allOrders.map((ord) => (
+                          {filteredOrders.map((ord) => (
                             <div key={ord.id} className="p-5 bg-white rounded-2xl border border-slate-100 shadow-xs relative space-y-4 hover:border-slate-200 transition-all">
                               
-                              <div className="flex justify-between items-start">
-                                <div>
-                                  <h5 className="font-bold text-slate-800 text-xs">العميل: {ord.customerName}</h5>
-                                  <p className="text-[10px] text-slate-400 mt-0.5">الهاتف: {ord.customerPhone} • الدولة/المدينة: {ord.customerCountry ? ord.customerCountry + ' - ' : ''}{ord.customerCity}</p>
-                                  <p className="text-[10px] text-slate-400 mt-0.5">العنوان: {ord.customerAddress}</p>
+                              {/* Order Header: ID, Date, and Status Selector */}
+                              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-slate-100">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-mono font-black text-xs text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">
+                                    #{ord.id?.substring(0, 8).toUpperCase()}
+                                  </span>
+                                  <div className="flex items-center gap-1.5 text-[11px] text-slate-600 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-200/80 font-medium">
+                                    <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                    <span>تاريخ الطلب: <strong className="text-slate-800 font-bold">{formatOrderDate(ord.createdAt)}</strong></span>
+                                  </div>
                                 </div>
                                 <select 
                                   value={ord.status}
                                   onChange={(e) => handleUpdateStatus(ord.id!, e.target.value)}
-                                  className="py-1 px-2.5 rounded-lg border border-slate-200 font-bold text-[10px] outline-none bg-slate-50 focus:bg-white text-slate-800 focus:ring-1 focus:ring-blue-500"
+                                  className="py-1 px-2.5 rounded-lg border border-slate-200 font-bold text-[10px] outline-none bg-slate-50 focus:bg-white text-slate-800 focus:ring-1 focus:ring-blue-500 cursor-pointer"
                                 >
                                   <option value="pending">⏳ معلق في الانتظار</option>
                                   <option value="preparing">⚙️ جاري التجهيز</option>
@@ -1648,6 +1784,13 @@ export default function StorePage() {
                                   <option value="delivered">✅ تم الاستلام والمحاسبة</option>
                                   <option value="cancelled">❌ ملغي</option>
                                 </select>
+                              </div>
+
+                              {/* Customer Information */}
+                              <div>
+                                <h5 className="font-bold text-slate-800 text-xs">العميل: {ord.customerName}</h5>
+                                <p className="text-[10px] text-slate-400 mt-0.5">الهاتف: {ord.customerPhone} • الدولة/المدينة: {ord.customerCountry ? ord.customerCountry + ' - ' : ''}{ord.customerCity}</p>
+                                <p className="text-[10px] text-slate-400 mt-0.5">العنوان: {ord.customerAddress}</p>
                               </div>
 
                               <div className="bg-[#FAFBFD] p-3.5 rounded-xl border border-slate-100 space-y-1">
