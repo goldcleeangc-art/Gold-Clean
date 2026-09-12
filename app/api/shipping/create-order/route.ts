@@ -1,6 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 
+// Helper to format Egyptian mobile/phone to strict 11 digits required by J&T API (String(11))
+function sanitizeEgyptianPhone(raw: any, fallback: string = '01000000000'): string {
+  if (!raw) return fallback;
+  let digits = String(raw).replace(/[^0-9]/g, '');
+  if (digits.startsWith('0020') && digits.length >= 14) {
+    digits = digits.slice(4);
+  } else if (digits.startsWith('20') && digits.length >= 12) {
+    digits = digits.slice(2);
+  }
+  if (digits.length === 10 && !digits.startsWith('0')) {
+    digits = '0' + digits;
+  }
+  const result = digits.slice(0, 11);
+  return result.length === 11 ? result : result.padEnd(11, '0');
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -32,11 +48,11 @@ export async function POST(req: NextRequest) {
     const plainTextPassword = process.env.JT_EXPRESS_PASSWORD;
 
     if (!apiAccount || !privateKey || !customerCode || !plainTextPassword) {
-      console.error('Missing J&T Express credentials:', {
-        apiAccount: !!apiAccount,
-        privateKey: !!privateKey,
-        customerCode: !!customerCode,
-        plainTextPassword: !!plainTextPassword
+      console.warn('J&T Express shipping configuration missing. Order recorded without J&T sync.', {
+        hasApiAccount: !!apiAccount,
+        hasPrivateKey: !!privateKey,
+        hasCustomerCode: !!customerCode,
+        hasPassword: !!plainTextPassword
       });
       return NextResponse.json(
         { success: false, error: 'إعدادات وبيانات الاتصال بشركة الشحن غير متوفرة في متغيرات البيئة (Environment Variables)' },
@@ -61,14 +77,12 @@ export async function POST(req: NextRequest) {
     const sanitizedOrderId = orderId ? String(orderId).replace(/[^a-zA-Z0-9_-]/g, '') : `ORD${Date.now()}`;
     const txlogisticId = sanitizedOrderId.length > 50 ? sanitizedOrderId.slice(0, 50) : sanitizedOrderId;
 
-    // Calculate parcel weight (min 0.5kg)
+    // Calculate parcel weight (J&T range: 0.01 - 30 kg)
     const incomingWeight = Number(body.weight);
     const calculatedWeight = incomingWeight > 0
-      ? Math.max(0.5, incomingWeight)
-      : Math.max(
-          0.5,
-          items.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 1) * 0.5, 0)
-        );
+      ? incomingWeight
+      : items.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 1) * 0.5, 0);
+    const finalWeight = Math.min(30, Math.max(0.5, Number(calculatedWeight.toFixed(2))));
 
     // Calculate total quantity of items
     const totalItemQuantity = items && items.length > 0
@@ -76,7 +90,7 @@ export async function POST(req: NextRequest) {
       : 1;
 
     // Prepare aggregated single item for J&T Express
-    // J&T Express's web portal and printed waybill label only display the first item of the array.
+    // In J&T Express web portal and waybill labels, only the first item in items array is printed.
     // By aggregating all items into a single combined item entry, all ordered items and quantities are displayed together.
     let aggregatedItemName = 'منظفات جولد كلين';
     let aggregatedDesc = 'منظفات عالية الجودة من مصنع جولد كلين';
@@ -87,7 +101,7 @@ export async function POST(req: NextRequest) {
       const shortParts = items.map((it: any) => {
         const code = String(it.productCode || it.code || '').trim();
         const rawName = String(it.productName || it.itemName || '').trim();
-        const shortName = rawName.length > 20 ? rawName.slice(0, 20) : rawName;
+        const shortName = rawName.length > 15 ? rawName.slice(0, 15) : rawName;
         const qty = Number(it.quantity) || 1;
         const identifier = code || shortName || 'منتج';
         return `${qty}x ${identifier}`;
@@ -99,7 +113,7 @@ export async function POST(req: NextRequest) {
         const name = String(it.productName || it.itemName || '').trim();
         const qty = Number(it.quantity) || 1;
         if (code && name && code !== name) {
-          return `${qty}x ${code} (${name.slice(0, 25)})`;
+          return `${qty}x ${code} (${name.slice(0, 20)})`;
         }
         return `${qty}x ${code || name || 'منتج'}`;
       });
@@ -107,11 +121,13 @@ export async function POST(req: NextRequest) {
       const shortSummary = shortParts.join(' + ');
       const detailedSummary = detailedParts.join(' + ');
 
-      // Use detailedSummary if it fits within 60 chars, otherwise use shortSummary (up to 60 chars)
-      if (detailedSummary.length <= 60) {
+      // Use detailedSummary if <= 30 chars, otherwise use shortSummary (capped at 30 chars for itemName per J&T spec String(30))
+      if (detailedSummary.length <= 30) {
         aggregatedItemName = detailedSummary;
+      } else if (shortSummary.length <= 30) {
+        aggregatedItemName = shortSummary;
       } else {
-        aggregatedItemName = shortSummary.length <= 60 ? shortSummary : shortSummary.slice(0, 60);
+        aggregatedItemName = shortSummary.slice(0, 30);
       }
 
       aggregatedDesc = detailedSummary.slice(0, 100);
@@ -120,14 +136,14 @@ export async function POST(req: NextRequest) {
 
     const formattedItems = [
       {
-        itemName: aggregatedItemName,
-        englishName: aggregatedItemName.slice(0, 60),
+        itemName: aggregatedItemName.slice(0, 30), // String(30) per J&T documentation
+        englishName: (contentSummary || aggregatedItemName).slice(0, 60), // String(60) per J&T documentation
         chineseName: 'Gold Clean',
         number: totalItemQuantity,
         itemType: 'ITN6', // Daily necessities
         itemValue: String(totalPrice || 0),
         priceCurrency: 'EGP',
-        desc: aggregatedDesc
+        desc: aggregatedDesc.slice(0, 100) // String(100) per J&T documentation
       }
     ];
 
@@ -164,7 +180,7 @@ export async function POST(req: NextRequest) {
       payType: 'PP_PM',
       expressType: 'EZ',
       network: '',
-      weight: Number(calculatedWeight.toFixed(2)),
+      weight: finalWeight,
       remark: finalRemark.slice(0, 200),
       pickInfo: pickInfoString,
       txlogisticId: txlogisticId,
@@ -179,8 +195,8 @@ export async function POST(req: NextRequest) {
         area: customerCity || 'القاهرة',
         street: customerAddress || 'عنوان العميل',
         name: String(customerName).slice(0, 50),
-        mobile: String(customerPhone).replace(/[^0-9+]/g, '').slice(0, 15) || '01000000000',
-        phone: String(customerPhone).replace(/[^0-9+]/g, '').slice(0, 15) || '01000000000',
+        mobile: sanitizeEgyptianPhone(customerPhone),
+        phone: sanitizeEgyptianPhone(customerPhone),
         countryCode: 'EGY'
       },
       sender: {
@@ -190,8 +206,8 @@ export async function POST(req: NextRequest) {
         street: process.env.JT_EXPRESS_SENDER_STREET || 'المنطقة الصناعي -  مخزن J&T',
         name: process.env.JT_EXPRESS_SENDER_NAME || 'مصنع جولد كلين Gold Clean',
         company: process.env.JT_EXPRESS_SENDER_COMPANY || 'شركة جولد كلين للمنظفات',
-        mobile: process.env.JT_EXPRESS_SENDER_PHONE || '01050981039',
-        phone: process.env.JT_EXPRESS_SENDER_PHONE || '01050981039',
+        mobile: sanitizeEgyptianPhone(process.env.JT_EXPRESS_SENDER_PHONE, '01050981039'),
+        phone: sanitizeEgyptianPhone(process.env.JT_EXPRESS_SENDER_PHONE, '01050981039'),
         countryCode: 'EGY'
       },
       items: formattedItems
