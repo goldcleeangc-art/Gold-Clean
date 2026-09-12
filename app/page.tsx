@@ -991,13 +991,22 @@ export default function StorePage() {
         customerCity: checkoutForm.city,
         customerAddress: checkoutForm.address,
         notes: checkoutForm.notes,
-        items: cart.map(item => ({
-          productId: item.product.id,
-          productName: item.product.name,
-          productCode: item.product.code || '',
-          quantity: item.quantity,
-          price: item.product.price
-        })),
+        items: cart.map(item => {
+          let code = item.product.code || '';
+          if (!code) {
+            const matchingProduct = products.find(p => p.id === item.product.id);
+            if (matchingProduct?.code) code = matchingProduct.code;
+            const matchingOffer = offers.find(o => `offer-${o.id}` === item.product.id || o.id === item.product.id);
+            if (matchingOffer?.code) code = matchingOffer.code;
+          }
+          return {
+            productId: item.product.id,
+            productName: item.product.name,
+            productCode: code,
+            quantity: item.quantity,
+            price: item.product.price
+          };
+        }),
         subtotal: itemsSubtotal,
         shippingCost: calculatedShipCost,
         shippingZone: shipCalc?.zone.name || '',

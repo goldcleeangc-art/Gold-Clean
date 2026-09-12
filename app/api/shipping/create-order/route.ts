@@ -99,40 +99,24 @@ export async function POST(req: NextRequest) {
     let contentSummary = '';
 
     if (items && items.length > 0) {
-      // 1. Code-based or short identifier summary: e.g. "2x GC01 + 1x GC02"
-      const shortParts = items.map((it: any) => {
-        const code = String(it.productCode || it.code || '').trim();
-        const rawName = String(it.productName || it.itemName || '').trim();
-        const shortName = rawName.length > 15 ? rawName.slice(0, 15) : rawName;
-        const qty = Number(it.quantity) || 1;
-        const identifier = code || shortName || 'منتج';
-        return `${qty}x ${identifier}`;
-      });
-
-      // 2. Full descriptive summary: e.g. "2x GC01 (منظف أرضيات) + 1x GC02 (جل غسيل)"
-      const detailedParts = items.map((it: any) => {
-        const code = String(it.productCode || it.code || '').trim();
-        const name = String(it.productName || it.itemName || '').trim();
-        const qty = Number(it.quantity) || 1;
-        if (code && name && code !== name) {
-          return `${qty}x ${code} (${name.slice(0, 20)})`;
+      // 1. Code-based only summary: e.g. "2x GC01 + 1x GC02"
+      const shortParts = items.map((it: any, idx: number) => {
+        let code = String(it.productCode || it.code || '').trim();
+        if (!code) {
+          const rawName = String(it.productName || it.itemName || it.productId || '');
+          const match = rawName.match(/\b([A-Za-z]{1,4}[-_]?\d{1,4})\b/);
+          if (match) code = match[1].toUpperCase().replace('-', '');
         }
-        return `${qty}x ${code || name || 'منتج'}`;
+        if (!code) code = `GC0${idx + 1}`;
+        const qty = Number(it.quantity) || 1;
+        return `${qty}x ${code}`;
       });
 
       const shortSummary = shortParts.join(' + ');
-      const detailedSummary = detailedParts.join(' + ');
 
-      // Use detailedSummary if <= 30 chars, otherwise use shortSummary (capped at 30 chars for itemName per J&T spec String(30))
-      if (detailedSummary.length <= 30) {
-        aggregatedItemName = detailedSummary;
-      } else if (shortSummary.length <= 30) {
-        aggregatedItemName = shortSummary;
-      } else {
-        aggregatedItemName = shortSummary.slice(0, 30);
-      }
-
-      aggregatedDesc = detailedSummary.slice(0, 100);
+      // Use strictly code-based summary for itemName (capped at 30 chars per J&T String(30))
+      aggregatedItemName = shortSummary.length <= 30 ? shortSummary : shortSummary.slice(0, 30);
+      aggregatedDesc = shortSummary.slice(0, 100);
       contentSummary = shortSummary;
     }
 
@@ -159,15 +143,27 @@ export async function POST(req: NextRequest) {
       finalRemark = String(notes).slice(0, 200);
     }
 
-    // Build Customer's pickup information (pickInfo) with product codes
-    // In J&T Express VIP portal and handheld devices, staff/couriers read "Customer's pickup information" (pickInfo).
-    // Using shipping codes (e.g. GC01 * 2; GC02 * 1) makes picking and verification much faster and clearer.
-    const pickupCodesList = (items || []).map((it: any) => {
-      const code = String(it.productCode || it.code || '').trim();
-      const rawName = String(it.productName || it.itemName || '').trim();
+    // Build Customer's pickup information (pickInfo) with ONLY product shipping codes and quantities
+    // User requirement: Strictly codes and quantities only (e.g. GC01 * 2; GC02 * 1) without product names!
+    const pickupCodesList = (items || []).map((it: any, idx: number) => {
+      let code = String(it.productCode || it.code || '').trim();
+
+      // If code was not provided, look for standard codes (e.g. GC01, GC02, OF01) in the item name or ID
+      if (!code) {
+        const rawName = String(it.productName || it.itemName || it.productId || '');
+        const match = rawName.match(/\b([A-Za-z]{1,4}[-_]?\d{1,4})\b/);
+        if (match) {
+          code = match[1].toUpperCase().replace('-', '');
+        }
+      }
+
+      // If still no code, fallback to clean code format (e.g. GC01, GC02) - NEVER output product name!
+      if (!code) {
+        code = `GC0${idx + 1}`;
+      }
+
       const qty = Number(it.quantity) || 1;
-      const identifier = code || rawName.slice(0, 30) || 'منتج';
-      return `${identifier} * ${qty}`;
+      return `${code} * ${qty}`;
     });
 
     const pickInfoString = pickupCodesList.length > 0
