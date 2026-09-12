@@ -618,6 +618,17 @@ export default function StorePage() {
     // Toast
     setAddedItemName(product.name);
     setTimeout(() => setAddedItemName(null), 2500);
+
+    // Meta Pixel AddToCart event
+    if (typeof window !== 'undefined' && (window as any).fbq) {
+      (window as any).fbq('track', 'AddToCart', {
+        content_name: product.name,
+        content_ids: [product.id],
+        content_type: 'product',
+        value: product.price,
+        currency: 'EGP'
+      });
+    }
   };
 
   const handleAddOfferToCart = (offer: Offer) => {
@@ -658,6 +669,17 @@ export default function StorePage() {
     // Toast
     setAddedItemName(`باقة: ${offer.title}`);
     setTimeout(() => setAddedItemName(null), 2500);
+
+    // Meta Pixel AddToCart event for offers
+    if (typeof window !== 'undefined' && (window as any).fbq) {
+      (window as any).fbq('track', 'AddToCart', {
+        content_name: `باقة: ${offer.title}`,
+        content_ids: [offer.id],
+        content_type: 'product',
+        value: offer.offerPrice,
+        currency: 'EGP'
+      });
+    }
   };
 
   const handleCopyLink = (productId: string) => {
@@ -917,7 +939,22 @@ export default function StorePage() {
       } catch (shippingErr) {
         console.error('Shipping API sync during checkout error:', shippingErr);
       }
-      
+
+      // Track Meta Pixel Purchase event
+      if (typeof window !== 'undefined' && (window as any).fbq) {
+        (window as any).fbq('track', 'Purchase', {
+          content_type: 'product',
+          contents: orderPayload.items.map(it => ({
+            id: it.productId,
+            quantity: it.quantity,
+            item_price: it.price
+          })),
+          value: orderPayload.totalPrice,
+          currency: 'EGP',
+          num_items: orderPayload.items.reduce((sum, it) => sum + it.quantity, 0)
+        });
+      }
+
       setSuccessOrder({ ...orderPayload, id: docRef.id });
       saveCart([]);
       setCheckoutForm({
