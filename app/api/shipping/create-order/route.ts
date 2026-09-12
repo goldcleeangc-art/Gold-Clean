@@ -67,18 +67,21 @@ export async function POST(req: NextRequest) {
       items.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 1) * 0.5, 0)
     );
 
-    // Prepare items list for J&T
+    // Prepare items list for J&T using product/offer code as primary identifier
     const formattedItems = items.length > 0
-      ? items.map((it: any) => ({
-          itemName: String(it.productName || 'منظفات جولد كلين').slice(0, 30),
-          englishName: String(it.productName || 'Gold Clean Products').slice(0, 60),
-          chineseName: 'Gold Clean',
-          number: Number(it.quantity) || 1,
-          itemType: 'ITN6', // Daily necessities
-          itemValue: String(it.price || 0),
-          priceCurrency: 'EGP',
-          desc: 'منظفات عالية الجودة من مصنع جولد كلين'
-        }))
+      ? items.map((it: any) => {
+          const itemCodeOrName = String(it.productCode || it.code || it.itemName || it.productName || 'منظفات جولد كلين').trim();
+          return {
+            itemName: itemCodeOrName.slice(0, 30),
+            englishName: itemCodeOrName.slice(0, 60),
+            chineseName: 'Gold Clean',
+            number: Number(it.quantity) || 1,
+            itemType: 'ITN6', // Daily necessities
+            itemValue: String(it.price || 0),
+            priceCurrency: 'EGP',
+            desc: String(it.productName || it.itemName || 'منظفات عالية الجودة من مصنع جولد كلين').slice(0, 50)
+          };
+        })
       : [
           {
             itemName: 'منظفات جولد كلين',

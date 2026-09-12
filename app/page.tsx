@@ -70,6 +70,7 @@ interface Category {
 interface Product {
   id: string;
   name: string;
+  code?: string;
   description: string;
   price: number;
   category: string;
@@ -96,6 +97,7 @@ interface OfferItem {
 interface Offer {
   id: string;
   title: string;
+  code?: string;
   description: string;
   items: OfferItem[];
   originalPrice: number;
@@ -142,6 +144,7 @@ interface Order {
   items: Array<{
     productId: string;
     productName: string;
+    productCode?: string;
     quantity: number;
     price: number;
   }>;
@@ -288,6 +291,7 @@ export default function StorePage() {
   const [selectedQuantityForOffer, setSelectedQuantityForOffer] = useState<number>(1);
   const [offerForm, setOfferForm] = useState<{
     title: string;
+    code?: string;
     description: string;
     badge: string;
     image: string;
@@ -298,6 +302,7 @@ export default function StorePage() {
     savings: number;
   }>({
     title: '',
+    code: '',
     description: '',
     badge: 'عرض توفير مميز',
     image: '',
@@ -330,6 +335,7 @@ export default function StorePage() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productForm, setProductForm] = useState({
     name: '',
+    code: '',
     description: '',
     price: 25,
     category: 'kitchen',
@@ -636,6 +642,7 @@ export default function StorePage() {
     const offerPseudoProduct: Product = {
       id: offerProductId,
       name: `باقة: ${offer.title}`,
+      code: offer.code || '',
       description: offer.description,
       price: offer.offerPrice,
       category: 'offers',
@@ -883,6 +890,7 @@ export default function StorePage() {
         items: cart.map(item => ({
           productId: item.product.id,
           productName: item.product.name,
+          productCode: item.product.code || '',
           quantity: item.quantity,
           price: item.product.price
         })),
@@ -978,6 +986,16 @@ export default function StorePage() {
     if (!order.id) return;
     setSyncingOrderId(order.id);
     try {
+      // Ensure each item has productCode (look up in products or offers if previously saved without code)
+      const enrichedItems = (order.items || []).map(it => {
+        if (it.productCode) return it;
+        const matchingProduct = products.find(p => p.id === it.productId);
+        if (matchingProduct?.code) return { ...it, productCode: matchingProduct.code };
+        const matchingOffer = offers.find(o => `offer-${o.id}` === it.productId);
+        if (matchingOffer?.code) return { ...it, productCode: matchingOffer.code };
+        return it;
+      });
+
       const res = await fetch('/api/shipping/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -988,7 +1006,7 @@ export default function StorePage() {
           customerCity: order.customerCity,
           customerAddress: order.customerAddress,
           notes: order.notes,
-          items: order.items,
+          items: enrichedItems,
           totalPrice: order.totalPrice
         })
       });
@@ -1085,6 +1103,7 @@ export default function StorePage() {
     try {
       const payload = {
         ...productForm,
+        code: productForm.code?.trim() || '',
         price: Number(productForm.price),
         isAvailable: Boolean(productForm.isAvailable),
         rating: editingProduct ? editingProduct.rating : 0,
@@ -1103,6 +1122,7 @@ export default function StorePage() {
       setEditingProduct(null);
       setProductForm({
         name: '',
+        code: '',
         description: '',
         price: 25,
         category: categories[0]?.key || 'kitchen',
@@ -1123,6 +1143,7 @@ export default function StorePage() {
     setEditingProduct(prod);
     setProductForm({
       name: prod.name,
+      code: prod.code || '',
       description: prod.description,
       price: prod.price,
       category: prod.category,
@@ -1234,6 +1255,7 @@ export default function StorePage() {
       const calculatedSavings = Math.max(0, offerForm.originalPrice - offerForm.offerPrice);
       const payload = {
         title: offerForm.title,
+        code: offerForm.code?.trim() || '',
         description: offerForm.description,
         badge: offerForm.badge || 'عرض خاص',
         image: offerForm.image || '',
@@ -1259,6 +1281,7 @@ export default function StorePage() {
       setEditingOffer(null);
       setOfferForm({
         title: '',
+        code: '',
         description: '',
         badge: 'عرض توفير مميز',
         image: '',
@@ -1280,6 +1303,7 @@ export default function StorePage() {
     setEditingOffer(offer);
     setOfferForm({
       title: offer.title,
+      code: offer.code || '',
       description: offer.description,
       badge: offer.badge || 'عرض خاص',
       image: offer.image || '',
@@ -1836,12 +1860,22 @@ export default function StorePage() {
                                   <span>تفاصيل مساحيق ومنظفات السلة:</span>
                                 </p>
                                 <ul className="space-y-1.5 text-slate-500 pr-3">
-                                  {ord.items.map((it, idx) => (
-                                    <li key={idx} className="flex justify-between text-[11px]">
-                                      <span>• {it.productName} (الكمية: {it.quantity})</span>
-                                      <span className="font-mono text-slate-700 font-bold">{it.price.toFixed(2)} جنيه</span>
-                                    </li>
-                                  ))}
+                                  {ord.items.map((it, idx) => {
+                                    const codeDisplay = it.productCode || products.find(p => p.id === it.productId)?.code || offers.find(o => `offer-${o.id}` === it.productId)?.code;
+                                    return (
+                                      <li key={idx} className="flex justify-between items-center text-[11px] gap-2">
+                                        <span className="flex items-center gap-1.5 flex-wrap">
+                                          <span>• {it.productName} (الكمية: {it.quantity})</span>
+                                          {codeDisplay && (
+                                            <span className="font-mono text-[9px] bg-blue-50 text-blue-700 px-1.5 py-0.2 rounded border border-blue-200 font-bold">
+                                              كود الشحن: {codeDisplay}
+                                            </span>
+                                          )}
+                                        </span>
+                                        <span className="font-mono text-slate-700 font-bold shrink-0">{it.price.toFixed(2)} جنيه</span>
+                                      </li>
+                                    );
+                                  })}
                                 </ul>
                                {ord.notes && (
                                   <div className="text-rose-600 mt-2 text-[10px] bg-rose-50/50 p-2 rounded-lg border border-rose-100/30">
@@ -1936,6 +1970,7 @@ export default function StorePage() {
                             setEditingProduct(null);
                             setProductForm({
                               name: '',
+                              code: '',
                               description: '',
                               price: 25,
                               category: 'kitchen',
@@ -1962,7 +1997,7 @@ export default function StorePage() {
                             {editingProduct ? '📝 تحديث تعديلات المنظف المحدد' : '✨ إدراج منظف جديد بالمنتجات المستهدفة'}
                           </h5>
                           
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
                               <label className="block text-[10px] text-slate-500 mb-1">اسم المنظف *</label>
                               <input 
@@ -1971,6 +2006,16 @@ export default function StorePage() {
                                 onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
                                 placeholder="صابون سائل للمطبخ فائق الرغوة..."
                                 className="w-full bg-white border border-slate-200 p-2.5 rounded-lg outline-none focus:ring-1 focus:ring-amber-500 text-xs"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-slate-500 mb-1">كود المنتج لدى شركة الشحن (SKU / Code)</label>
+                              <input 
+                                type="text"
+                                value={productForm.code || ''}
+                                onChange={(e) => setProductForm({ ...productForm, code: e.target.value })}
+                                placeholder="مثال: GC-101 أو DSH-500"
+                                className="w-full bg-white border border-slate-200 p-2.5 rounded-lg outline-none focus:ring-1 focus:ring-amber-500 text-xs font-mono"
                               />
                             </div>
                             <div>
@@ -2165,7 +2210,14 @@ export default function StorePage() {
                                 <img src={p.image} className="w-full h-full object-cover" />
                               </div>
                               <div>
-                                <h6 className="font-bold text-slate-800 text-xs">{p.name}</h6>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <h6 className="font-bold text-slate-800 text-xs">{p.name}</h6>
+                                  {p.code && (
+                                    <span className="font-mono text-[9px] bg-blue-50 text-blue-700 px-1.5 py-0.2 rounded border border-blue-200 font-bold">
+                                      كود: {p.code}
+                                    </span>
+                                  )}
+                                </div>
                                 <span className="text-[10px] text-slate-400 block mt-0.5">
                                   السعر: {p.price} جنيه • متوفر: {p.isAvailable ? 'نعم' : 'لا'}
                                 </span>
@@ -2231,6 +2283,7 @@ export default function StorePage() {
                             setEditingOffer(null);
                             setOfferForm({
                               title: '',
+                              code: '',
                               description: '',
                               badge: 'عرض توفير مميز 🔥',
                               image: '',
@@ -2264,7 +2317,7 @@ export default function StorePage() {
                             <span className="text-[11px] text-slate-400 font-medium">كل عرض يتكون من عدة منتجات مع كمياتها</span>
                           </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
                               <label className="block text-slate-700 font-bold mb-1.5 text-xs">عنوان العرض / الباقة *</label>
                               <input 
@@ -2275,6 +2328,18 @@ export default function StorePage() {
                                 onChange={(e) => setOfferForm({ ...offerForm, title: e.target.value })}
                                 placeholder="مثال: باقة النظافة الشاملة للمنزل (4 قطع)"
                                 className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs focus:bg-white focus:ring-1 focus:ring-rose-500 focus:outline-none"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-slate-700 font-bold mb-1.5 text-xs">كود العرض لشركة الشحن (Offer Code / SKU)</label>
+                              <input 
+                                id="offer-code-input"
+                                type="text"
+                                value={offerForm.code || ''}
+                                onChange={(e) => setOfferForm({ ...offerForm, code: e.target.value })}
+                                placeholder="مثال: GC-OFFER-01"
+                                className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs focus:bg-white focus:ring-1 focus:ring-rose-500 focus:outline-none font-mono"
                               />
                             </div>
 
@@ -2584,7 +2649,14 @@ export default function StorePage() {
                                       </button>
                                     </div>
 
-                                    <h5 className="font-extrabold text-slate-900 text-sm mb-1">{off.title}</h5>
+                                    <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                                      <h5 className="font-extrabold text-slate-900 text-sm">{off.title}</h5>
+                                      {off.code && (
+                                        <span className="font-mono text-[9px] bg-rose-50 text-rose-700 px-1.5 py-0.2 rounded border border-rose-200 font-bold">
+                                          كود: {off.code}
+                                        </span>
+                                      )}
+                                    </div>
                                     <p className="text-[11px] text-slate-500 line-clamp-2 mb-3">{off.description}</p>
 
                                     {/* Bundle items list */}
