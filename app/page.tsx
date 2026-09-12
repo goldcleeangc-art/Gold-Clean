@@ -1105,11 +1105,16 @@ export default function StorePage() {
         return it;
       });
 
+      const existingBillCode = order.shippingInfo?.billCode || '';
+      const isModifying = !!existingBillCode;
+
       const res = await fetch('/api/shipping/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          orderId: order.id,
+          orderId: order.shippingInfo?.txlogisticId || order.id,
+          billCode: existingBillCode,
+          operateType: isModifying ? 2 : 1,
           customerName: order.customerName,
           customerPhone: order.customerPhone,
           customerCity: order.customerCity,
@@ -1122,18 +1127,23 @@ export default function StorePage() {
       });
       const data = await res.json();
       if (data && (data.billCode || data.success)) {
+        const returnedBillCode = data.billCode || existingBillCode;
         const shippingInfoData: ShippingInfo = {
-          billCode: data.billCode || '',
-          sortingCode: data.sortingCode || '',
+          billCode: returnedBillCode || '',
+          sortingCode: data.sortingCode || order.shippingInfo?.sortingCode || '',
           courier: 'J&T Express',
           status: 'created',
-          txlogisticId: data.txlogisticId || order.id,
+          txlogisticId: data.txlogisticId || order.shippingInfo?.txlogisticId || order.id,
           syncedAt: new Date().toISOString()
         };
         await updateDoc(doc(db, 'orders', order.id), {
           shippingInfo: shippingInfoData
         });
-        alert(`تم إرسال الطلب لشركة الشحن J&T Express بنجاح!\nرقم بوليصة الشحن والتتبع: ${data.billCode || data.txlogisticId || 'مسجل'}`);
+        if (isModifying) {
+          alert(`تم تحديث بيانات الشحنة في J&T بنجاح دون تكرار!\nرقم البوليصة الثابت: ${returnedBillCode}`);
+        } else {
+          alert(`تم إرسال الطلب لشركة الشحن J&T Express بنجاح!\nرقم بوليصة الشحن والتتبع: ${returnedBillCode}`);
+        }
       } else {
         alert(`رد شركة الشحن J&T Express: ${data.msg || data.error || 'لم يتم إصدار البوليصة'}`);
       }

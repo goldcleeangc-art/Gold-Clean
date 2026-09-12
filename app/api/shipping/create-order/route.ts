@@ -28,7 +28,9 @@ export async function POST(req: NextRequest) {
       customerAddress,
       notes,
       items = [],
-      totalPrice = 0
+      totalPrice = 0,
+      billCode = '',
+      operateType
     } = body;
 
     if (!customerName || !customerPhone) {
@@ -172,6 +174,10 @@ export async function POST(req: NextRequest) {
       ? pickupCodesList.join('; ').slice(0, 500)
       : 'GC01 * 1';
 
+    // Determine operateType: 1 (Adding new order), 2 (Modifying existing order)
+    const finalOperateType = operateType ? Number(operateType) : (billCode ? 2 : 1);
+    const existingBillCode = billCode ? String(billCode).trim() : '';
+
     // Build bizContent JSON object
     const bizContentObj = {
       customerCode: customerCode,
@@ -184,7 +190,8 @@ export async function POST(req: NextRequest) {
       remark: finalRemark.slice(0, 200),
       pickInfo: pickInfoString,
       txlogisticId: txlogisticId,
-      operateType: 1, // 1 Adding
+      billCode: existingBillCode,
+      operateType: finalOperateType,
       goodsType: 'ITN6', // Daily necessities
       totalQuantity: 1, // Package ticket count (must be 1 for single parcel ticket per J&T specification)
       itemsValue: Number(totalPrice) || 0,
@@ -255,8 +262,9 @@ export async function POST(req: NextRequest) {
       msg: responseData.msg || (isSuccess ? 'تم إرسال الطلب لشركة الشحن بنجاح' : 'استجابة شركة الشحن'),
       data: responseData.data || null,
       txlogisticId: txlogisticId,
-      billCode: responseData?.data?.billCode || null,
+      billCode: responseData?.data?.billCode || existingBillCode || null,
       sortingCode: responseData?.data?.sortingCode || null,
+      operateType: finalOperateType,
       rawResponse: responseData
     });
   } catch (error: any) {
