@@ -141,6 +141,21 @@ export async function POST(req: NextRequest) {
       finalRemark = String(notes).slice(0, 200);
     }
 
+    // Build Customer's pickup information (pickInfo) with product codes
+    // In J&T Express VIP portal and handheld devices, staff/couriers read "Customer's pickup information" (pickInfo).
+    // Using shipping codes (e.g. GC01 * 2; GC02 * 1) makes picking and verification much faster and clearer.
+    const pickupCodesList = (items || []).map((it: any) => {
+      const code = String(it.productCode || it.code || '').trim();
+      const rawName = String(it.productName || it.itemName || '').trim();
+      const qty = Number(it.quantity) || 1;
+      const identifier = code || rawName.slice(0, 30) || 'منتج';
+      return `${identifier} * ${qty}`;
+    });
+
+    const pickInfoString = pickupCodesList.length > 0
+      ? pickupCodesList.join('; ').slice(0, 500)
+      : 'GC01 * 1';
+
     // Build bizContent JSON object
     const bizContentObj = {
       customerCode: customerCode,
@@ -151,10 +166,11 @@ export async function POST(req: NextRequest) {
       network: '',
       weight: Number(calculatedWeight.toFixed(2)),
       remark: finalRemark.slice(0, 200),
+      pickInfo: pickInfoString,
       txlogisticId: txlogisticId,
       operateType: 1, // 1 Adding
       goodsType: 'ITN6', // Daily necessities
-      totalQuantity: totalItemQuantity,
+      totalQuantity: 1, // Package ticket count (must be 1 for single parcel ticket per J&T specification)
       itemsValue: Number(totalPrice) || 0,
       priceCurrency: 'EGP',
       receiver: {
