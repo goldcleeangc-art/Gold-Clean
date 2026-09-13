@@ -5254,29 +5254,11 @@ export default function StorePage() {
                 </div>
               </div>
 
-              {/* Bottom Footer / Combined Bundle CTA */}
-              <div className="p-3.5 sm:p-4 bg-white border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
-                <button
-                  onClick={(e) => {
-                    triggerFlyAnimation(e);
-                    handleAddOfferToCart(targetPromoOffer, e);
-                    handleAddToCart(targetPromoProduct, e);
-                    setAddedItemName('باقة GC01 + منتج GC02 معاً');
-                    setTimeout(() => setAddedItemName(null), 2500);
-                    setIsPromoModalOpen(false);
-                  }}
-                  className="w-full sm:w-auto flex-1 py-3 px-5 bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-[0.99] text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-md shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer transition-all border border-amber-300"
-                >
-                  <Sparkles className="w-4 h-4 text-slate-950 fill-slate-950" />
-                  <span>أضف العرض والمنتج معاً بضغطة واحدة ⚡</span>
-                  <span className="bg-slate-950/10 px-2 py-0.5 rounded-lg text-[11px] font-mono font-bold">
-                    {(targetPromoOffer.offerPrice + targetPromoProduct.price)} ج.م
-                  </span>
-                </button>
-
+              {/* Bottom Footer */}
+              <div className="p-3.5 sm:p-4 bg-white border-t border-slate-200/80 flex items-center justify-center shrink-0">
                 <button
                   onClick={() => setIsPromoModalOpen(false)}
-                  className="w-full sm:w-auto py-2.5 px-4 text-slate-500 hover:text-slate-800 text-xs font-bold transition-colors cursor-pointer"
+                  className="w-full sm:w-auto py-2.5 px-6 text-slate-500 hover:text-slate-800 text-xs sm:text-sm font-bold transition-colors cursor-pointer text-center"
                 >
                   متابعة التصفح في المتجر
                 </button>
