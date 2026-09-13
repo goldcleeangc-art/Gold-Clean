@@ -296,6 +296,7 @@ export default function StorePage() {
 
   // Offers State
   const [offers, setOffers] = useState<Offer[]>([]);
+  const [offersLoading, setOffersLoading] = useState<boolean>(true);
   const [isOfferFormOpen, setIsOfferFormOpen] = useState<boolean>(false);
   const [editingOffer, setEditingOffer] = useState<Offer | null>(null);
   const [offerToDelete, setOfferToDelete] = useState<string | null>(null);
@@ -377,16 +378,24 @@ export default function StorePage() {
   const [selectedProductDetails, setSelectedProductDetails] = useState<Product | null>(null);
   const [isProductDetailsOpen, setIsProductDetailsOpen] = useState<boolean>(false);
 
-  // Promo Welcome Modal (GC01 & GC02)
+  // Promo Welcome Modal
   const [isPromoModalOpen, setIsPromoModalOpen] = useState<boolean>(false);
+  const promoAutoOpenedRef = React.useRef<boolean>(false);
 
-  // Auto-open promotional popup shortly after visitor lands on the website
+  // Auto-open promotional popup ONLY after real products load from Firestore
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsPromoModalOpen(true);
-    }, 750);
-    return () => clearTimeout(timer);
-  }, []);
+    // Wait until products finish loading from Firestore
+    if (loading || offersLoading || promoAutoOpenedRef.current) return;
+
+    // Only open if products have actually loaded from DB
+    if (products.length > 0) {
+      promoAutoOpenedRef.current = true;
+      const timer = setTimeout(() => {
+        setIsPromoModalOpen(true);
+      }, 750);
+      return () => clearTimeout(timer);
+    }
+  }, [loading, offersLoading, products.length]);
 
   // ----------------------------------------------------
   // URL Routing Sync
@@ -550,8 +559,10 @@ export default function StorePage() {
         });
       });
       setOffers(list);
+      setOffersLoading(false);
     }, (error) => {
       console.error("Error listening to offers:", error);
+      setOffersLoading(false);
     });
 
     return () => unsubscribe();
@@ -1579,54 +1590,32 @@ export default function StorePage() {
     }))
   };
 
-  // Matched Promo Product (GC02) and Promo Offer (GC01)
+  // Matched Promo Offer (GC01) and Matched Promo Product (GC02) strictly from real Firestore data
+  const matchedPromoOffer = offers.find(o => 
+    (o.code && o.code.trim().toUpperCase() === 'GC01') ||
+    (o.id && o.id.trim().toUpperCase() === 'GC01') ||
+    (o.title && o.title.includes('GC01'))
+  );
+  const targetPromoOffer: Offer | null = matchedPromoOffer || (offers.length > 0 ? offers[0] : null);
+
   const matchedPromoProduct = products.find(p => 
     (p.code && p.code.trim().toUpperCase() === 'GC02') ||
     (p.id && p.id.trim().toUpperCase() === 'GC02') ||
     (p.name && p.name.includes('GC02'))
   );
 
-  const targetPromoProduct: Product = matchedPromoProduct || (products.length > 0 ? {
-    ...products[0],
-    code: products[0].code || 'GC02'
-  } : {
-    id: 'prod-gc02',
-    name: 'منظف ومطهر جولد كلين الفاخر',
-    code: 'GC02',
-    description: 'تركيبة مركزة فائقة الفعالية تقضي على أصعب الدهون والأوساخ مع لمعان ناصع ورائحة انتعاش تدوم طويلاً.',
-    price: 45.00,
-    category: 'kitchen',
-    image: 'https://images.unsplash.com/photo-1563453392212-326f518500b1?auto=format&fit=crop&q=80&w=600',
-    volume: '1 لتر',
-    isAvailable: true,
-    rating: 5,
-    reviewsCount: 148
-  });
+  // Derive promotional items dynamically from database (no mock fallback data)
+  const promoItem1: { type: 'offer'; data: Offer } | { type: 'product'; data: Product } | null = 
+    targetPromoOffer 
+      ? { type: 'offer', data: targetPromoOffer }
+      : products.length > 0 
+        ? { type: 'product', data: products[0] }
+        : null;
 
-  const matchedPromoOffer = offers.find(o => 
-    (o.code && o.code.trim().toUpperCase() === 'GC01') ||
-    (o.id && o.id.trim().toUpperCase() === 'GC01') ||
-    (o.title && o.title.includes('GC01'))
-  );
-
-  const targetPromoOffer: Offer = matchedPromoOffer || (offers.length > 0 ? {
-    ...offers[0],
-    code: offers[0].code || 'GC01'
-  } : {
-    id: 'offer-gc01',
-    title: 'باقة التوفير الذهبية الشاملة',
-    code: 'GC01',
-    description: 'مجموعة التوفير المتكاملة لنظافة منزلية فائقة الجودة لكافة الأسطح والمفروشات مع خصم مباشر وسعر حصري.',
-    items: [
-      { productId: targetPromoProduct.id, productName: targetPromoProduct.name, quantity: 2, unitPrice: targetPromoProduct.price }
-    ],
-    originalPrice: 160,
-    offerPrice: 119,
-    savings: 41,
-    image: 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&q=80&w=600',
-    badge: 'خصم خاص 🔥',
-    isAvailable: true
-  });
+  const promoItem2: Product | null = 
+    targetPromoOffer 
+      ? (matchedPromoProduct || (products.length > 0 ? products[0] : null))
+      : (products.length > 1 ? (matchedPromoProduct && matchedPromoProduct.id !== products[0].id ? matchedPromoProduct : products[1]) : null);
 
   return (
     <>
@@ -5077,9 +5066,9 @@ export default function StorePage() {
         )}
       </AnimatePresence>
 
-      {/* PROMOTIONAL WELCOME MODAL (GC01 & GC02) */}
+      {/* PROMOTIONAL WELCOME MODAL */}
       <AnimatePresence>
-        {isPromoModalOpen && (
+        {isPromoModalOpen && promoItem1 && promoItem2 && (
           <div className="fixed inset-0 z-[9990] flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto">
             {/* Backdrop */}
             <motion.div
@@ -5120,10 +5109,13 @@ export default function StorePage() {
                     <span>مفاجأة ترحيبية خاصة لزوار متجر Gold Clean اليوم 🔥</span>
                   </div>
                   <h2 className="text-lg sm:text-xl md:text-2xl font-black text-white leading-tight">
-                    أقوى باقة توفير والمنتج الأكثر طلباً
+                    {promoItem1.type === 'offer' ? 'أقوى باقة توفير والمنتج الأكثر طلباً' : 'أبرز منتجات Gold Clean الأكثر طلباً'}
                   </h2>
                   <p className="text-xs md:text-sm text-slate-300 mt-1 leading-relaxed">
-                    اخترنا لك أفضل باقة توفير والمنتج الأكثر مبيعاً بأفضل سعر مع توصيل سريع حتى باب بيتك
+                    {promoItem1.type === 'offer' 
+                      ? 'اخترنا لك أفضل باقة توفير والمنتج الأكثر مبيعاً بأفضل سعر مع توصيل سريع حتى باب بيتك'
+                      : 'اخترنا لك أفضل منتجاتنا الفاخرة والأكثر طلباً بجودة عالية وتوصيل سريع حتى باب بيتك'
+                    }
                   </p>
                 </div>
               </div>
@@ -5132,62 +5124,131 @@ export default function StorePage() {
               <div className="p-4 md:p-6 overflow-y-auto flex-1 space-y-4 bg-slate-50/70">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
                   
-                  {/* CARD 1: OFFER GC01 */}
-                  <div className="bg-white rounded-2xl border border-rose-200/80 shadow-xs p-4 sm:p-5 flex flex-col justify-between relative hover:border-rose-400 transition-all hover:shadow-md">
-                    <div>
-                      {/* Top Badges */}
-                      <div className="flex items-center justify-between gap-2 mb-3">
-                        <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">
-                          <Flame className="w-3.5 h-3.5 text-rose-600" />
-                          <span>باقة التوفير الذهبي</span>
-                        </span>
-                        <span className="text-[10px] font-mono font-extrabold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-                          كود العرض: {targetPromoOffer.code || 'GC01'}
-                        </span>
-                      </div>
+                  {/* CARD 1: OFFER OR PRODUCT */}
+                  {promoItem1.type === 'offer' ? (
+                    <div className="bg-white rounded-2xl border border-rose-200/80 shadow-xs p-4 sm:p-5 flex flex-col justify-between relative hover:border-rose-400 transition-all hover:shadow-md">
+                      <div>
+                        {/* Top Badges */}
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">
+                            <Flame className="w-3.5 h-3.5 text-rose-600" />
+                            <span>باقة التوفير الذهبي</span>
+                          </span>
+                          {promoItem1.data.code && (
+                            <span className="text-[10px] font-mono font-extrabold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                              كود العرض: {promoItem1.data.code}
+                            </span>
+                          )}
+                        </div>
 
-                      {/* Image Box */}
-                      <div className="h-40 sm:h-44 w-full rounded-xl bg-slate-50 p-2 border border-slate-100 relative overflow-hidden flex items-center justify-center mb-3">
-                        <img
-                          src={targetPromoOffer.image || 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&q=80&w=600'}
-                          alt={targetPromoOffer.title}
-                          className="w-full h-full object-contain"
-                        />
-                        <div className="absolute top-2.5 right-2.5 bg-emerald-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg shadow-sm flex items-center gap-1">
-                          <span>وفر {targetPromoOffer.savings || (targetPromoOffer.originalPrice - targetPromoOffer.offerPrice)} ج.م 💰</span>
+                        {/* Image Box */}
+                        <div className="h-40 sm:h-44 w-full rounded-xl bg-slate-50 p-2 border border-slate-100 relative overflow-hidden flex items-center justify-center mb-3">
+                          <img
+                            src={promoItem1.data.image || 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&q=80&w=600'}
+                            alt={promoItem1.data.title}
+                            className="w-full h-full object-contain"
+                          />
+                          {(promoItem1.data.savings > 0 || promoItem1.data.originalPrice > promoItem1.data.offerPrice) && (
+                            <div className="absolute top-2.5 right-2.5 bg-emerald-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg shadow-sm flex items-center gap-1">
+                              <span>وفر {promoItem1.data.savings || (promoItem1.data.originalPrice - promoItem1.data.offerPrice)} ج.م 💰</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Title & Description */}
+                        <h3 className="font-black text-slate-900 text-sm sm:text-base leading-snug line-clamp-1">
+                          {promoItem1.data.title}
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
+                          {promoItem1.data.description}
+                        </p>
+
+                        {/* Pricing */}
+                        <div className="mt-3.5 flex items-baseline gap-2">
+                          <span className="text-xl sm:text-2xl font-black text-rose-600 font-mono">
+                            {promoItem1.data.offerPrice} ج.م
+                          </span>
+                          {promoItem1.data.originalPrice > promoItem1.data.offerPrice && (
+                            <span className="text-xs text-slate-400 line-through font-mono">
+                              {promoItem1.data.originalPrice} ج.م
+                            </span>
+                          )}
                         </div>
                       </div>
 
-                      {/* Title & Description */}
-                      <h3 className="font-black text-slate-900 text-sm sm:text-base leading-snug line-clamp-1">
-                        {targetPromoOffer.title}
-                      </h3>
-                      <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
-                        {targetPromoOffer.description}
-                      </p>
-
-                      {/* Pricing */}
-                      <div className="mt-3.5 flex items-baseline gap-2">
-                        <span className="text-xl sm:text-2xl font-black text-rose-600 font-mono">
-                          {targetPromoOffer.offerPrice} ج.م
-                        </span>
-                        {targetPromoOffer.originalPrice > targetPromoOffer.offerPrice && (
-                          <span className="text-xs text-slate-400 line-through font-mono">
-                            {targetPromoOffer.originalPrice} ج.م
-                          </span>
-                        )}
-                      </div>
+                      {/* Action Button */}
+                      <button
+                        onClick={(e) => handleAddOfferToCart(promoItem1.data, e)}
+                        className="w-full mt-4 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-xs cursor-pointer hover:shadow-rose-600/20"
+                      >
+                        <ShoppingCart className="w-4 h-4" />
+                        <span>أضف باقة العرض للسلة</span>
+                      </button>
                     </div>
+                  ) : (
+                    <div className="bg-white rounded-2xl border border-amber-200/80 shadow-xs p-4 sm:p-5 flex flex-col justify-between relative hover:border-amber-400 transition-all hover:shadow-md">
+                      <div>
+                        {/* Top Badges */}
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
+                            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                            <span>منتج مميز</span>
+                          </span>
+                          {promoItem1.data.code && (
+                            <span className="text-[10px] font-mono font-extrabold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                              كود المنتج: {promoItem1.data.code}
+                            </span>
+                          )}
+                        </div>
 
-                    {/* Action Button */}
-                    <button
-                      onClick={(e) => handleAddOfferToCart(targetPromoOffer, e)}
-                      className="w-full mt-4 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-xs cursor-pointer hover:shadow-rose-600/20"
-                    >
-                      <ShoppingCart className="w-4 h-4" />
-                      <span>أضف باقة العرض للسلة</span>
-                    </button>
-                  </div>
+                        {/* Image Box */}
+                        <div className="h-40 sm:h-44 w-full rounded-xl bg-slate-50 p-2 border border-slate-100 relative overflow-hidden flex items-center justify-center mb-3">
+                          <img
+                            src={promoItem1.data.image || 'https://images.unsplash.com/photo-1563453392212-326f518500b1?auto=format&fit=crop&q=80&w=600'}
+                            alt={promoItem1.data.name}
+                            className="w-full h-full object-contain"
+                          />
+                          {promoItem1.data.volume && (
+                            <div className="absolute top-2.5 right-2.5 bg-slate-900/80 text-white backdrop-blur text-[10px] font-bold px-2 py-0.5 rounded-md">
+                              {promoItem1.data.volume}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Title & Description */}
+                        <h3 className="font-black text-slate-900 text-sm sm:text-base leading-snug line-clamp-1">
+                          {promoItem1.data.name}
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
+                          {promoItem1.data.description}
+                        </p>
+
+                        {/* Pricing & Rating */}
+                        <div className="mt-3.5 flex items-center justify-between">
+                          <span className="text-xl sm:text-2xl font-black text-slate-900 font-mono">
+                            {promoItem1.data.price} ج.م
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <div className="flex items-center text-amber-400">
+                              {[1, 2, 3, 4, 5].map((s) => (
+                                <Star key={s} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                              ))}
+                            </div>
+                            <span className="text-[11px] font-bold text-slate-500 font-mono">({promoItem1.data.rating || 5})</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action Button */}
+                      <button
+                        onClick={(e) => handleAddToCart(promoItem1.data, e)}
+                        className="w-full mt-4 py-2.5 px-4 bg-slate-900 hover:bg-amber-600 active:scale-[0.98] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-xs cursor-pointer hover:shadow-amber-600/20"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span>أضف المنتج للسلة</span>
+                      </button>
+                    </div>
+                  )}
 
                   {/* CARD 2: PRODUCT GC02 */}
                   <div className="bg-white rounded-2xl border border-blue-200/80 shadow-xs p-4 sm:p-5 flex flex-col justify-between relative hover:border-blue-400 transition-all hover:shadow-md">
@@ -5198,37 +5259,39 @@ export default function StorePage() {
                           <Sparkles className="w-3.5 h-3.5 text-blue-600" />
                           <span>المنتج الأكثر طلباً</span>
                         </span>
-                        <span className="text-[10px] font-mono font-extrabold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-                          كود المنتج: {targetPromoProduct.code || 'GC02'}
-                        </span>
+                        {promoItem2.code && (
+                          <span className="text-[10px] font-mono font-extrabold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                            كود المنتج: {promoItem2.code}
+                          </span>
+                        )}
                       </div>
 
                       {/* Image Box */}
                       <div className="h-40 sm:h-44 w-full rounded-xl bg-slate-50 p-2 border border-slate-100 relative overflow-hidden flex items-center justify-center mb-3">
                         <img
-                          src={targetPromoProduct.image || 'https://images.unsplash.com/photo-1563453392212-326f518500b1?auto=format&fit=crop&q=80&w=600'}
-                          alt={targetPromoProduct.name}
+                          src={promoItem2.image || 'https://images.unsplash.com/photo-1563453392212-326f518500b1?auto=format&fit=crop&q=80&w=600'}
+                          alt={promoItem2.name}
                           className="w-full h-full object-contain"
                         />
-                        {targetPromoProduct.volume && (
+                        {promoItem2.volume && (
                           <div className="absolute top-2.5 right-2.5 bg-slate-900/80 text-white backdrop-blur text-[10px] font-bold px-2 py-0.5 rounded-md">
-                            {targetPromoProduct.volume}
+                            {promoItem2.volume}
                           </div>
                         )}
                       </div>
 
                       {/* Title & Description */}
                       <h3 className="font-black text-slate-900 text-sm sm:text-base leading-snug line-clamp-1">
-                        {targetPromoProduct.name}
+                        {promoItem2.name}
                       </h3>
                       <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
-                        {targetPromoProduct.description}
+                        {promoItem2.description}
                       </p>
 
                       {/* Pricing & Rating */}
                       <div className="mt-3.5 flex items-center justify-between">
                         <span className="text-xl sm:text-2xl font-black text-slate-900 font-mono">
-                          {targetPromoProduct.price} ج.م
+                          {promoItem2.price} ج.م
                         </span>
                         <div className="flex items-center gap-1">
                           <div className="flex items-center text-amber-400">
@@ -5236,14 +5299,14 @@ export default function StorePage() {
                               <Star key={s} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
                             ))}
                           </div>
-                          <span className="text-[11px] font-bold text-slate-500 font-mono">(4.9)</span>
+                          <span className="text-[11px] font-bold text-slate-500 font-mono">({promoItem2.rating || 4.9})</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Action Button */}
                     <button
-                      onClick={(e) => handleAddToCart(targetPromoProduct, e)}
+                      onClick={(e) => handleAddToCart(promoItem2, e)}
                       className="w-full mt-4 py-2.5 px-4 bg-slate-900 hover:bg-blue-600 active:scale-[0.98] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-xs cursor-pointer hover:shadow-blue-600/20"
                     >
                       <Plus className="w-4 h-4" />
@@ -5269,7 +5332,7 @@ export default function StorePage() {
       </AnimatePresence>
 
       {/* Floating Re-open Promo Button */}
-      {!isPromoModalOpen && (
+      {!isPromoModalOpen && promoItem1 && promoItem2 && (
         <motion.button
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -5285,7 +5348,12 @@ export default function StorePage() {
             <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
           </span>
           <Sparkles className="w-4 h-4 text-amber-300" />
-          <span className="text-[11px] sm:text-xs">عروض اليوم المميزة (GC01 + GC02)</span>
+          <span className="text-[11px] sm:text-xs">
+            {promoItem1.data.code && promoItem2.code 
+              ? `عروض اليوم المميزة (${promoItem1.data.code} + ${promoItem2.code})`
+              : 'عروض اليوم المميزة'
+            }
+          </span>
         </motion.button>
       )}
 
