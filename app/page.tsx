@@ -40,7 +40,9 @@ import {
   Percent,
   Send,
   RefreshCw,
-  Info
+  Info,
+  Copy,
+  ExternalLink
 } from 'lucide-react';
 import { db, auth, googleProvider } from '../lib/firebase';
 import {
@@ -363,6 +365,7 @@ export default function StorePage() {
   // Success Bubble Notification
   const [addedItemName, setAddedItemName] = useState<string | null>(null);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
+  const [copiedBillCode, setCopiedBillCode] = useState<string | null>(null);
 
   // Fly-to-cart Star Animation State
   const [flyingParticles, setFlyingParticles] = useState<Array<{
@@ -793,6 +796,15 @@ export default function StorePage() {
     setTimeout(() => setCopiedLinkId(null), 2000);
   };
 
+  const handleCopyBillCode = (code?: string) => {
+    if (!code) return;
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(code);
+      setCopiedBillCode(code);
+      setTimeout(() => setCopiedBillCode(null), 2000);
+    }
+  };
+
   const handleUpdateQty = (productId: string, diff: number) => {
     const newCart = cart.map(item => {
       if (item.product.id === productId) {
@@ -1029,25 +1041,17 @@ export default function StorePage() {
         customerEmail: guestEmail
       };
 
-      // 1. Record order in Firestore
-      const docRef = await addDoc(collection(db, 'orders'), orderPayload);
+      // 1. Generate unique order reference and ID in memory before saving
+      const orderDocRef = doc(collection(db, 'orders'));
+      const generatedOrderId = orderDocRef.id;
 
-      // Save order reference in localStorage for guest tracking
-      if (!user && typeof window !== 'undefined') {
-        const guestOrders: string[] = JSON.parse(localStorage.getItem('goldclean_guest_orders') || '[]');
-        if (!guestOrders.includes(docRef.id)) {
-          guestOrders.unshift(docRef.id);
-          localStorage.setItem('goldclean_guest_orders', JSON.stringify(guestOrders.slice(0, 30)));
-        }
-      }
-
-      // 2. Transmit to J&T Express Shipping Logistics API
+      // 2. Transmit to J&T Express Shipping Logistics API first to obtain waybill immediately
       try {
         const shippingRes = await fetch('/api/shipping/create-order', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            orderId: docRef.id,
+            orderId: generatedOrderId,
             customerName: checkoutForm.name,
             customerPhone: checkoutForm.phone,
             customerCity: checkoutForm.city,
@@ -1065,16 +1069,25 @@ export default function StorePage() {
             sortingCode: shippingData.sortingCode || '',
             courier: 'J&T Express',
             status: 'created',
-            txlogisticId: shippingData.txlogisticId || docRef.id,
+            txlogisticId: shippingData.txlogisticId || generatedOrderId,
             syncedAt: new Date().toISOString()
           };
-          await updateDoc(doc(db, 'orders', docRef.id), {
-            shippingInfo: shippingInfoData
-          });
           orderPayload.shippingInfo = shippingInfoData;
         }
       } catch (shippingErr) {
         console.error('Shipping API sync during checkout error:', shippingErr);
+      }
+
+      // 3. Atomically record order in Firestore with shippingInfo and waybill already attached
+      await setDoc(orderDocRef, orderPayload);
+
+      // Save order reference in localStorage for guest tracking
+      if (!user && typeof window !== 'undefined') {
+        const guestOrders: string[] = JSON.parse(localStorage.getItem('goldclean_guest_orders') || '[]');
+        if (!guestOrders.includes(generatedOrderId)) {
+          guestOrders.unshift(generatedOrderId);
+          localStorage.setItem('goldclean_guest_orders', JSON.stringify(guestOrders.slice(0, 30)));
+        }
       }
 
       // Track Meta Pixel Purchase event
@@ -1092,7 +1105,7 @@ export default function StorePage() {
         });
       }
 
-      setSuccessOrder({ ...orderPayload, id: docRef.id });
+      setSuccessOrder({ ...orderPayload, id: generatedOrderId });
       saveCart([]);
       setCheckoutForm({
         name: user?.displayName || '',
@@ -1111,8 +1124,24 @@ export default function StorePage() {
   };
 
   // Manual or Re-Sync order with J&T Express API
-  const handleSyncOrderWithShipping = async (order: Order) => {
+  const handleSyncOrderWithShipping = async (order: Order, allowRecreate = false) => {
     if (!order.id) return;
+
+    const existingBillCode = order.shippingInfo?.billCode || '';
+
+    // Safeguard: Prevent accidental re-submission if order already has a waybill
+    if (existingBillCode && !allowRecreate) {
+      const confirmResend = confirm(
+        `⚠️ تنبيه هـام لمنع تكرار الأوردر:\n\n` +
+        `هذا الطلب مسجل بالفعل لدى شركة الشحن J&T Express!\n` +
+        `رقم بوليصة الشحن الحالية: ${existingBillCode}\n\n` +
+        `إعادة الإرسال قد تؤدي إلى إنشاء بوليصة ثانية مكررة في حساب شركة الشحن وتكبد تكاليف شحن إضافية.\n\n` +
+        `هل تريد بالتأكيد الاستمرار وإعادة الإرسال لشركة الشحن؟`
+      );
+      if (!confirmResend) return;
+      allowRecreate = true;
+    }
+
     setSyncingOrderId(order.id);
     try {
       // Ensure each item has productCode (look up in products or offers if previously saved without code)
@@ -1125,7 +1154,6 @@ export default function StorePage() {
         return it;
       });
 
-      const existingBillCode = order.shippingInfo?.billCode || '';
       const isModifying = !!existingBillCode;
 
       const res = await fetch('/api/shipping/create-order', {
@@ -1135,6 +1163,7 @@ export default function StorePage() {
           orderId: order.shippingInfo?.txlogisticId || order.id,
           billCode: existingBillCode,
           operateType: isModifying ? 2 : 1,
+          forceRecreate: allowRecreate,
           customerName: order.customerName,
           customerPhone: order.customerPhone,
           customerCity: order.customerCity,
@@ -1147,6 +1176,10 @@ export default function StorePage() {
       });
       const data = await res.json();
       if (data && (data.billCode || data.success)) {
+        if (data.duplicatePrevented) {
+          alert(`✅ تم التحقق ومنع التكرار:\n${data.msg || 'الطلب مسجل بالفعل في شركة الشحن برقم البوليصة الثابت.'}`);
+          return;
+        }
         const returnedBillCode = data.billCode || existingBillCode;
         const shippingInfoData: ShippingInfo = {
           billCode: returnedBillCode || '',
@@ -2059,33 +2092,78 @@ export default function StorePage() {
                               </div>
 
                               {/* J&T Express Shipping Integration Section */}
-                              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-1.5 font-bold text-slate-800 text-[11px]">
                                     <Truck className="w-3.5 h-3.5 text-blue-600" />
                                     <span>شركة الشحن J&T Express</span>
                                   </div>
-                                  <button
-                                    onClick={() => handleSyncOrderWithShipping(ord)}
-                                    disabled={syncingOrderId === ord.id}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-[10px] rounded-lg border border-blue-200 transition-colors disabled:opacity-50 cursor-pointer"
-                                  >
-                                    <RefreshCw className={`w-3 h-3 ${syncingOrderId === ord.id ? 'animate-spin' : ''}`} />
-                                    <span>{ord.shippingInfo?.billCode ? 'إعادة الإرسال / تحديث' : 'إرسال لشركة الشحن'}</span>
-                                  </button>
+                                  {ord.shippingInfo?.billCode ? (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-100/80 text-emerald-800 font-bold text-[10px] rounded-full border border-emerald-300">
+                                      <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                                      <span>مسجل في الشحن</span>
+                                    </span>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleSyncOrderWithShipping(ord)}
+                                      disabled={syncingOrderId === ord.id}
+                                      className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] rounded-lg shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
+                                    >
+                                      <RefreshCw className={`w-3 h-3 ${syncingOrderId === ord.id ? 'animate-spin' : ''}`} />
+                                      <span>إرسال لشركة الشحن</span>
+                                    </button>
+                                  )}
                                 </div>
                                 {ord.shippingInfo?.billCode ? (
-                                  <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 p-2 rounded-lg text-[10px]">
-                                    <div className="space-y-0.5">
-                                      <span className="text-emerald-800 font-bold block">رقم بوليصة الشحن (Waybill):</span>
-                                      <span className="font-mono font-black text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200 inline-block">{ord.shippingInfo.billCode}</span>
+                                  <div className="bg-emerald-50/90 border border-emerald-200 p-2.5 rounded-lg text-[10px] space-y-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="space-y-0.5">
+                                        <span className="text-emerald-800 font-bold block text-[10px]">رقم بوليصة الشحن (Waybill):</span>
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="font-mono font-black text-emerald-800 bg-white px-2 py-0.5 rounded border border-emerald-300 inline-block shadow-xs text-[11px]">{ord.shippingInfo.billCode}</span>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleCopyBillCode(ord.shippingInfo?.billCode)}
+                                            className="p-1 hover:bg-white text-emerald-700 rounded border border-transparent hover:border-emerald-200 transition-colors cursor-pointer"
+                                            title="نسخ رقم البوليصة"
+                                          >
+                                            {copiedBillCode === ord.shippingInfo.billCode ? (
+                                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                            ) : (
+                                              <Copy className="w-3.5 h-3.5" />
+                                            )}
+                                          </button>
+                                        </div>
+                                      </div>
+                                      {ord.shippingInfo.sortingCode && (
+                                        <div className="text-left shrink-0">
+                                          <span className="text-emerald-800 font-bold block text-[9px]">كود الفرز:</span>
+                                          <span className="text-emerald-700 font-mono text-[9px] bg-emerald-100/80 px-1.5 py-0.5 rounded border border-emerald-200 inline-block">{ord.shippingInfo.sortingCode}</span>
+                                        </div>
+                                      )}
                                     </div>
-                                    {ord.shippingInfo.sortingCode && (
-                                      <span className="text-emerald-700 font-mono text-[9px] bg-emerald-100/60 px-1.5 py-0.5 rounded">كود الفرز: {ord.shippingInfo.sortingCode}</span>
-                                    )}
+                                    <div className="flex items-center justify-between pt-1.5 border-t border-emerald-200/60 text-[9px]">
+                                      <a
+                                        href={`https://www.jtexpress.eg/trajectoryQuery?bills=${ord.shippingInfo.billCode}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-emerald-700 hover:text-emerald-900 font-bold hover:underline"
+                                      >
+                                        <ExternalLink className="w-3 h-3" />
+                                        <span>تتبع الشحنة أونلاين</span>
+                                      </a>
+                                      <button
+                                        onClick={() => handleSyncOrderWithShipping(ord, false)}
+                                        disabled={syncingOrderId === ord.id}
+                                        className="text-slate-400 hover:text-rose-600 transition-colors text-[9px] cursor-pointer"
+                                        title="إعادة إرسال استثنائية (تطلب تأكيد لمنع التكرار)"
+                                      >
+                                        {syncingOrderId === ord.id ? 'جارِ التحقق...' : 'إعادة إرسال استثنائية'}
+                                      </button>
+                                    </div>
                                   </div>
                                 ) : (
-                                  <p className="text-[10px] text-slate-400">لم يتم تأكيد بوليصة شحن لهذا الطلب بعد أو معلق للمزامنة.</p>
+                                  <p className="text-[10px] text-slate-400">لم يتم تأكيد بوليصة شحن لهذا الطلب بعد (اضغط إرسال لشركة الشحن لإصدار البوليصة).</p>
                                 )}
                               </div>
 

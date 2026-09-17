@@ -30,8 +30,23 @@ export async function POST(req: NextRequest) {
       items = [],
       totalPrice = 0,
       billCode = '',
-      operateType
+      operateType,
+      forceRecreate = false
     } = body;
+
+    // Prevent duplicate orders in J&T Express:
+    // If the order already has an assigned billCode (Waybill) and forceRecreate is false,
+    // prevent re-submitting to J&T API to avoid duplicate orders / parcels.
+    if (billCode && !forceRecreate) {
+      return NextResponse.json({
+        success: true,
+        duplicatePrevented: true,
+        msg: `تم منع تكرار الطلب: الطلب مسجل مسبقاً لدى شركة الشحن برقم البوليصة (${billCode}).`,
+        billCode: String(billCode).trim(),
+        txlogisticId: orderId,
+        code: '1'
+      });
+    }
 
     if (!customerName || !customerPhone) {
       return NextResponse.json(
@@ -251,6 +266,30 @@ export async function POST(req: NextRequest) {
 
     // Check if successfully generated order or returned code '1'
     const isSuccess = responseData.code === '1' || responseData.code === 1;
+
+    // Special handling for duplicate error codes returned by J&T Express:
+    // 145002001: Duplicate order, don't place the order repeatedly!
+    // 145003101: Customer order number already exists, cannot place an order!
+    const isDuplicateError =
+      responseData.code === '145002001' ||
+      responseData.code === 145002001 ||
+      responseData.code === '145003101' ||
+      responseData.code === 145003101;
+
+    if (isDuplicateError) {
+      return NextResponse.json({
+        success: true,
+        duplicatePrevented: true,
+        code: responseData.code,
+        msg: 'الطلب مسجل بالفعل في نظام شركة الشحن بنفس رقم الطلب (تم منع التكرار بنجاح).',
+        data: responseData.data || null,
+        txlogisticId: txlogisticId,
+        billCode: responseData?.data?.billCode || existingBillCode || null,
+        sortingCode: responseData?.data?.sortingCode || null,
+        operateType: finalOperateType,
+        rawResponse: responseData
+      });
+    }
 
     return NextResponse.json({
       success: isSuccess,
