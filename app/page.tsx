@@ -400,6 +400,17 @@ export default function StorePage() {
     }
   }, [loading, offersLoading, products.length]);
 
+  // Close promo modal with Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isPromoModalOpen) {
+        setIsPromoModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isPromoModalOpen]);
+
   // ----------------------------------------------------
   // URL Routing Sync
   // ----------------------------------------------------
@@ -5188,7 +5199,10 @@ export default function StorePage() {
       {/* PROMOTIONAL WELCOME MODAL */}
       <AnimatePresence>
         {isPromoModalOpen && promoItem1 && promoItem2 && (
-          <div className="fixed inset-0 z-[9990] flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto">
+          <div 
+            className="fixed inset-0 z-[9990] flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto"
+            onClick={() => setIsPromoModalOpen(false)}
+          >
             {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
@@ -5215,14 +5229,20 @@ export default function StorePage() {
 
                 {/* Close Button */}
                 <button
-                  onClick={() => setIsPromoModalOpen(false)}
-                  className="absolute top-4 left-4 w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 border border-white/20 text-white flex items-center justify-center transition-all cursor-pointer z-10"
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsPromoModalOpen(false);
+                  }}
+                  className="absolute top-3.5 left-3.5 sm:top-4 sm:left-4 w-10 h-10 rounded-full bg-white/15 hover:bg-white/30 active:scale-90 border border-white/25 text-white flex items-center justify-center transition-all cursor-pointer z-50 shadow-md touch-manipulation"
                   title="إغلاق النافذة"
+                  aria-label="إغلاق النافذة"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-5 h-5 pointer-events-none" />
                 </button>
 
-                <div className="relative z-10 pr-1 pl-10">
+                <div className="relative pr-1 pl-12 sm:pl-14">
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500/25 to-rose-500/25 border border-amber-400/40 text-amber-300 text-[11px] font-bold mb-2">
                     <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
                     <span>مفاجأة ترحيبية خاصة لزوار متجر Gold Clean اليوم 🔥</span>
@@ -5439,7 +5459,12 @@ export default function StorePage() {
               {/* Bottom Footer */}
               <div className="p-3.5 sm:p-4 bg-white border-t border-slate-200/80 flex items-center justify-center shrink-0">
                 <button
-                  onClick={() => setIsPromoModalOpen(false)}
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsPromoModalOpen(false);
+                  }}
                   className="w-full sm:w-auto py-2.5 px-6 text-slate-500 hover:text-slate-800 text-xs sm:text-sm font-bold transition-colors cursor-pointer text-center"
                 >
                   متابعة التصفح في المتجر
