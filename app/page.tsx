@@ -728,6 +728,19 @@ export default function StorePage() {
         currency: 'EGP'
       });
     }
+
+    // TikTok Pixel AddToCart event
+    if (typeof window !== 'undefined' && (window as any).ttq) {
+      (window as any).ttq.track('AddToCart', {
+        content_id: product.id,
+        content_name: product.name,
+        content_type: 'product',
+        quantity: 1,
+        price: product.price,
+        value: product.price,
+        currency: 'EGP'
+      });
+    }
   };
 
   const handleAddOfferToCart = (offer: Offer, e?: React.MouseEvent) => {
@@ -783,6 +796,19 @@ export default function StorePage() {
         content_name: `باقة: ${offer.title}`,
         content_ids: [offer.id],
         content_type: 'product',
+        value: offer.offerPrice,
+        currency: 'EGP'
+      });
+    }
+
+    // TikTok Pixel AddToCart event for offers
+    if (typeof window !== 'undefined' && (window as any).ttq) {
+      (window as any).ttq.track('AddToCart', {
+        content_id: offer.id,
+        content_name: `باقة: ${offer.title}`,
+        content_type: 'product',
+        quantity: 1,
+        price: offer.offerPrice,
         value: offer.offerPrice,
         currency: 'EGP'
       });
@@ -1102,6 +1128,21 @@ export default function StorePage() {
           value: orderPayload.totalPrice,
           currency: 'EGP',
           num_items: orderPayload.items.reduce((sum, it) => sum + it.quantity, 0)
+        });
+      }
+
+      // Track TikTok Pixel CompletePayment event
+      if (typeof window !== 'undefined' && (window as any).ttq) {
+        (window as any).ttq.track('CompletePayment', {
+          content_type: 'product',
+          contents: orderPayload.items.map(it => ({
+            content_id: it.productId,
+            content_name: it.productName,
+            quantity: it.quantity,
+            price: it.price
+          })),
+          value: orderPayload.totalPrice,
+          currency: 'EGP'
         });
       }
 
