@@ -51,7 +51,8 @@ import {
   calculateShipping,
   calculateCartTotalWeight,
   SHIPPING_ZONES,
-  getZoneByCity
+  getZoneByCity,
+  normalizeArabicNumerals
 } from '../lib/shipping';
 import { 
   collection, 
@@ -1049,7 +1050,9 @@ export default function StorePage() {
     setOrderInProgress(true);
 
     try {
-      const guestEmail = user?.email || (checkoutForm.phone ? `${checkoutForm.phone.replace(/[^0-9]/g, '')}@guest.store` : 'guest@goldclean.store');
+      const normalizedPhone = normalizeArabicNumerals(checkoutForm.phone).replace(/[^0-9]/g, '');
+      const cleanPhone = normalizedPhone || checkoutForm.phone;
+      const guestEmail = user?.email || (cleanPhone ? `${cleanPhone}@guest.store` : 'guest@goldclean.store');
       const itemsSubtotal = getSubtotal();
       const currentCartWeight = calculateCartTotalWeight(cart);
       const shipCalc = calculateShipping(checkoutForm.city, currentCartWeight);
@@ -1058,7 +1061,7 @@ export default function StorePage() {
 
       const orderPayload: Order = {
         customerName: checkoutForm.name,
-        customerPhone: checkoutForm.phone,
+        customerPhone: cleanPhone,
         customerCountry: checkoutForm.country || 'مصر',
         customerCity: checkoutForm.city,
         customerAddress: checkoutForm.address,
@@ -1102,7 +1105,7 @@ export default function StorePage() {
           body: JSON.stringify({
             orderId: generatedOrderId,
             customerName: checkoutForm.name,
-            customerPhone: checkoutForm.phone,
+            customerPhone: cleanPhone,
             customerCity: checkoutForm.city,
             customerAddress: checkoutForm.address,
             notes: checkoutForm.notes,
@@ -1240,7 +1243,7 @@ export default function StorePage() {
           operateType: isModifying ? 2 : 1,
           forceRecreate: allowRecreate,
           customerName: order.customerName,
-          customerPhone: order.customerPhone,
+          customerPhone: normalizeArabicNumerals(order.customerPhone),
           customerCity: order.customerCity,
           customerAddress: order.customerAddress,
           notes: order.notes,
@@ -1395,7 +1398,7 @@ export default function StorePage() {
               operateType: 1,
               forceRecreate: false,
               customerName: order.customerName,
-              customerPhone: order.customerPhone,
+              customerPhone: normalizeArabicNumerals(order.customerPhone),
               customerCity: order.customerCity,
               customerAddress: order.customerAddress,
               notes: order.notes,
@@ -5121,7 +5124,7 @@ export default function StorePage() {
                         type="tel" 
                         required 
                         value={checkoutForm.phone}
-                        onChange={(e) => setCheckoutForm({ ...checkoutForm, phone: e.target.value })}
+                        onChange={(e) => setCheckoutForm({ ...checkoutForm, phone: normalizeArabicNumerals(e.target.value) })}
                         placeholder="01012345678"
                         className="w-full bg-slate-50 border border-slate-200 py-2.5 px-3 rounded-lg focus:ring-1 focus:ring-blue-500 outline-none text-left flex-1 font-mono"
                         dir="ltr"

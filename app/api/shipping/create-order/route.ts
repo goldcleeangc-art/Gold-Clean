@@ -1,20 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 
+// Helper to normalize Arabic-Indic and Eastern Arabic-Indic numerals (٠-٩ and ۰-۹) to standard Latin digits (0-9)
+function normalizeArabicNumerals(str: any): string {
+  if (!str) return '';
+  return String(str)
+    .replace(/[٠۰]/g, '0')
+    .replace(/[١۱]/g, '1')
+    .replace(/[٢۲]/g, '2')
+    .replace(/[٣۳]/g, '3')
+    .replace(/[٤۴]/g, '4')
+    .replace(/[٥۵]/g, '5')
+    .replace(/[٦۶]/g, '6')
+    .replace(/[٧۷]/g, '7')
+    .replace(/[٨۸]/g, '8')
+    .replace(/[٩۹]/g, '9');
+}
+
 // Helper to format Egyptian mobile/phone to strict 11 digits required by J&T API (String(11))
 function sanitizeEgyptianPhone(raw: any, fallback: string = '01000000000'): string {
   if (!raw) return fallback;
-  let digits = String(raw).replace(/[^0-9]/g, '');
+  
+  // 1. Convert Arabic-Indic (٠-٩) and Eastern Arabic-Indic (۰-۹) numerals to standard Latin digits (0-9)
+  const normalized = normalizeArabicNumerals(raw);
+
+  // 2. Strip all non-digit characters (spaces, dashes, brackets, letters, symbols)
+  let digits = normalized.replace(/[^0-9]/g, '');
+
+  // 3. Handle international country code variations: 0020, +20, 20
   if (digits.startsWith('0020') && digits.length >= 14) {
     digits = digits.slice(4);
   } else if (digits.startsWith('20') && digits.length >= 12) {
     digits = digits.slice(2);
   }
-  if (digits.length === 10 && !digits.startsWith('0')) {
+
+  // 4. Handle missing leading 0 for Egyptian mobile prefixes (10, 11, 12, 15)
+  if (digits.length === 10 && /^(10|11|12|15)/.test(digits)) {
     digits = '0' + digits;
   }
-  const result = digits.slice(0, 11);
-  return result.length === 11 ? result : result.padEnd(11, '0');
+
+  // 5. If it starts with 01 and is at least 11 digits, extract the 11 digits
+  if (digits.startsWith('01') && digits.length >= 11) {
+    return digits.slice(0, 11);
+  }
+
+  // 6. Return exact 11 digits if available
+  if (digits.length === 11) {
+    return digits;
+  }
+
+  return digits.length > 0 ? digits.slice(0, 11).padEnd(11, '0') : fallback;
 }
 
 export async function POST(req: NextRequest) {
@@ -310,14 +345,18 @@ export async function POST(req: NextRequest) {
       '145003030': 'فشل التحقق من توقيع الهيدر (headers signature verification failed) — يرجى مراجعة المفتاح الخاص JT_EXPRESS_PRIVATE_KEY وحساب الربط JT_EXPRESS_API_ACCOUNT.',
       '145003080': 'كود العميل غير مسجل لدى شركة الشحن (Customer not found) — يرجى مراجعة JT_EXPRESS_CUSTOMER_CODE.',
       '145003010': 'حساب الـ API غير مسجل في بيئة العمل الحالية (API account does not exist).',
-      '145003085': 'رقم هاتف المستلم أو الراسل غير مكتمل أو غير صالح.',
+      '145003085': 'بيانات الاتصال أو رقم هاتف العميل غير صالحة (Abnormal contact information) — يرجى التأكد من كتابة رقم هاتف مصري صحيح (11 رقماً).',
       '145003086': 'بيانات العنوان غير مكتملة.',
       '145003092': 'بيانات وزن الشحنة غير صالحة.'
     };
 
-    const friendlyMsg = isSuccess
+    let friendlyMsg = isSuccess
       ? (responseData.msg || 'تم إرسال الطلب لشركة الشحن بنجاح')
       : (jtErrorMessages[String(responseData.code)] || responseData.msg || 'استجابة شركة الشحن');
+
+    if (!isSuccess && String(responseData.msg || '').toLowerCase().includes('abnormal contact')) {
+      friendlyMsg = 'بيانات الاتصال غير صالحة (Abnormal contact information) — يرجى التأكد من صحة رقم الهاتف وأن يكون 11 رقماً يبدأ بـ 01 (مثل: 01012345678).';
+    }
 
     return NextResponse.json({
       success: isSuccess,

@@ -72,6 +72,22 @@ export function normalizeArabicText(text: string): string {
     .toLowerCase();
 }
 
+// Helper to normalize Arabic-Indic (٠-٩) and Eastern Arabic-Indic (۰-۹) numerals to standard Latin digits (0-9)
+export function normalizeArabicNumerals(text: any): string {
+  if (!text) return '';
+  return String(text)
+    .replace(/[٠۰]/g, '0')
+    .replace(/[١۱]/g, '1')
+    .replace(/[٢۲]/g, '2')
+    .replace(/[٣۳]/g, '3')
+    .replace(/[٤۴]/g, '4')
+    .replace(/[٥۵]/g, '5')
+    .replace(/[٦۶]/g, '6')
+    .replace(/[٧۷]/g, '7')
+    .replace(/[٨۸]/g, '8')
+    .replace(/[٩۹]/g, '9');
+}
+
 // Find zone by city name
 export function getZoneByCity(cityName: string): ShippingZone | null {
   if (!cityName) return null;
