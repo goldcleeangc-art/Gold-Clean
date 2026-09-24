@@ -266,21 +266,35 @@ export async function POST(req: NextRequest) {
     // Check if successfully generated order or returned code '1'
     const isSuccess = responseData.code === '1' || responseData.code === 1;
 
-    // Special handling for duplicate error codes returned by J&T Express:
+    // Special handling for duplicate / locked order error codes returned by J&T Express:
     // 145002001: Duplicate order, don't place the order repeatedly!
     // 145003101: Customer order number already exists, cannot place an order!
+    // 145003201: Picked up status can not be modified (Courier already collected parcel)
+    // 145003202: Cancelled status can not be modified
+    const isPickedUpCode = responseData.code === '145003201' || responseData.code === 145003201;
+    const isCancelledCode = responseData.code === '145003202' || responseData.code === 145003202;
     const isDuplicateError =
       responseData.code === '145002001' ||
       responseData.code === 145002001 ||
       responseData.code === '145003101' ||
-      responseData.code === 145003101;
+      responseData.code === 145003101 ||
+      isPickedUpCode ||
+      isCancelledCode;
 
     if (isDuplicateError) {
+      let duplicateMsg = 'الطلب مسجل بالفعل في نظام شركة الشحن بنفس رقم الطلب (تم منع التكرار بنجاح).';
+      if (isPickedUpCode) {
+        duplicateMsg = 'تم منع التكرار: الشحنة تم استلامها بالفعل من المندوب (Picked Up) في نظام J&T ولا يمكن تكرارها أو تعديلها.';
+      } else if (isCancelledCode) {
+        duplicateMsg = 'تم منع التكرار: الشحنة ملغاة مسبقاً في نظام شركة الشحن (Cancelled).';
+      }
+
       return NextResponse.json({
         success: true,
         duplicatePrevented: true,
+        isPickedUp: isPickedUpCode,
         code: responseData.code,
-        msg: 'الطلب مسجل بالفعل في نظام شركة الشحن بنفس رقم الطلب (تم منع التكرار بنجاح).',
+        msg: duplicateMsg,
         data: responseData.data || null,
         txlogisticId: txlogisticId,
         billCode: responseData?.data?.billCode || existingBillCode || null,

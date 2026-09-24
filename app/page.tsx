@@ -1183,6 +1183,17 @@ export default function StorePage() {
 
     const existingBillCode = order.shippingInfo?.billCode || '';
 
+    // Strict Lock: If order was already collected by courier (Picked Up) or delivered, completely forbid re-sending to prevent duplicate waybills
+    if (order.status === 'shipping' || order.status === 'delivered') {
+      alert(
+        `⛔ محظور إعادة إرسال هذا الطلب:\n\n` +
+        `هذا الطلب تم التقاطه واستلامه بالفعل من قِبل مندوب شركة الشحن (Picked Up) أو تم تسليمه للعميل.\n` +
+        `إعادة الإرسال محظورة تماماً لحمايتك من فتح بوليصة مكررة وتكبد مصاريف شحن إضافية.\n\n` +
+        `رقم البوليصة الثابت للشحنة: ${existingBillCode || 'مسجل'}`
+      );
+      return;
+    }
+
     // Safeguard: Prevent accidental re-submission if order already has a waybill
     if (existingBillCode && !allowRecreate) {
       const confirmResend = confirm(
@@ -1231,6 +1242,14 @@ export default function StorePage() {
       const data = await res.json();
       if (data && (data.billCode || data.success)) {
         if (data.duplicatePrevented) {
+          if (data.isPickedUp) {
+            // Update order status to 'shipping' so it clearly shows it was collected by courier!
+            await updateDoc(doc(db, 'orders', order.id), {
+              status: 'shipping'
+            });
+            alert(`🔒 تم حماية الطلب ومنع التكرار بنجاح:\n\n${data.msg}\nتم تثبيت حالة الطلب على "خرج مع المندوب / تم الالتقاط (Picked Up)".`);
+            return;
+          }
           alert(`✅ تم التحقق ومنع التكرار:\n${data.msg || 'الطلب مسجل بالفعل في شركة الشحن برقم البوليصة الثابت.'}`);
           return;
         }
@@ -1259,6 +1278,41 @@ export default function StorePage() {
       alert('حدث خطأ أثناء الاتصال بواجهة شركة الشحن J&T Express');
     } finally {
       setSyncingOrderId(null);
+    }
+  };
+
+  // Manually attach an existing J&T waybill (billCode) to an order that was entered into J&T portal manually
+  const handleManualAttachWaybill = async (order: Order) => {
+    if (!order.id) return;
+    const currentCode = order.shippingInfo?.billCode || '';
+    const input = prompt(
+      `🔗 ربط رقم بوليصة شحن يدوياً:\n\n` +
+      `أدخل رقم بوليصة الشحن (Waybill / Bill Code) الصادر لهذا الطلب من J&T Express:`,
+      currentCode
+    );
+
+    if (!input || !input.trim()) return;
+    const cleanBillCode = input.trim();
+
+    try {
+      const shippingInfoData: ShippingInfo = {
+        billCode: cleanBillCode,
+        sortingCode: order.shippingInfo?.sortingCode || '',
+        courier: 'J&T Express',
+        status: 'picked_up',
+        txlogisticId: order.shippingInfo?.txlogisticId || order.id,
+        syncedAt: new Date().toISOString()
+      };
+
+      await updateDoc(doc(db, 'orders', order.id), {
+        shippingInfo: shippingInfoData,
+        status: order.status === 'pending' ? 'preparing' : order.status
+      });
+
+      alert(`✅ تم ربط وحفظ رقم البوليصة (${cleanBillCode}) بالطلب بنجاح!`);
+    } catch (e: any) {
+      console.error(e);
+      alert(`حدث خطأ أثناء حفظ رقم البوليصة: ${e.message}`);
     }
   };
 
@@ -2332,14 +2386,26 @@ export default function StorePage() {
                                       <span>مسجل في الشحن</span>
                                     </span>
                                   ) : (
-                                    <button
-                                      onClick={() => handleSyncOrderWithShipping(ord)}
-                                      disabled={syncingOrderId === ord.id}
-                                      className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] rounded-lg shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
-                                    >
-                                      <RefreshCw className={`w-3 h-3 ${syncingOrderId === ord.id ? 'animate-spin' : ''}`} />
-                                      <span>إرسال لشركة الشحن</span>
-                                    </button>
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleManualAttachWaybill(ord)}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 font-bold text-[10px] rounded-lg border border-slate-200 transition-colors cursor-pointer shadow-2xs"
+                                        title="إذا تم إدخال هذا الطلب في J&T يدوياً أو تم التقاطه، يمكنك كتابة رقم البوليصة هنا لحمايته ومنع تكراره"
+                                      >
+                                        <Link2 className="w-3 h-3 text-blue-600" />
+                                        <span>ربط بوليصة يدوياً</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSyncOrderWithShipping(ord)}
+                                        disabled={syncingOrderId === ord.id}
+                                        className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] rounded-lg shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
+                                      >
+                                        <RefreshCw className={`w-3 h-3 ${syncingOrderId === ord.id ? 'animate-spin' : ''}`} />
+                                        <span>إرسال لشركة الشحن</span>
+                                      </button>
+                                    </div>
                                   )}
                                 </div>
                                 {ord.shippingInfo?.billCode ? (
@@ -2380,14 +2446,22 @@ export default function StorePage() {
                                         <ExternalLink className="w-3 h-3" />
                                         <span>تتبع الشحنة أونلاين</span>
                                       </a>
-                                      <button
-                                        onClick={() => handleSyncOrderWithShipping(ord, false)}
-                                        disabled={syncingOrderId === ord.id}
-                                        className="text-slate-400 hover:text-rose-600 transition-colors text-[9px] cursor-pointer"
-                                        title="إعادة إرسال استثنائية (تطلب تأكيد لمنع التكرار)"
-                                      >
-                                        {syncingOrderId === ord.id ? 'جارِ التحقق...' : 'إعادة إرسال استثنائية'}
-                                      </button>
+                                      {ord.status === 'shipping' || ord.status === 'delivered' ? (
+                                        <span className="text-emerald-700 font-bold text-[9px] flex items-center gap-1">
+                                          <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                                          <span>تم الاستلام / بالشحن (مقفلة ضد التكرار)</span>
+                                        </span>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSyncOrderWithShipping(ord, false)}
+                                          disabled={syncingOrderId === ord.id}
+                                          className="text-slate-400 hover:text-rose-600 transition-colors text-[9px] cursor-pointer"
+                                          title="إعادة إرسال استثنائية (تطلب تأكيد لمنع التكرار)"
+                                        >
+                                          {syncingOrderId === ord.id ? 'جارِ التحقق...' : 'إعادة إرسال استثنائية'}
+                                        </button>
+                                      )}
                                     </div>
                                   </div>
                                 ) : (
