@@ -44,7 +44,9 @@ import {
   Copy,
   ExternalLink,
   Calendar,
-  AlertTriangle
+  AlertTriangle,
+  FileSpreadsheet,
+  Download
 } from 'lucide-react';
 import { db, auth, googleProvider } from '../lib/firebase';
 import {
@@ -1949,6 +1951,107 @@ export default function StorePage() {
     }
   };
 
+  // Export orders to Excel (CSV with UTF-8 BOM for native Arabic support in Microsoft Excel)
+  const handleExportOrdersToExcel = (targetStatus: string = 'preparing') => {
+    let targetOrders: Order[] = [];
+    let filenamePrefix = '';
+
+    if (targetStatus === 'all') {
+      targetOrders = allOrders;
+      filenamePrefix = 'جميع_طلبات_المتجر';
+    } else if (targetStatus === 'current_filter') {
+      targetOrders = filteredOrders;
+      filenamePrefix = `طلبات_مفلترة_${adminOrderFilter}`;
+    } else {
+      targetOrders = allOrders.filter(o => o.status === targetStatus);
+      const statusNames: Record<string, string> = {
+        preparing: 'جاري_التجهيز',
+        pending: 'معلق',
+        shipping: 'بالشحن',
+        delivered: 'تم_الاستلام',
+        cancelled: 'ملغي'
+      };
+      filenamePrefix = `طلبات_${statusNames[targetStatus] || targetStatus}`;
+    }
+
+    if (targetOrders.length === 0) {
+      alert(`لا توجد أي طلبات بحالة (${targetStatus === 'preparing' ? 'جاري التجهيز' : targetStatus}) حالياً لتصديرها.`);
+      return;
+    }
+
+    const statusArabicMap: Record<string, string> = {
+      pending: 'معلق في الانتظار',
+      preparing: 'جاري التجهيز',
+      shipping: 'خرج مع المندوب',
+      delivered: 'تم الاستلام والمحاسبة',
+      cancelled: 'ملغي'
+    };
+
+    // Columns requested: الاسم، الرقم، تفاصيل ومحتويات الطلب + essential logistics fields
+    const headers = [
+      'م',
+      'اسم العميل',
+      'رقم الهاتف',
+      'تفاصيل ومحتويات الطلب',
+      'إجمالي المبلغ (ج.م)',
+      'الحالة',
+      'المحافظة / المدينة',
+      'العنوان التفصيلي',
+      'ملاحظات العميل',
+      'رقم بوليصة الشحن (J&T)',
+      'رقم الطلب',
+      'تاريخ الطلب'
+    ];
+
+    const rows = targetOrders.map((ord, idx) => {
+      // Build clean items details string
+      const itemsDetail = (ord.items || [])
+        .map(it => {
+          const code = it.productCode || products.find(p => p.id === it.productId)?.code || offers.find(o => `offer-${o.id}` === it.productId)?.code || '';
+          const codeLabel = code ? ` [كود: ${code}]` : '';
+          return `${it.quantity}x ${it.productName}${codeLabel}`;
+        })
+        .join(' + ');
+
+      const cleanPhone = ord.customerPhone ? sanitizeEgyptianPhone(ord.customerPhone, ord.customerPhone) : '';
+
+      return [
+        idx + 1,
+        ord.customerName || 'عميل',
+        // Formula prefix to force Excel to keep leading zero
+        cleanPhone ? `="${cleanPhone}"` : '',
+        itemsDetail || 'بدون تفاصيل',
+        Number(ord.totalPrice || 0).toFixed(2),
+        statusArabicMap[ord.status] || ord.status,
+        ord.customerCity || '',
+        ord.customerAddress || '',
+        ord.notes || '',
+        ord.shippingInfo?.billCode ? `="${ord.shippingInfo.billCode}"` : '',
+        ord.id ? `#${ord.id.slice(0, 8)}` : '',
+        formatOrderDate(ord.createdAt)
+      ];
+    });
+
+    // Construct CSV with UTF-8 BOM (\uFEFF)
+    const csvContent =
+      '\uFEFF' +
+      [
+        headers.map(h => `"${String(h).replace(/"/g, '""')}"`).join(','),
+        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      ].join('\r\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const today = new Date().toISOString().slice(0, 10);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `${filenamePrefix}_${today}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   // Order status counts for Admin
   const orderCounts = {
     all: allOrders.length,
@@ -2357,39 +2460,65 @@ export default function StorePage() {
                           )}
                         </div>
 
-                        {/* Status Filter Buttons */}
-                        <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-100">
-                          <span className="text-[11px] font-bold text-slate-500 ml-1">تصفية حسب الحالة:</span>
-                          {[
-                            { id: 'all', label: 'الكل', count: orderCounts.all },
-                            { id: 'pending', label: '⏳ معلق', count: orderCounts.pending },
-                            { id: 'preparing', label: '⚙️ جاري التجهيز', count: orderCounts.preparing },
-                            { id: 'shipping', label: '🛵 بالشحن', count: orderCounts.shipping },
-                            { id: 'delivered', label: '✅ تم الاستلام', count: orderCounts.delivered },
-                            { id: 'cancelled', label: '❌ ملغي', count: orderCounts.cancelled },
-                          ].map((tab) => {
-                            const isActive = adminOrderFilter === tab.id;
-                            return (
-                              <button
-                                key={tab.id}
-                                onClick={() => setAdminOrderFilter(tab.id as any)}
-                                className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1.5 border cursor-pointer ${
-                                  isActive
-                                    ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-                                }`}
-                              >
-                                <span>{tab.label}</span>
-                                <span
-                                  className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${
-                                    isActive ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-600'
+                        {/* Status Filter Buttons and Excel Export */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11px] font-bold text-slate-500 ml-1">تصفية حسب الحالة:</span>
+                            {[
+                              { id: 'all', label: 'الكل', count: orderCounts.all },
+                              { id: 'pending', label: '⏳ معلق', count: orderCounts.pending },
+                              { id: 'preparing', label: '⚙️ جاري التجهيز', count: orderCounts.preparing },
+                              { id: 'shipping', label: '🛵 بالشحن', count: orderCounts.shipping },
+                              { id: 'delivered', label: '✅ تم الاستلام', count: orderCounts.delivered },
+                              { id: 'cancelled', label: '❌ ملغي', count: orderCounts.cancelled },
+                            ].map((tab) => {
+                              const isActive = adminOrderFilter === tab.id;
+                              return (
+                                <button
+                                  key={tab.id}
+                                  onClick={() => setAdminOrderFilter(tab.id as any)}
+                                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1.5 border cursor-pointer ${
+                                    isActive
+                                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                      : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                                   }`}
                                 >
-                                  {tab.count}
-                                </span>
+                                  <span>{tab.label}</span>
+                                  <span
+                                    className={`px-1.5 py-0.2 rounded-full text-[9px] font-mono ${
+                                      isActive ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-600'
+                                    }`}
+                                  >
+                                    {tab.count}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => handleExportOrdersToExcel('preparing')}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold text-[11px] rounded-xl border border-emerald-300 shadow-2xs transition-colors cursor-pointer"
+                              title="تنزيل شيت إكسيل بجميع الطلبات الجاري تجهيزها (الاسم، الرقم، وتفاصيل الطلب)"
+                            >
+                              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>سحب إكسيل جاري التجهيز ({orderCounts.preparing}) 📥</span>
+                            </button>
+
+                            {adminOrderFilter !== 'preparing' && (
+                              <button
+                                type="button"
+                                onClick={() => handleExportOrdersToExcel('current_filter')}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 font-bold text-[10px] rounded-xl border border-slate-200 transition-colors cursor-pointer"
+                                title="تصدير شيت إكسيل للطلبات المعروضة حالياً"
+                              >
+                                <Download className="w-3 h-3 text-slate-500" />
+                                <span>تصدير المعروض ({filteredOrders.length})</span>
                               </button>
-                            );
-                          })}
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -2417,6 +2546,16 @@ export default function StorePage() {
                         </div>
 
                         <div className="w-full md:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleExportOrdersToExcel('preparing')}
+                            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                            title="تنزيل شيت إكسيل بجميع الطلبات الجاري تجهيزها (الاسم، الرقم، وتفاصيل الطلب)"
+                          >
+                            <FileSpreadsheet className="w-3.5 h-3.5" />
+                            <span>سحب إكسيل جاري التجهيز ({orderCounts.preparing}) 📊</span>
+                          </button>
+
                           <button
                             type="button"
                             onClick={() => {
