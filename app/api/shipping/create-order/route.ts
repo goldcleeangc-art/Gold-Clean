@@ -18,6 +18,7 @@ function normalizeArabicNumerals(str: any): string {
 }
 
 // Helper to format Egyptian mobile/phone to strict 11 digits required by J&T API (String(11))
+// Handles Arabic numerals, international codes (+20, 0020, 20), and strips unwanted prefixes like "02" before mobile numbers.
 function sanitizeEgyptianPhone(raw: any, fallback: string = '01000000000'): string {
   if (!raw) return fallback;
   
@@ -27,24 +28,44 @@ function sanitizeEgyptianPhone(raw: any, fallback: string = '01000000000'): stri
   // 2. Strip all non-digit characters (spaces, dashes, brackets, letters, symbols)
   let digits = normalized.replace(/[^0-9]/g, '');
 
-  // 3. Handle international country code variations: 0020, +20, 20
+  // 3. If there is a complete 11-digit Egyptian mobile number starting with 010, 011, 012, or 015 inside the string:
+  // This automatically strips any prefixes like "02", "+2", "002", "20", etc. (e.g. 0201012345678 -> 01012345678)
+  const mobileMatch = digits.match(/01[0125]\d{8}/);
+  if (mobileMatch) {
+    return mobileMatch[0];
+  }
+
+  // 4. Handle cases where the leading 0 of the mobile was dropped:
+  // e.g. 021012345678 (02 + 10...) or 201012345678 (20 + 10...) or 0021012345678 or +21012345678
+  const noZeroMatch = digits.match(/(?:^|02|20|002|2)(1[0125]\d{8})$/);
+  if (noZeroMatch) {
+    return '0' + noZeroMatch[1];
+  }
+
+  // 5. If it starts with "02" before other digits, remove "02" prefix
+  if (digits.startsWith('02') && digits.length > 2) {
+    digits = digits.slice(2);
+    if (!digits.startsWith('0')) digits = '0' + digits;
+  }
+
+  // 6. Generic country code strips (+20, 0020, 20)
   if (digits.startsWith('0020') && digits.length >= 14) {
     digits = digits.slice(4);
   } else if (digits.startsWith('20') && digits.length >= 12) {
     digits = digits.slice(2);
   }
 
-  // 4. Handle missing leading 0 for Egyptian mobile prefixes (10, 11, 12, 15)
+  // 7. Handle missing leading 0 for Egyptian mobile prefixes (10, 11, 12, 15)
   if (digits.length === 10 && /^(10|11|12|15)/.test(digits)) {
     digits = '0' + digits;
   }
 
-  // 5. If it starts with 01 and is at least 11 digits, extract the 11 digits
+  // 8. If it starts with 01 and is at least 11 digits, extract first 11
   if (digits.startsWith('01') && digits.length >= 11) {
     return digits.slice(0, 11);
   }
 
-  // 6. Return exact 11 digits if available
+  // 9. Return exact 11 digits if available
   if (digits.length === 11) {
     return digits;
   }

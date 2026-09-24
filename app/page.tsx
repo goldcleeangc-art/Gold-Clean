@@ -52,7 +52,8 @@ import {
   calculateCartTotalWeight,
   SHIPPING_ZONES,
   getZoneByCity,
-  normalizeArabicNumerals
+  normalizeArabicNumerals,
+  sanitizeEgyptianPhone
 } from '../lib/shipping';
 import { 
   collection, 
@@ -1050,8 +1051,7 @@ export default function StorePage() {
     setOrderInProgress(true);
 
     try {
-      const normalizedPhone = normalizeArabicNumerals(checkoutForm.phone).replace(/[^0-9]/g, '');
-      const cleanPhone = normalizedPhone || checkoutForm.phone;
+      const cleanPhone = sanitizeEgyptianPhone(checkoutForm.phone, checkoutForm.phone);
       const guestEmail = user?.email || (cleanPhone ? `${cleanPhone}@guest.store` : 'guest@goldclean.store');
       const itemsSubtotal = getSubtotal();
       const currentCartWeight = calculateCartTotalWeight(cart);
@@ -1243,7 +1243,7 @@ export default function StorePage() {
           operateType: isModifying ? 2 : 1,
           forceRecreate: allowRecreate,
           customerName: order.customerName,
-          customerPhone: normalizeArabicNumerals(order.customerPhone),
+          customerPhone: sanitizeEgyptianPhone(order.customerPhone),
           customerCity: order.customerCity,
           customerAddress: order.customerAddress,
           notes: order.notes,
@@ -1398,7 +1398,7 @@ export default function StorePage() {
               operateType: 1,
               forceRecreate: false,
               customerName: order.customerName,
-              customerPhone: normalizeArabicNumerals(order.customerPhone),
+              customerPhone: sanitizeEgyptianPhone(order.customerPhone),
               customerCity: order.customerCity,
               customerAddress: order.customerAddress,
               notes: order.notes,
@@ -5125,6 +5125,14 @@ export default function StorePage() {
                         required 
                         value={checkoutForm.phone}
                         onChange={(e) => setCheckoutForm({ ...checkoutForm, phone: normalizeArabicNumerals(e.target.value) })}
+                        onBlur={() => {
+                          if (checkoutForm.phone) {
+                            const cleaned = sanitizeEgyptianPhone(checkoutForm.phone, '');
+                            if (cleaned && cleaned !== '01000000000' && cleaned.startsWith('01')) {
+                              setCheckoutForm(prev => ({ ...prev, phone: cleaned }));
+                            }
+                          }
+                        }}
                         placeholder="01012345678"
                         className="w-full bg-slate-50 border border-slate-200 py-2.5 px-3 rounded-lg focus:ring-1 focus:ring-blue-500 outline-none text-left flex-1 font-mono"
                         dir="ltr"
