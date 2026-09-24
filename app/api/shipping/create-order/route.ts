@@ -57,12 +57,11 @@ export async function POST(req: NextRequest) {
 
     // Config credentials from environment variables
     const apiUrl =
-      process.env.JT_EXPRESS_API_URL ||
-      'https://openapi.jtjms-eg.com/webopenplatformapi/api/order/addOrder';
-    const apiAccount = process.env.JT_EXPRESS_API_ACCOUNT;
-    const privateKey = process.env.JT_EXPRESS_PRIVATE_KEY;
-    const customerCode = process.env.JT_EXPRESS_CUSTOMER_CODE;
-    const plainTextPassword = process.env.JT_EXPRESS_PASSWORD;
+      (process.env.JT_EXPRESS_API_URL || 'https://openapi.jtjms-eg.com/webopenplatformapi/api/order/addOrder').trim();
+    const apiAccount = String(process.env.JT_EXPRESS_API_ACCOUNT || '').trim();
+    const privateKey = String(process.env.JT_EXPRESS_PRIVATE_KEY || '').trim();
+    const customerCode = String(process.env.JT_EXPRESS_CUSTOMER_CODE || '').trim();
+    const plainTextPassword = String(process.env.JT_EXPRESS_PASSWORD || '').trim();
 
     if (!apiAccount || !privateKey || !customerCode || !plainTextPassword) {
       console.warn('J&T Express shipping configuration missing. Order recorded without J&T sync.', {
@@ -291,10 +290,25 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // Helpful Arabic translations for known J&T Express error codes
+    const jtErrorMessages: Record<string, string> = {
+      '145003031': 'فشل التحقق من توقيع حساب العميل (Business parameter signature verification failed) — كلمة المرور الحالية لحساب العميل في J&T غير متطابقة مع JT_EXPRESS_PASSWORD، أو تم تغيير كلمة المرور في منصة J&T VIP. يرجى مراجعة وتحديث كلمة المرور.',
+      '145003030': 'فشل التحقق من توقيع الهيدر (headers signature verification failed) — يرجى مراجعة المفتاح الخاص JT_EXPRESS_PRIVATE_KEY وحساب الربط JT_EXPRESS_API_ACCOUNT.',
+      '145003080': 'كود العميل غير مسجل لدى شركة الشحن (Customer not found) — يرجى مراجعة JT_EXPRESS_CUSTOMER_CODE.',
+      '145003010': 'حساب الـ API غير مسجل في بيئة العمل الحالية (API account does not exist).',
+      '145003085': 'رقم هاتف المستلم أو الراسل غير مكتمل أو غير صالح.',
+      '145003086': 'بيانات العنوان غير مكتملة.',
+      '145003092': 'بيانات وزن الشحنة غير صالحة.'
+    };
+
+    const friendlyMsg = isSuccess
+      ? (responseData.msg || 'تم إرسال الطلب لشركة الشحن بنجاح')
+      : (jtErrorMessages[String(responseData.code)] || responseData.msg || 'استجابة شركة الشحن');
+
     return NextResponse.json({
       success: isSuccess,
       code: responseData.code,
-      msg: responseData.msg || (isSuccess ? 'تم إرسال الطلب لشركة الشحن بنجاح' : 'استجابة شركة الشحن'),
+      msg: friendlyMsg,
       data: responseData.data || null,
       txlogisticId: txlogisticId,
       billCode: responseData?.data?.billCode || existingBillCode || null,

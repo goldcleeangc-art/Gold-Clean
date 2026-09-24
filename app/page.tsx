@@ -283,6 +283,8 @@ export default function StorePage() {
   const [isShippingRatesOpen, setIsShippingRatesOpen] = useState<boolean>(false);
   const [orderInProgress, setOrderInProgress] = useState<boolean>(false);
   const [syncingOrderId, setSyncingOrderId] = useState<string | null>(null);
+  const [isBulkSyncing, setIsBulkSyncing] = useState<boolean>(false);
+  const [bulkSyncProgress, setBulkSyncProgress] = useState<{ current: number; total: number } | null>(null);
   const [successOrder, setSuccessOrder] = useState<Order | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -1260,6 +1262,141 @@ export default function StorePage() {
     }
   };
 
+  // Bulk sync all pending orders with J&T Express and change status to 'preparing'
+  const handleSyncAllPendingOrdersWithShipping = async () => {
+    const pendingOrders = allOrders.filter(o => o.status === 'pending');
+
+    if (pendingOrders.length === 0) {
+      alert('لا توجد أي طلبات معلقة (Pending) حالياً للإرسال.');
+      return;
+    }
+
+    const confirmMsg =
+      `🚚 تأكيد إرسال وتجهيز الطلبات المعلقة:\n\n` +
+      `تم العثور على (${pendingOrders.length}) طلب بحالة معلق.\n\n` +
+      `سيقوم النظام بالتالي:\n` +
+      `1. إرسال الطلبات لشركة الشحن J&T Express لإصدار بوالص الشحن.\n` +
+      `2. تحويل حالة الطلبات الناجحة تلقائياً إلى "جاري التجهيز 📦".\n\n` +
+      `هل تريد بالتأكيد المتابعة الآن؟`;
+
+    if (!confirm(confirmMsg)) return;
+
+    setIsBulkSyncing(true);
+    setBulkSyncProgress({ current: 0, total: pendingOrders.length });
+
+    let successCount = 0;
+    let failCount = 0;
+    const errorsList: string[] = [];
+
+    try {
+      for (let i = 0; i < pendingOrders.length; i++) {
+        const order = pendingOrders[i];
+        if (!order.id) continue;
+
+        setBulkSyncProgress({ current: i + 1, total: pendingOrders.length });
+
+        const existingBillCode = order.shippingInfo?.billCode || '';
+
+        // If order already has a waybill, don't recreate with shipping API; simply update status to 'preparing'
+        if (existingBillCode) {
+          try {
+            await updateDoc(doc(db, 'orders', order.id), {
+              status: 'preparing'
+            });
+            successCount++;
+          } catch (err: any) {
+            failCount++;
+            errorsList.push(`الطلب #${order.id?.slice(0, 7)}: ${err.message}`);
+          }
+          continue;
+        }
+
+        // Prepare enriched items with product codes
+        const enrichedItems = (order.items || []).map(it => {
+          if (it.productCode) return it;
+          const matchingProduct = products.find(p => p.id === it.productId);
+          if (matchingProduct?.code) return { ...it, productCode: matchingProduct.code };
+          const matchingOffer = offers.find(o => `offer-${o.id}` === it.productId);
+          if (matchingOffer?.code) return { ...it, productCode: matchingOffer.code };
+          return it;
+        });
+
+        try {
+          const res = await fetch('/api/shipping/create-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              orderId: order.shippingInfo?.txlogisticId || order.id,
+              billCode: '',
+              operateType: 1,
+              forceRecreate: false,
+              customerName: order.customerName,
+              customerPhone: order.customerPhone,
+              customerCity: order.customerCity,
+              customerAddress: order.customerAddress,
+              notes: order.notes,
+              items: enrichedItems,
+              totalPrice: order.totalPrice,
+              weight: order.shippingWeight || 1
+            })
+          });
+
+          const data = await res.json();
+          if (data && (data.billCode || data.success)) {
+            const returnedBillCode = data.billCode || '';
+            const shippingInfoData: ShippingInfo = {
+              billCode: returnedBillCode || '',
+              sortingCode: data.sortingCode || '',
+              courier: 'J&T Express',
+              status: 'created',
+              txlogisticId: data.txlogisticId || order.id,
+              syncedAt: new Date().toISOString()
+            };
+
+            await updateDoc(doc(db, 'orders', order.id), {
+              shippingInfo: shippingInfoData,
+              status: 'preparing'
+            });
+            successCount++;
+          } else {
+            failCount++;
+            const errMsg = data?.msg || data?.error || 'فشل إصدار البوليصة';
+            errorsList.push(`الطلب #${order.id?.slice(0, 7)} (${order.customerName}): ${errMsg}`);
+          }
+        } catch (fetchErr: any) {
+          failCount++;
+          errorsList.push(`الطلب #${order.id?.slice(0, 7)} (${order.customerName}): ${fetchErr.message}`);
+        }
+
+        // Small breathing delay between API calls (200ms)
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+
+      // Final alert
+      if (failCount === 0) {
+        alert(
+          `🎉 تم بنجاح!\n\n` +
+          `تم إرسال جميع الطلبات المعلقة (${successCount} طلب) لشركة الشحن J&T Express بنجاح.\n` +
+          `وتم تحويل حالتها جميعاً إلى "جاري التجهيز 📦".`
+        );
+      } else {
+        const sampleErrors = errorsList.slice(0, 4).join('\n• ');
+        alert(
+          `📊 تقرير معالجة الطلبات:\n\n` +
+          `✅ تم بنجاح: ${successCount} طلب (تم إصدار البوالص وتحويلها لجاري التجهيز).\n` +
+          `⚠️ تعذر إرسال: ${failCount} طلب.\n\n` +
+          (sampleErrors ? `أمثلة على الأخطاء:\n• ${sampleErrors}\n\n(تم الإبقاء على الطلبات غير الناجحة بحالة "معلق" لتصحيحها).` : '')
+        );
+      }
+    } catch (globalErr: any) {
+      console.error('Error during bulk shipping sync:', globalErr);
+      alert('حدث خطأ عام أثناء معالجة الطلبات المعلقة.');
+    } finally {
+      setIsBulkSyncing(false);
+      setBulkSyncProgress(null);
+    }
+  };
+
   // Merchant Log (Bypassed if logged in via Manager Gmail account)
   const handleMerchantAuth = (e: React.FormEvent) => {
     e.preventDefault();
@@ -2057,6 +2194,45 @@ export default function StorePage() {
                             );
                           })}
                         </div>
+                      </div>
+
+                      {/* Bulk Sync Action Bar for Pending Orders */}
+                      <div className="bg-gradient-to-r from-amber-50 via-amber-50/50 to-orange-50/30 border border-amber-200/90 rounded-2xl p-3.5 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-xs">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                            <Truck className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h5 className="font-extrabold text-xs text-slate-900">إرسال كل الطلبات المعلقة لشركة الشحن J&T</h5>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${
+                                orderCounts.pending > 0
+                                  ? 'bg-amber-100 text-amber-800 border-amber-200'
+                                  : 'bg-slate-100 text-slate-500 border-slate-200'
+                              }`}>
+                                {orderCounts.pending} طلب معلق
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              إصدار بوالص الشحن لجميع الطلبات المعلقة بضغطة زر واحدة وتحديث حالتها تلقائياً إلى &quot;جاري التجهيز 📦&quot;
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={handleSyncAllPendingOrdersWithShipping}
+                          disabled={isBulkSyncing || orderCounts.pending === 0}
+                          className="w-full md:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${isBulkSyncing ? 'animate-spin' : ''}`} />
+                          <span>
+                            {isBulkSyncing
+                              ? `جاري الإرسال (${bulkSyncProgress?.current || 0}/${bulkSyncProgress?.total || orderCounts.pending})...`
+                              : orderCounts.pending === 0
+                                ? 'لا توجد طلبات معلقة حالياً'
+                                : `إرسال كل المعلق (${orderCounts.pending}) للشحن وجاري التجهيز 📦`}
+                          </span>
+                        </button>
                       </div>
 
                       {allOrders.length === 0 ? (
