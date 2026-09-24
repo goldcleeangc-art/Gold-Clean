@@ -1979,36 +1979,19 @@ export default function StorePage() {
       return;
     }
 
-    const statusArabicMap: Record<string, string> = {
-      pending: 'معلق في الانتظار',
-      preparing: 'جاري التجهيز',
-      shipping: 'خرج مع المندوب',
-      delivered: 'تم الاستلام والمحاسبة',
-      cancelled: 'ملغي'
-    };
-
-    // Columns requested: الاسم، الرقم، تفاصيل ومحتويات الطلب + essential logistics fields
+    // Strictly 3 columns as requested: الاسم، الرقم، تفاصيل منتجات الطلب
     const headers = [
-      'م',
-      'اسم العميل',
-      'رقم الهاتف',
-      'تفاصيل ومحتويات الطلب',
-      'إجمالي المبلغ (ج.م)',
-      'الحالة',
-      'المحافظة / المدينة',
-      'العنوان التفصيلي',
-      'ملاحظات العميل',
-      'رقم بوليصة الشحن (J&T)',
-      'رقم الطلب',
-      'تاريخ الطلب'
+      'الاسم',
+      'الرقم',
+      'تفاصيل منتجات الطلب'
     ];
 
-    const rows = targetOrders.map((ord, idx) => {
-      // Build clean items details string
+    const rows = targetOrders.map((ord) => {
+      // Format order items details cleanly (e.g. 2x صابون لافندر + 1x معقم)
       const itemsDetail = (ord.items || [])
         .map(it => {
           const code = it.productCode || products.find(p => p.id === it.productId)?.code || offers.find(o => `offer-${o.id}` === it.productId)?.code || '';
-          const codeLabel = code ? ` [كود: ${code}]` : '';
+          const codeLabel = code ? ` (${code})` : '';
           return `${it.quantity}x ${it.productName}${codeLabel}`;
         })
         .join(' + ');
@@ -2016,19 +1999,10 @@ export default function StorePage() {
       const cleanPhone = ord.customerPhone ? sanitizeEgyptianPhone(ord.customerPhone, ord.customerPhone) : '';
 
       return [
-        idx + 1,
-        ord.customerName || 'عميل',
-        // Formula prefix to force Excel to keep leading zero
+        ord.customerName || '',
+        // Force Excel to preserve leading zero
         cleanPhone ? `="${cleanPhone}"` : '',
-        itemsDetail || 'بدون تفاصيل',
-        Number(ord.totalPrice || 0).toFixed(2),
-        statusArabicMap[ord.status] || ord.status,
-        ord.customerCity || '',
-        ord.customerAddress || '',
-        ord.notes || '',
-        ord.shippingInfo?.billCode ? `="${ord.shippingInfo.billCode}"` : '',
-        ord.id ? `#${ord.id.slice(0, 8)}` : '',
-        formatOrderDate(ord.createdAt)
+        itemsDetail || ''
       ];
     });
 
