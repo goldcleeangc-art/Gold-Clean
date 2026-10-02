@@ -121,6 +121,7 @@ interface Offer {
   image?: string;
   badge?: string;
   isAvailable: boolean;
+  isFreeShipping?: boolean;
   createdAt?: any;
   updatedAt?: any;
 }
@@ -135,6 +136,7 @@ interface CartItem {
     originalPrice: number;
     offerPrice: number;
     savings: number;
+    isFreeShipping?: boolean;
   };
 }
 
@@ -327,6 +329,7 @@ export default function StorePage() {
     badge: string;
     image: string;
     isAvailable: boolean;
+    isFreeShipping: boolean;
     items: OfferItem[];
     originalPrice: number;
     offerPrice: number;
@@ -338,6 +341,7 @@ export default function StorePage() {
     badge: 'عرض توفير مميز',
     image: '',
     isAvailable: true,
+    isFreeShipping: false,
     items: [],
     originalPrice: 0,
     offerPrice: 0,
@@ -397,35 +401,6 @@ export default function StorePage() {
   const [selectedProductDetails, setSelectedProductDetails] = useState<Product | null>(null);
   const [isProductDetailsOpen, setIsProductDetailsOpen] = useState<boolean>(false);
 
-  // Promo Welcome Modal
-  const [isPromoModalOpen, setIsPromoModalOpen] = useState<boolean>(false);
-  const promoAutoOpenedRef = React.useRef<boolean>(false);
-
-  // Auto-open promotional popup ONLY after real products load from Firestore
-  useEffect(() => {
-    // Wait until products finish loading from Firestore
-    if (loading || offersLoading || promoAutoOpenedRef.current) return;
-
-    // Only open if products have actually loaded from DB
-    if (products.length > 0) {
-      promoAutoOpenedRef.current = true;
-      const timer = setTimeout(() => {
-        setIsPromoModalOpen(true);
-      }, 750);
-      return () => clearTimeout(timer);
-    }
-  }, [loading, offersLoading, products.length]);
-
-  // Close promo modal with Escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isPromoModalOpen) {
-        setIsPromoModalOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPromoModalOpen]);
 
   // ----------------------------------------------------
   // URL Routing Sync
@@ -802,7 +777,8 @@ export default function StorePage() {
           items: offer.items,
           originalPrice: offer.originalPrice,
           offerPrice: offer.offerPrice,
-          savings: offer.savings || Math.max(0, offer.originalPrice - offer.offerPrice)
+          savings: offer.savings || Math.max(0, offer.originalPrice - offer.offerPrice),
+          isFreeShipping: Boolean(offer.isFreeShipping)
         }
       });
     }
@@ -878,12 +854,25 @@ export default function StorePage() {
     return cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
   };
 
+  // Check if any offer currently in cart has free shipping enabled
+  const hasFreeShippingOffer = useMemo(() => {
+    return cart.some(item => {
+      if (!item.isOffer) return false;
+      if (item.offerDetails?.isFreeShipping) return true;
+      const offerId = item.offerDetails?.offerId || item.product.id.replace('offer-', '');
+      const matchedOffer = offers.find(o => o.id === offerId);
+      return matchedOffer?.isFreeShipping === true;
+    });
+  }, [cart, offers]);
+
   // Dynamic shipping cost calculation based on chosen city and parcel weight
   const cartTotalWeight = calculateCartTotalWeight(cart);
   const shippingCalculation = checkoutForm.city
     ? calculateShipping(checkoutForm.city, cartTotalWeight)
     : null;
-  const currentShippingCost = shippingCalculation ? shippingCalculation.shippingCost : 0;
+  const currentShippingCost = hasFreeShippingOffer
+    ? 0
+    : (shippingCalculation ? shippingCalculation.shippingCost : 0);
   const checkoutGrandTotal = getSubtotal() + currentShippingCost;
 
   // Real-time listener for the logged-in user's or guest device orders
@@ -1058,7 +1047,7 @@ export default function StorePage() {
       const itemsSubtotal = getSubtotal();
       const currentCartWeight = calculateCartTotalWeight(cart);
       const shipCalc = calculateShipping(checkoutForm.city, currentCartWeight);
-      const calculatedShipCost = shipCalc ? shipCalc.shippingCost : 0;
+      const calculatedShipCost = hasFreeShippingOffer ? 0 : (shipCalc ? shipCalc.shippingCost : 0);
       const finalGrandTotal = itemsSubtotal + calculatedShipCost;
 
       const orderPayload: Order = {
@@ -1086,7 +1075,7 @@ export default function StorePage() {
         }),
         subtotal: itemsSubtotal,
         shippingCost: calculatedShipCost,
-        shippingZone: shipCalc?.zone.name || '',
+        shippingZone: hasFreeShippingOffer ? `${shipCalc?.zone.name || 'شحن مجاني'} (عرض شحن مجاني)` : (shipCalc?.zone.name || ''),
         shippingWeight: currentCartWeight,
         totalPrice: finalGrandTotal,
         status: 'pending',
@@ -1691,6 +1680,7 @@ export default function StorePage() {
         badge: offerForm.badge || 'عرض خاص',
         image: offerForm.image || '',
         isAvailable: Boolean(offerForm.isAvailable),
+        isFreeShipping: Boolean(offerForm.isFreeShipping),
         items: offerForm.items,
         originalPrice: Number(offerForm.originalPrice),
         offerPrice: Number(offerForm.offerPrice),
@@ -1717,6 +1707,7 @@ export default function StorePage() {
         badge: 'عرض توفير مميز',
         image: '',
         isAvailable: true,
+        isFreeShipping: false,
         items: [],
         originalPrice: 0,
         offerPrice: 0,
@@ -1739,6 +1730,7 @@ export default function StorePage() {
       badge: offer.badge || 'عرض خاص',
       image: offer.image || '',
       isAvailable: offer.isAvailable,
+      isFreeShipping: Boolean(offer.isFreeShipping),
       items: offer.items || [],
       originalPrice: offer.originalPrice,
       offerPrice: offer.offerPrice,
@@ -2086,32 +2078,6 @@ export default function StorePage() {
     }))
   };
 
-  // Matched Promo Offer (GC01) and Matched Promo Product (GC02) strictly from real Firestore data
-  const matchedPromoOffer = offers.find(o => 
-    (o.code && o.code.trim().toUpperCase() === 'GC01') ||
-    (o.id && o.id.trim().toUpperCase() === 'GC01') ||
-    (o.title && o.title.includes('GC01'))
-  );
-  const targetPromoOffer: Offer | null = matchedPromoOffer || (offers.length > 0 ? offers[0] : null);
-
-  const matchedPromoProduct = products.find(p => 
-    (p.code && p.code.trim().toUpperCase() === 'GC02') ||
-    (p.id && p.id.trim().toUpperCase() === 'GC02') ||
-    (p.name && p.name.includes('GC02'))
-  );
-
-  // Derive promotional items dynamically from database (no mock fallback data)
-  const promoItem1: { type: 'offer'; data: Offer } | { type: 'product'; data: Product } | null = 
-    targetPromoOffer 
-      ? { type: 'offer', data: targetPromoOffer }
-      : products.length > 0 
-        ? { type: 'product', data: products[0] }
-        : null;
-
-  const promoItem2: Product | null = 
-    targetPromoOffer 
-      ? (matchedPromoProduct || (products.length > 0 ? products[0] : null))
-      : (products.length > 1 ? (matchedPromoProduct && matchedPromoProduct.id !== products[0].id ? matchedPromoProduct : products[1]) : null);
 
   return (
     <>
@@ -2748,7 +2714,7 @@ export default function StorePage() {
                                   <span className="font-extrabold text-blue-600 bg-blue-50/30 px-3 py-1 rounded-lg">الحساب الإجمالي: {ord.totalPrice.toFixed(2)} جنيه</span>
                                   {typeof ord.shippingCost === 'number' && (
                                     <span className="text-[10px] text-slate-400 block mt-1 pr-1">
-                                      (المنتجات: {(ord.subtotal ?? (ord.totalPrice - ord.shippingCost)).toFixed(2)} ج + الشحن: {ord.shippingCost.toFixed(2)} ج {ord.shippingZone ? `• ${ord.shippingZone}` : ''})
+                                      (المنتجات: {(ord.subtotal ?? (ord.totalPrice - ord.shippingCost)).toFixed(2)} ج + الشحن: {ord.shippingCost === 0 ? 'مجاني 🎁' : `${ord.shippingCost.toFixed(2)} ج`} {ord.shippingZone ? `• ${ord.shippingZone}` : ''})
                                     </span>
                                   )}
                                 </div>
@@ -3123,6 +3089,7 @@ export default function StorePage() {
                               badge: 'عرض توفير مميز 🔥',
                               image: '',
                               isAvailable: true,
+                              isFreeShipping: false,
                               items: [],
                               originalPrice: 0,
                               offerPrice: 0,
@@ -3412,17 +3379,41 @@ export default function StorePage() {
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2">
-                            <input 
-                              type="checkbox"
-                              id="offer-available-check"
-                              checked={offerForm.isAvailable}
-                              onChange={(e) => setOfferForm({ ...offerForm, isAvailable: e.target.checked })}
-                              className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500"
-                            />
-                            <label htmlFor="offer-available-check" className="text-xs font-bold text-slate-700 cursor-pointer">
-                              العرض متاح للطلب الفوري في واجهة المتجر
-                            </label>
+                          <div className="space-y-3 pt-1">
+                            <div className="flex items-center gap-2">
+                              <input 
+                                type="checkbox"
+                                id="offer-available-check"
+                                checked={offerForm.isAvailable}
+                                onChange={(e) => setOfferForm({ ...offerForm, isAvailable: e.target.checked })}
+                                className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500 cursor-pointer"
+                              />
+                              <label htmlFor="offer-available-check" className="text-xs font-bold text-slate-700 cursor-pointer">
+                                العرض متاح للطلب الفوري في واجهة المتجر
+                              </label>
+                            </div>
+
+                            {/* Free Shipping Checkbox */}
+                            <div className="p-3.5 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2.5">
+                                <Truck className="w-5 h-5 text-emerald-600 shrink-0" />
+                                <div>
+                                  <label htmlFor="offer-free-shipping-check" className="text-xs font-extrabold text-slate-900 cursor-pointer block">
+                                    شحن مجاني لهذا العرض (Free Shipping) 🚚
+                                  </label>
+                                  <span className="text-[11px] text-slate-500">
+                                    عند تفعيل هذا الخيار، سيتم احتساب الشحن مجاناً (0 جنيه) تلقائياً عند طلب هذا العرض.
+                                  </span>
+                                </div>
+                              </div>
+                              <input 
+                                type="checkbox"
+                                id="offer-free-shipping-check"
+                                checked={Boolean(offerForm.isFreeShipping)}
+                                onChange={(e) => setOfferForm({ ...offerForm, isFreeShipping: e.target.checked })}
+                                className="w-5 h-5 rounded text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                              />
+                            </div>
                           </div>
 
                           <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
@@ -3469,9 +3460,17 @@ export default function StorePage() {
                                 <div key={off.id} className="p-4 bg-white rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between hover:border-rose-200 transition-all">
                                   <div>
                                     <div className="flex items-start justify-between gap-2 mb-2">
-                                      <span className="bg-rose-50 text-rose-700 text-[10px] font-extrabold px-2.5 py-0.5 rounded-md border border-rose-100">
-                                        {off.badge || 'عرض خاص'}
-                                      </span>
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="bg-rose-50 text-rose-700 text-[10px] font-extrabold px-2.5 py-0.5 rounded-md border border-rose-100">
+                                          {off.badge || 'عرض خاص'}
+                                        </span>
+                                        {off.isFreeShipping && (
+                                          <span className="bg-emerald-50 text-emerald-700 text-[10px] font-extrabold px-2 py-0.5 rounded-md border border-emerald-200 flex items-center gap-1">
+                                            <Truck className="w-3 h-3" />
+                                            <span>شحن مجاني</span>
+                                          </span>
+                                        )}
+                                      </div>
                                       <button
                                         onClick={() => handleToggleOfferAvailability(off.id, off.isAvailable)}
                                         className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
@@ -4287,7 +4286,7 @@ export default function StorePage() {
                           {/* Card Header & Visual Media */}
                           <div className="relative bg-slate-50 p-4 border-b border-slate-100 overflow-hidden">
                             {/* Promo Badge */}
-                            <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5">
+                            <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5 flex-wrap">
                               <span className="bg-rose-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg shadow-xs flex items-center gap-1">
                                 <Flame className="w-3 h-3" />
                                 <span>{offer.badge || 'عرض خاص'}</span>
@@ -4295,6 +4294,12 @@ export default function StorePage() {
                               {discountPercent > 0 && (
                                 <span className="bg-amber-500 text-white text-[10px] font-black px-2 py-1 rounded-lg shadow-xs">
                                   خصم {discountPercent}%
+                                </span>
+                              )}
+                              {offer.isFreeShipping && (
+                                <span className="bg-emerald-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg shadow-xs flex items-center gap-1">
+                                  <Truck className="w-3 h-3" />
+                                  <span>شحن مجاني 🚚</span>
                                 </span>
                               )}
                             </div>
@@ -4432,6 +4437,14 @@ export default function StorePage() {
                               وفر {savingsVal} جنيه 💰
                             </div>
                           </div>
+
+                          {/* Free Shipping Banner */}
+                          {offer.isFreeShipping && (
+                            <div className="p-2 bg-gradient-to-r from-blue-50 to-emerald-50 rounded-xl border border-blue-200/80 flex items-center justify-center gap-1.5 text-blue-900 text-[11px] font-bold shadow-2xs">
+                              <Truck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                              <span>العرض يشمل شحن وتوصيل مجاني بالكامل 🎁</span>
+                            </div>
+                          )}
 
                           {/* CTA Button */}
                           <button
@@ -5030,6 +5043,12 @@ export default function StorePage() {
                                 كود: {item.product.code}
                               </span>
                             )}
+                            {item.isOffer && (item.offerDetails?.isFreeShipping || offers.find(o => o.id === (item.offerDetails?.offerId || item.product.id.replace('offer-', '')))?.isFreeShipping) && (
+                              <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
+                                <Truck className="w-2.5 h-2.5" />
+                                <span>شحن مجاني</span>
+                              </span>
+                            )}
                             <span className="text-[11px] text-slate-500 font-bold">
                               سعر القطعة: {item.product.price} جنيه
                             </span>
@@ -5072,11 +5091,18 @@ export default function StorePage() {
                       <span>إجمالي عدد القطع بالسلة</span>
                       <span className="font-bold">{cart.reduce((c, i) => c + i.quantity, 0)} قطعة</span>
                     </div>
-                    <div className="flex justify-between text-slate-600">
+                    <div className="flex justify-between text-slate-600 items-center">
                       <span>مصاريف الشحن والتوصيل</span>
-                      <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
-                        معاينة عند كتابة العنوان (شركة J&T)
-                      </span>
+                      {hasFreeShippingOffer ? (
+                        <span className="text-emerald-700 font-bold bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300 text-[11px] flex items-center gap-1 shadow-2xs">
+                          <Truck className="w-3.5 h-3.5" />
+                          <span>شحن مجاني بالكامل 🎁</span>
+                        </span>
+                      ) : (
+                        <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
+                          معاينة عند كتابة العنوان (شركة J&T)
+                        </span>
+                      )}
                     </div>
                     <div className="flex justify-between text-slate-900 font-bold pt-3 border-t border-slate-200 text-sm">
                       <span>المجموع الإجمالي للمنتجات</span>
@@ -5184,7 +5210,9 @@ export default function StorePage() {
                       </div>
                       <div className="flex justify-between items-center text-slate-600">
                         <span>تكلفة الشحن والتوصيل {successOrder.shippingZone ? `(${successOrder.shippingZone})` : ''}:</span>
-                        <span className="font-mono font-bold text-emerald-700">{(successOrder.shippingCost || 0).toFixed(2)} جنيه</span>
+                        <span className="font-mono font-bold text-emerald-700">
+                          {successOrder.shippingCost === 0 ? 'مجاني 🎉' : `${(successOrder.shippingCost || 0).toFixed(2)} جنيه`}
+                        </span>
                       </div>
                       <div className="flex justify-between items-center text-slate-900 font-extrabold pt-1.5 border-t border-slate-200">
                         <span>المبلغ المستحق للدفع عند الاستلام:</span>
@@ -5365,8 +5393,24 @@ export default function StorePage() {
                             ({shippingCalculation.zone.name})
                           </span>
                         )}
+                        {hasFreeShippingOffer && (
+                          <span className="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-1.5 py-0.5 rounded border border-emerald-200">
+                            عرض شحن مجاني 🎁
+                          </span>
+                        )}
                       </div>
-                      {shippingCalculation ? (
+                      {hasFreeShippingOffer ? (
+                        <div className="flex items-center gap-1.5">
+                          {shippingCalculation && (
+                            <span className="font-mono text-slate-400 line-through text-[10px]">
+                              +{shippingCalculation.shippingCost.toFixed(2)} ج
+                            </span>
+                          )}
+                          <span className="font-bold text-emerald-600 text-xs">
+                            مجاني 🎉
+                          </span>
+                        </div>
+                      ) : shippingCalculation ? (
                         <span className="font-mono font-bold text-emerald-700">
                           +{shippingCalculation.shippingCost.toFixed(2)} جنيه
                         </span>
@@ -5608,7 +5652,9 @@ export default function StorePage() {
                                 </div>
                                 <div className="text-left">
                                   <span className="block text-[9px] text-slate-400 leading-none">
-                                    {typeof order.shippingCost === 'number' ? `شامل الشحن (${order.shippingCost} ج)` : 'إجمالي الحساب (COD)'}
+                                    {typeof order.shippingCost === 'number' 
+                                      ? (order.shippingCost === 0 ? 'شامل الشحن (شحن مجاني 🎁)' : `شامل الشحن (${order.shippingCost} ج)`) 
+                                      : 'إجمالي الحساب (COD)'}
                                   </span>
                                   <span className="text-sm font-black text-blue-600 font-mono inline-block mt-1">{order.totalPrice.toFixed(2)} جنيه</span>
                                 </div>
@@ -5992,310 +6038,6 @@ export default function StorePage() {
         )}
       </AnimatePresence>
 
-      {/* PROMOTIONAL WELCOME MODAL */}
-      <AnimatePresence>
-        {isPromoModalOpen && promoItem1 && promoItem2 && (
-          <div 
-            className="fixed inset-0 z-[9990] flex items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto"
-            onClick={() => setIsPromoModalOpen(false)}
-          >
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsPromoModalOpen(false)}
-              className="fixed inset-0 bg-slate-950/80 backdrop-blur-md cursor-pointer"
-            />
-
-            {/* Modal Card */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 25 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.92, y: 20 }}
-              transition={{ type: "spring", duration: 0.5, bounce: 0.2 }}
-              dir="rtl"
-              className="relative w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-amber-300/60 overflow-hidden z-10 flex flex-col my-auto max-h-[92vh]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Header */}
-              <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-amber-950 text-white p-5 md:p-6 relative overflow-hidden shrink-0">
-                <div className="absolute -right-10 -top-10 w-40 h-40 bg-amber-500/20 rounded-full blur-2xl pointer-events-none" />
-                <div className="absolute -left-10 -bottom-10 w-40 h-40 bg-rose-500/20 rounded-full blur-2xl pointer-events-none" />
-
-                {/* Close Button */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setIsPromoModalOpen(false);
-                  }}
-                  className="absolute top-3.5 left-3.5 sm:top-4 sm:left-4 w-10 h-10 rounded-full bg-white/15 hover:bg-white/30 active:scale-90 border border-white/25 text-white flex items-center justify-center transition-all cursor-pointer z-50 shadow-md touch-manipulation"
-                  title="إغلاق النافذة"
-                  aria-label="إغلاق النافذة"
-                >
-                  <X className="w-5 h-5 pointer-events-none" />
-                </button>
-
-                <div className="relative pr-1 pl-12 sm:pl-14">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-amber-500/25 to-rose-500/25 border border-amber-400/40 text-amber-300 text-[11px] font-bold mb-2">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-                    <span>مفاجأة ترحيبية خاصة لزوار متجر Gold Clean اليوم 🔥</span>
-                  </div>
-                  <h2 className="text-lg sm:text-xl md:text-2xl font-black text-white leading-tight">
-                    {promoItem1.type === 'offer' ? 'أقوى باقة توفير والمنتج الأكثر طلباً' : 'أبرز منتجات Gold Clean الأكثر طلباً'}
-                  </h2>
-                  <p className="text-xs md:text-sm text-slate-300 mt-1 leading-relaxed">
-                    {promoItem1.type === 'offer' 
-                      ? 'اخترنا لك أفضل باقة توفير والمنتج الأكثر مبيعاً بأفضل سعر مع توصيل سريع حتى باب بيتك'
-                      : 'اخترنا لك أفضل منتجاتنا الفاخرة والأكثر طلباً بجودة عالية وتوصيل سريع حتى باب بيتك'
-                    }
-                  </p>
-                </div>
-              </div>
-
-              {/* Cards Grid */}
-              <div className="p-4 md:p-6 overflow-y-auto flex-1 space-y-4 bg-slate-50/70">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-                  
-                  {/* CARD 1: OFFER OR PRODUCT */}
-                  {promoItem1.type === 'offer' ? (
-                    <div className="bg-white rounded-2xl border border-rose-200/80 shadow-xs p-4 sm:p-5 flex flex-col justify-between relative hover:border-rose-400 transition-all hover:shadow-md">
-                      <div>
-                        {/* Top Badges */}
-                        <div className="flex items-center justify-between gap-2 mb-3">
-                          <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200">
-                            <Flame className="w-3.5 h-3.5 text-rose-600" />
-                            <span>باقة التوفير الذهبي</span>
-                          </span>
-                          {promoItem1.data.code && (
-                            <span className="text-[10px] font-mono font-extrabold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-                              كود العرض: {promoItem1.data.code}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Image Box */}
-                        <div className="h-40 sm:h-44 w-full rounded-xl bg-slate-50 p-2 border border-slate-100 relative overflow-hidden flex items-center justify-center mb-3">
-                          <img
-                            src={promoItem1.data.image || 'https://images.unsplash.com/photo-1584622650111-993a426fbf0a?auto=format&fit=crop&q=80&w=600'}
-                            alt={promoItem1.data.title}
-                            className="w-full h-full object-contain"
-                          />
-                          {(promoItem1.data.savings > 0 || promoItem1.data.originalPrice > promoItem1.data.offerPrice) && (
-                            <div className="absolute top-2.5 right-2.5 bg-emerald-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg shadow-sm flex items-center gap-1">
-                              <span>وفر {promoItem1.data.savings || (promoItem1.data.originalPrice - promoItem1.data.offerPrice)} ج.م 💰</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Title & Description */}
-                        <h3 className="font-black text-slate-900 text-sm sm:text-base leading-snug line-clamp-1">
-                          {promoItem1.data.title}
-                        </h3>
-                        <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
-                          {promoItem1.data.description}
-                        </p>
-
-                        {/* Pricing */}
-                        <div className="mt-3.5 flex items-baseline gap-2">
-                          <span className="text-xl sm:text-2xl font-black text-rose-600 font-mono">
-                            {promoItem1.data.offerPrice} ج.م
-                          </span>
-                          {promoItem1.data.originalPrice > promoItem1.data.offerPrice && (
-                            <span className="text-xs text-slate-400 line-through font-mono">
-                              {promoItem1.data.originalPrice} ج.م
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Action Button */}
-                      <button
-                        onClick={(e) => handleAddOfferToCart(promoItem1.data, e)}
-                        className="w-full mt-4 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 active:scale-[0.98] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-xs cursor-pointer hover:shadow-rose-600/20"
-                      >
-                        <ShoppingCart className="w-4 h-4" />
-                        <span>أضف باقة العرض للسلة</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="bg-white rounded-2xl border border-amber-200/80 shadow-xs p-4 sm:p-5 flex flex-col justify-between relative hover:border-amber-400 transition-all hover:shadow-md">
-                      <div>
-                        {/* Top Badges */}
-                        <div className="flex items-center justify-between gap-2 mb-3">
-                          <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
-                            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                            <span>منتج مميز</span>
-                          </span>
-                          {promoItem1.data.code && (
-                            <span className="text-[10px] font-mono font-extrabold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-                              كود المنتج: {promoItem1.data.code}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Image Box */}
-                        <div className="h-40 sm:h-44 w-full rounded-xl bg-slate-50 p-2 border border-slate-100 relative overflow-hidden flex items-center justify-center mb-3">
-                          <img
-                            src={promoItem1.data.image || 'https://images.unsplash.com/photo-1563453392212-326f518500b1?auto=format&fit=crop&q=80&w=600'}
-                            alt={promoItem1.data.name}
-                            className="w-full h-full object-contain"
-                          />
-                          {promoItem1.data.volume && (
-                            <div className="absolute top-2.5 right-2.5 bg-slate-900/80 text-white backdrop-blur text-[10px] font-bold px-2 py-0.5 rounded-md">
-                              {promoItem1.data.volume}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Title & Description */}
-                        <h3 className="font-black text-slate-900 text-sm sm:text-base leading-snug line-clamp-1">
-                          {promoItem1.data.name}
-                        </h3>
-                        <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
-                          {promoItem1.data.description}
-                        </p>
-
-                        {/* Pricing & Rating */}
-                        <div className="mt-3.5 flex items-center justify-between">
-                          <span className="text-xl sm:text-2xl font-black text-slate-900 font-mono">
-                            {promoItem1.data.price} ج.م
-                          </span>
-                          <div className="flex items-center gap-1">
-                            <div className="flex items-center text-amber-400">
-                              {[1, 2, 3, 4, 5].map((s) => (
-                                <Star key={s} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                              ))}
-                            </div>
-                            <span className="text-[11px] font-bold text-slate-500 font-mono">({promoItem1.data.rating || 5})</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Action Button */}
-                      <button
-                        onClick={(e) => handleAddToCart(promoItem1.data, e)}
-                        className="w-full mt-4 py-2.5 px-4 bg-slate-900 hover:bg-amber-600 active:scale-[0.98] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-xs cursor-pointer hover:shadow-amber-600/20"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>أضف المنتج للسلة</span>
-                      </button>
-                    </div>
-                  )}
-
-                  {/* CARD 2: PRODUCT GC02 */}
-                  <div className="bg-white rounded-2xl border border-blue-200/80 shadow-xs p-4 sm:p-5 flex flex-col justify-between relative hover:border-blue-400 transition-all hover:shadow-md">
-                    <div>
-                      {/* Top Badges */}
-                      <div className="flex items-center justify-between gap-2 mb-3">
-                        <span className="inline-flex items-center gap-1 text-[11px] font-extrabold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
-                          <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                          <span>المنتج الأكثر طلباً</span>
-                        </span>
-                        {promoItem2.code && (
-                          <span className="text-[10px] font-mono font-extrabold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-                            كود المنتج: {promoItem2.code}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Image Box */}
-                      <div className="h-40 sm:h-44 w-full rounded-xl bg-slate-50 p-2 border border-slate-100 relative overflow-hidden flex items-center justify-center mb-3">
-                        <img
-                          src={promoItem2.image || 'https://images.unsplash.com/photo-1563453392212-326f518500b1?auto=format&fit=crop&q=80&w=600'}
-                          alt={promoItem2.name}
-                          className="w-full h-full object-contain"
-                        />
-                        {promoItem2.volume && (
-                          <div className="absolute top-2.5 right-2.5 bg-slate-900/80 text-white backdrop-blur text-[10px] font-bold px-2 py-0.5 rounded-md">
-                            {promoItem2.volume}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Title & Description */}
-                      <h3 className="font-black text-slate-900 text-sm sm:text-base leading-snug line-clamp-1">
-                        {promoItem2.name}
-                      </h3>
-                      <p className="text-xs text-slate-500 mt-1 line-clamp-2 leading-relaxed">
-                        {promoItem2.description}
-                      </p>
-
-                      {/* Pricing & Rating */}
-                      <div className="mt-3.5 flex items-center justify-between">
-                        <span className="text-xl sm:text-2xl font-black text-slate-900 font-mono">
-                          {promoItem2.price} ج.م
-                        </span>
-                        <div className="flex items-center gap-1">
-                          <div className="flex items-center text-amber-400">
-                            {[1, 2, 3, 4, 5].map((s) => (
-                              <Star key={s} className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                            ))}
-                          </div>
-                          <span className="text-[11px] font-bold text-slate-500 font-mono">({promoItem2.rating || 4.9})</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Action Button */}
-                    <button
-                      onClick={(e) => handleAddToCart(promoItem2, e)}
-                      className="w-full mt-4 py-2.5 px-4 bg-slate-900 hover:bg-blue-600 active:scale-[0.98] text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-xs cursor-pointer hover:shadow-blue-600/20"
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>أضف المنتج للسلة</span>
-                    </button>
-                  </div>
-
-                </div>
-              </div>
-
-              {/* Bottom Footer */}
-              <div className="p-3.5 sm:p-4 bg-white border-t border-slate-200/80 flex items-center justify-center shrink-0">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setIsPromoModalOpen(false);
-                  }}
-                  className="w-full sm:w-auto py-2.5 px-6 text-slate-500 hover:text-slate-800 text-xs sm:text-sm font-bold transition-colors cursor-pointer text-center"
-                >
-                  متابعة التصفح في المتجر
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Floating Re-open Promo Button */}
-      {!isPromoModalOpen && promoItem1 && promoItem2 && (
-        <motion.button
-          initial={{ scale: 0, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          whileHover={{ scale: 1.04 }}
-          whileTap={{ scale: 0.96 }}
-          onClick={() => setIsPromoModalOpen(true)}
-          className="fixed bottom-16 md:bottom-6 right-4 md:right-6 z-40 bg-gradient-to-r from-slate-950 via-slate-900 to-amber-950 text-white font-bold text-xs py-2.5 px-3.5 sm:px-4 rounded-full shadow-xl shadow-amber-950/20 flex items-center gap-2 border border-amber-400/40 cursor-pointer hover:border-amber-400 transition-all"
-          title="عروض اليوم الخاصة"
-          dir="rtl"
-        >
-          <span className="flex h-2.5 w-2.5 relative">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
-          </span>
-          <Sparkles className="w-4 h-4 text-amber-300" />
-          <span className="text-[11px] sm:text-xs">
-            {promoItem1.data.code && promoItem2.code 
-              ? `عروض اليوم المميزة (${promoItem1.data.code} + ${promoItem2.code})`
-              : 'عروض اليوم المميزة'
-            }
-          </span>
-        </motion.button>
-      )}
 
       {/* FLY TO CART ANIMATED PARTICLES */}
       <div className="fixed inset-0 pointer-events-none z-[99999] overflow-hidden">
