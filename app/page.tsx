@@ -373,7 +373,7 @@ export default function StorePage() {
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [userSearchQuery, setUserSearchQuery] = useState<string>('');
   const [adminTab, setAdminTab] = useState<'orders' | 'products' | 'offers' | 'categories' | 'stats' | 'users'>('orders');
-  const [adminOrderFilter, setAdminOrderFilter] = useState<'all' | 'pending' | 'preparing' | 'shipping' | 'delivered' | 'cancelled'>('all');
+  const [adminOrderFilter, setAdminOrderFilter] = useState<'all' | 'pending' | 'preparing' | 'shipping' | 'delivered' | 'cancelled' | 'sku_updated'>('all');
   const [adminOrderSearch, setAdminOrderSearch] = useState<string>('');
 
   // New product editing/adding form
@@ -2203,8 +2203,175 @@ export default function StorePage() {
     }
   };
 
+  // Helper to check if an order had its offer/carton SKU modified/replaced with constituent product SKUs
+  const isSkuModifiedOrder = (ord: Order) => {
+    if (ord.shippingInfo?.skuUpdated) return true;
+    if (ord.shippingInfo?.skuUpdatedSummary) return true;
+    const hasUnpackedBundle = (ord.items || []).some(it => {
+      const isOffer = it.isOffer || (typeof it.productId === 'string' && it.productId.startsWith('offer-'));
+      return isOffer && Array.isArray(it.bundleItems) && it.bundleItems.length > 0;
+    });
+    return Boolean(hasUnpackedBundle);
+  };
+
+  // Orders where offer/carton SKU was modified/replaced with individual product SKUs
+  const skuUpdatedOrders = useMemo(() => {
+    return allOrders.filter(isSkuModifiedOrder);
+  }, [allOrders]);
+
+  // Export orders modified from offer SKU to constituent product SKUs into Excel
+  const handleExportSkuUpdatedOrdersToExcel = () => {
+    if (skuUpdatedOrders.length === 0) {
+      alert('لا توجد أي طلبات تم تعديل SKU العرض فيها بأكواد المنتجات الفردية حتى الآن لتصديرها.');
+      return;
+    }
+
+    const headers = [
+      'م',
+      'رقم بوليصة الشحن (J&T)',
+      'اسم العميل',
+      'رقم الهاتف',
+      'أكواد SKU المنتجات المستبدلة',
+      'كود العرض / الكرتونة الأصلي',
+      'تفاصيل محتويات الطلب والمنتجات الفردية',
+      'إجمالي المبلغ (ج.م)',
+      'حالة الطلب',
+      'المحافظة',
+      'العنوان بالتفصيل',
+      'ملاحظات العميل',
+      'رقم الطلب',
+      'تاريخ الطلب',
+      'تاريخ تعديل SKU والمزامنة'
+    ];
+
+    const statusArabicMap: Record<string, string> = {
+      pending: 'معلق في الانتظار',
+      preparing: 'جاري التجهيز',
+      shipping: 'خرج مع المندوب',
+      delivered: 'تم الاستلام والمحاسبة',
+      cancelled: 'ملغي'
+    };
+
+    const rows = skuUpdatedOrders.map((ord, idx) => {
+      const cleanPhone = ord.customerPhone ? sanitizeEgyptianPhone(ord.customerPhone, ord.customerPhone) : '';
+      const billCode = ord.shippingInfo?.billCode || '';
+
+      // Replaced physical product SKUs
+      let replacedSkus = ord.shippingInfo?.skuUpdatedSummary || '';
+      if (!replacedSkus) {
+        const extractedCodes: string[] = [];
+        (ord.items || []).forEach(it => {
+          const isOffer = it.isOffer || (typeof it.productId === 'string' && it.productId.startsWith('offer-'));
+          const bundle = (it.bundleItems && it.bundleItems.length > 0)
+            ? it.bundleItems
+            : (isOffer ? offers.find(o => `offer-${o.id}` === it.productId || o.id === it.productId)?.items : null);
+
+          if (bundle && Array.isArray(bundle) && bundle.length > 0) {
+            bundle.forEach((sub: any) => {
+              const prod = products.find(p => p.id === sub.productId);
+              const subCode = sub.productCode || prod?.code || sub.productName;
+              const subQty = (Number(sub.quantity) || 1) * (Number(it.quantity) || 1);
+              extractedCodes.push(`${subQty}x ${subCode}`);
+            });
+          } else {
+            const code = it.productCode || products.find(p => p.id === it.productId)?.code || it.productName;
+            extractedCodes.push(`${it.quantity}x ${code}`);
+          }
+        });
+        replacedSkus = extractedCodes.join(' + ');
+      }
+
+      // Original Offer / Carton code
+      const originalOfferCodes: string[] = [];
+      (ord.items || []).forEach(it => {
+        const matchingOffer = offers.find(o => 
+          `offer-${o.id}` === it.productId || 
+          o.id === it.productId ||
+          (it.productCode && o.code && o.code.toLowerCase() === it.productCode.toLowerCase()) ||
+          (it.productName && o.title && o.title.trim().toLowerCase() === it.productName.trim().toLowerCase())
+        );
+        const isOffer = Boolean(it.isOffer) || Boolean(matchingOffer) || (typeof it.productId === 'string' && it.productId.startsWith('offer-'));
+        if (isOffer) {
+          const cartonCode = it.productCode || matchingOffer?.code || 'عرض';
+          originalOfferCodes.push(`${cartonCode} (${it.productName})`);
+        }
+      });
+      const originalOfferStr = originalOfferCodes.length > 0 ? originalOfferCodes.join(' + ') : 'عرض مخصص';
+
+      // Full items and constituent products breakdown
+      const itemsDetail = (ord.items || [])
+        .map(it => {
+          const isOffer = it.isOffer || (typeof it.productId === 'string' && it.productId.startsWith('offer-'));
+          const bundle = (it.bundleItems && it.bundleItems.length > 0)
+            ? it.bundleItems
+            : (isOffer ? offers.find(o => `offer-${o.id}` === it.productId || o.id === it.productId)?.items : null);
+
+          if (bundle && Array.isArray(bundle) && bundle.length > 0) {
+            const bundleDesc = bundle.map((sub: any) => {
+              const prod = products.find(p => p.id === sub.productId);
+              const subCode = sub.productCode || prod?.code || '';
+              const codeLabel = subCode ? ` [SKU: ${subCode}]` : '';
+              const subQty = (Number(sub.quantity) || 1) * (Number(it.quantity) || 1);
+              return `${subQty}x ${sub.productName}${codeLabel}`;
+            }).join(' + ');
+            return `[محتويات ${it.productName}: ${bundleDesc}]`;
+          }
+
+          const code = it.productCode || products.find(p => p.id === it.productId)?.code || '';
+          const codeLabel = code ? ` [SKU: ${code}]` : '';
+          return `${it.quantity}x ${it.productName}${codeLabel}`;
+        })
+        .join(' + ');
+
+      const statusArabic = statusArabicMap[ord.status] || ord.status;
+      const orderDate = formatOrderDate(ord.createdAt);
+      const updateDate = ord.shippingInfo?.syncedAt ? formatOrderDate(ord.shippingInfo.syncedAt) : '';
+
+      return [
+        idx + 1,
+        billCode ? `="${billCode}"` : 'بدون بوليصة',
+        ord.customerName || '',
+        cleanPhone ? `="${cleanPhone}"` : '',
+        replacedSkus || '',
+        originalOfferStr,
+        itemsDetail || '',
+        Number(ord.totalPrice || 0).toFixed(2),
+        statusArabic,
+        ord.customerCity || '',
+        ord.customerAddress || '',
+        ord.notes || '',
+        ord.id ? `#${ord.id.slice(0, 8)}` : '',
+        orderDate,
+        updateDate
+      ];
+    });
+
+    const csvContent =
+      '\uFEFF' +
+      [
+        headers.map(h => `"${String(h).replace(/"/g, '""')}"`).join(','),
+        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      ].join('\r\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const today = new Date().toISOString().slice(0, 10);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `طلبات_معدلة_بـ_SKU_المنتجات_${today}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   // Export orders to Excel (CSV with UTF-8 BOM for native Arabic support in Microsoft Excel)
   const handleExportOrdersToExcel = (targetStatus: string = 'preparing') => {
+    if (targetStatus === 'sku_updated') {
+      handleExportSkuUpdatedOrdersToExcel();
+      return;
+    }
+
     let targetOrders: Order[] = [];
     let filenamePrefix = '';
 
@@ -2301,6 +2468,7 @@ export default function StorePage() {
     shipping: allOrders.filter(o => o.status === 'shipping').length,
     delivered: allOrders.filter(o => o.status === 'delivered').length,
     cancelled: allOrders.filter(o => o.status === 'cancelled').length,
+    skuUpdated: skuUpdatedOrders.length,
   };
 
   // Active waybills with carton/offer items that can be updated to individual product SKUs
@@ -2323,14 +2491,19 @@ export default function StorePage() {
 
   // Admin filtered orders by status and search query
   const filteredOrders = allOrders.filter((ord) => {
-    const statusMatch = adminOrderFilter === 'all' || ord.status === adminOrderFilter;
+    const statusMatch = adminOrderFilter === 'all'
+      ? true
+      : adminOrderFilter === 'sku_updated'
+        ? isSkuModifiedOrder(ord)
+        : ord.status === adminOrderFilter;
     const query = adminOrderSearch.trim().toLowerCase();
     if (!query) return statusMatch;
     const nameMatch = ord.customerName?.toLowerCase().includes(query);
     const phoneMatch = ord.customerPhone?.includes(query);
     const idMatch = ord.id?.toLowerCase().includes(query);
     const billCodeMatch = ord.shippingInfo?.billCode?.toLowerCase().includes(query);
-    return statusMatch && (nameMatch || phoneMatch || idMatch || billCodeMatch);
+    const skuMatch = ord.shippingInfo?.skuUpdatedSummary?.toLowerCase().includes(query);
+    return statusMatch && (nameMatch || phoneMatch || idMatch || billCodeMatch || skuMatch);
   });
 
   // Filter computation
@@ -2704,6 +2877,7 @@ export default function StorePage() {
                               { id: 'shipping', label: '🛵 بالشحن', count: orderCounts.shipping },
                               { id: 'delivered', label: '✅ تم الاستلام', count: orderCounts.delivered },
                               { id: 'cancelled', label: '❌ ملغي', count: orderCounts.cancelled },
+                              { id: 'sku_updated', label: '🔄 معدل بـ SKU المنتجات', count: orderCounts.skuUpdated },
                             ].map((tab) => {
                               const isActive = adminOrderFilter === tab.id;
                               return (
@@ -2730,6 +2904,17 @@ export default function StorePage() {
                           </div>
 
                           <div className="flex items-center gap-1.5 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={handleExportSkuUpdatedOrdersToExcel}
+                              disabled={skuUpdatedOrders.length === 0}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-800 font-extrabold text-[11px] rounded-xl border border-blue-300 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+                              title="تنزيل شيت إكسيل بجميع الطلبات التي تم استبدال SKU العرض فيها بأكواد المنتجات الفردية"
+                            >
+                              <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600" />
+                              <span>إكسيل المعدل بـ SKU ({orderCounts.skuUpdated}) 📥</span>
+                            </button>
+
                             <button
                               type="button"
                               onClick={() => handleExportOrdersToExcel('preparing')}
@@ -2787,6 +2972,17 @@ export default function StorePage() {
                           >
                             <FileSpreadsheet className="w-3.5 h-3.5" />
                             <span>سحب إكسيل جاري التجهيز ({orderCounts.preparing}) 📊</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleExportSkuUpdatedOrdersToExcel}
+                            disabled={skuUpdatedOrders.length === 0}
+                            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                            title="تنزيل شيت إكسيل بجميع الطلبات التي تم استبدال SKU العرض فيها بأكواد المنتجات الفردية"
+                          >
+                            <FileSpreadsheet className="w-3.5 h-3.5" />
+                            <span>سحب إكسيل المعدل بـ SKU ({orderCounts.skuUpdated}) 📥</span>
                           </button>
 
                           <button
