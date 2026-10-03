@@ -149,6 +149,8 @@ interface ShippingInfo {
   txlogisticId?: string;
   syncedAt?: any;
   error?: string;
+  skuUpdated?: boolean;
+  skuUpdatedSummary?: string;
 }
 
 interface Order {
@@ -301,6 +303,8 @@ export default function StorePage() {
   const [syncingOrderId, setSyncingOrderId] = useState<string | null>(null);
   const [isBulkSyncing, setIsBulkSyncing] = useState<boolean>(false);
   const [bulkSyncProgress, setBulkSyncProgress] = useState<{ current: number; total: number } | null>(null);
+  const [isBulkUpdatingSkus, setIsBulkUpdatingSkus] = useState<boolean>(false);
+  const [bulkSkuProgress, setBulkSkuProgress] = useState<{ current: number; total: number } | null>(null);
   const [successOrder, setSuccessOrder] = useState<Order | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -1227,6 +1231,50 @@ export default function StorePage() {
     }
   };
 
+  // Centralized helper to unpack carton/offer bundle items into individual constituent products with SKUs
+  const enrichOrderItems = (rawItems: Order['items']) => {
+    return (rawItems || []).map(it => {
+      let code = it.productCode;
+      const matchingProduct = products.find(p => p.id === it.productId);
+      if (!code && matchingProduct?.code) code = matchingProduct.code;
+
+      const matchingOffer = offers.find(o => 
+        `offer-${o.id}` === it.productId || 
+        o.id === it.productId ||
+        (it.productCode && o.code && o.code.toLowerCase() === it.productCode.toLowerCase()) ||
+        (it.productName && o.title && o.title.trim().toLowerCase() === it.productName.trim().toLowerCase())
+      );
+
+      const isOffer = Boolean(it.isOffer) || Boolean(matchingOffer) || (typeof it.productId === 'string' && it.productId.startsWith('offer-'));
+
+      if (isOffer) {
+        if (!code && matchingOffer?.code) code = matchingOffer.code;
+        const rawBundle = (it.bundleItems && it.bundleItems.length > 0)
+          ? it.bundleItems
+          : (matchingOffer?.items || []);
+
+        const bundleItems = rawBundle.map(sub => {
+          const prod = products.find(p => p.id === sub.productId);
+          return {
+            productId: sub.productId,
+            productName: sub.productName,
+            productCode: sub.productCode || prod?.code || '',
+            quantity: sub.quantity
+          };
+        });
+
+        return {
+          ...it,
+          productCode: code,
+          isOffer: true,
+          bundleItems
+        };
+      }
+
+      return { ...it, productCode: code };
+    });
+  };
+
   // Manual or Re-Sync order with J&T Express API
   const handleSyncOrderWithShipping = async (order: Order, allowRecreate = false) => {
     if (!order.id) return;
@@ -1259,37 +1307,7 @@ export default function StorePage() {
 
     setSyncingOrderId(order.id);
     try {
-      // Ensure each item has productCode and bundleItems unpacked
-      const enrichedItems = (order.items || []).map(it => {
-        let code = it.productCode;
-        const matchingProduct = products.find(p => p.id === it.productId);
-        if (!code && matchingProduct?.code) code = matchingProduct.code;
-
-        const matchingOffer = offers.find(o => `offer-${o.id}` === it.productId || o.id === it.productId);
-        if (matchingOffer) {
-          if (!code && matchingOffer.code) code = matchingOffer.code;
-          const bundleItems = it.bundleItems && it.bundleItems.length > 0 
-            ? it.bundleItems 
-            : (matchingOffer.items || []).map(sub => {
-                const prod = products.find(p => p.id === sub.productId);
-                return {
-                  productId: sub.productId,
-                  productName: sub.productName,
-                  productCode: sub.productCode || prod?.code || '',
-                  quantity: sub.quantity
-                };
-              });
-          return {
-            ...it,
-            productCode: code,
-            isOffer: true,
-            bundleItems
-          };
-        }
-
-        return { ...it, productCode: code };
-      });
-
+      const enrichedItems = enrichOrderItems(order.items);
       const isModifying = !!existingBillCode;
 
       const res = await fetch('/api/shipping/create-order', {
@@ -1334,6 +1352,7 @@ export default function StorePage() {
           syncedAt: new Date().toISOString()
         };
         await updateDoc(doc(db, 'orders', order.id), {
+          items: enrichedItems,
           shippingInfo: shippingInfoData
         });
         if (isModifying) {
@@ -1347,6 +1366,112 @@ export default function StorePage() {
     } catch (err: any) {
       console.error(err);
       alert('حدث خطأ أثناء الاتصال بواجهة شركة الشحن J&T Express');
+    } finally {
+      setSyncingOrderId(null);
+    }
+  };
+
+  // Update Waybill SKU at J&T Express (replaces carton SKU with constituent individual product SKUs)
+  const handleUpdateOrderSkuWithShipping = async (order: Order, silent = false) => {
+    if (!order.id) return { success: false, error: 'رقم الطلب غير متوفر' };
+
+    const billCode = order.shippingInfo?.billCode;
+    if (!billCode) {
+      if (!silent) alert('هذا الطلب ليس له بوليصة شحن مسجلة بعد.');
+      return { success: false, error: 'لا يوجد بوليصة شحن مسجلة' };
+    }
+
+    if (order.status === 'shipping' || order.status === 'delivered') {
+      const msg = `⛔ تعذر تعديل البوليصة (${billCode}): الشحنة خرجت مع المندوب أو تم تسليمها بالفعل. شركة الشحن تمنع تعديل الشحنات بعد الاستلام (Picked Up).`;
+      if (!silent) alert(msg);
+      return { success: false, error: msg, isPickedUp: true };
+    }
+
+    setSyncingOrderId(order.id);
+    try {
+      const enrichedItems = enrichOrderItems(order.items);
+
+      // Build summary of product codes for tracking
+      const extractedPhysicalCodes: string[] = [];
+      enrichedItems.forEach(it => {
+        if (it.isOffer && Array.isArray(it.bundleItems) && it.bundleItems.length > 0) {
+          it.bundleItems.forEach(sub => {
+            const qty = (Number(sub.quantity) || 1) * (Number(it.quantity) || 1);
+            extractedPhysicalCodes.push(`${qty}x ${sub.productCode || sub.productName}`);
+          });
+        } else {
+          extractedPhysicalCodes.push(`${it.quantity}x ${it.productCode || it.productName}`);
+        }
+      });
+
+      const res = await fetch('/api/shipping/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: order.shippingInfo?.txlogisticId || order.id,
+          billCode: billCode,
+          operateType: 2, // Explicitly 2 = Modifying existing order in J&T
+          forceRecreate: true,
+          customerName: order.customerName,
+          customerPhone: sanitizeEgyptianPhone(order.customerPhone),
+          customerCity: order.customerCity,
+          customerAddress: order.customerAddress,
+          notes: order.notes,
+          items: enrichedItems,
+          totalPrice: order.totalPrice,
+          weight: order.shippingWeight || 1
+        })
+      });
+
+      const data = await res.json();
+
+      if (data && (data.success || data.code === '1' || data.code === 1)) {
+        const returnedBillCode = data.billCode || billCode;
+        const shippingInfoData: ShippingInfo = {
+          ...(order.shippingInfo || {}),
+          billCode: returnedBillCode,
+          sortingCode: data.sortingCode || order.shippingInfo?.sortingCode || '',
+          courier: 'J&T Express',
+          status: 'created',
+          txlogisticId: data.txlogisticId || order.shippingInfo?.txlogisticId || order.id,
+          syncedAt: new Date().toISOString(),
+          skuUpdated: true,
+          skuUpdatedSummary: extractedPhysicalCodes.join(' + ')
+        };
+
+        await updateDoc(doc(db, 'orders', order.id), {
+          items: enrichedItems,
+          shippingInfo: shippingInfoData
+        });
+
+        if (!silent) {
+          alert(
+            `✅ تم تعديل البوليصة لدى شركة الشحن J&T Express بنجاح!\n\n` +
+            `رقم البوليصة الثابت: ${returnedBillCode}\n\n` +
+            `تم استبدال كود الكرتونة بأكواد المنتجات الفردية:\n` +
+            `📦 ${extractedPhysicalCodes.join(' + ')}\n\n` +
+            `تم تحديث بيانات الشحنة للمندوب ولقاعدة البيانات دون أي تكرار للبوليصة.`
+          );
+        }
+        return { success: true, billCode: returnedBillCode };
+      } else {
+        if (data?.isPickedUp) {
+          await updateDoc(doc(db, 'orders', order.id), {
+            status: 'shipping'
+          });
+          const msg = `🔒 تم قفل التعديل من J&T: الشحنة تم استلامها بالفعل من المندوب (Picked Up) ولا يمكن تعديلها.`;
+          if (!silent) alert(msg);
+          return { success: false, error: msg, isPickedUp: true };
+        }
+        const errorMsg = data?.msg || data?.error || 'فشل تحديث الشحنة لدى شركة الشحن';
+        if (!silent) alert(`رد شركة الشحن J&T: ${errorMsg}`);
+        return { success: false, error: errorMsg };
+      }
+    } catch (err: any) {
+      console.error('Error updating order SKU with shipping:', err);
+      const errStr = err?.message || 'حدث خطأ في الاتصال بواجهة شركة الشحن';
+      if (!silent) alert(errStr);
+      return { success: false, error: errStr };
     } finally {
       setSyncingOrderId(null);
     }
@@ -1437,36 +1562,7 @@ export default function StorePage() {
         }
 
         // Prepare enriched items with product codes and unpacked bundle items
-        const enrichedItems = (order.items || []).map(it => {
-          let code = it.productCode;
-          const matchingProduct = products.find(p => p.id === it.productId);
-          if (!code && matchingProduct?.code) code = matchingProduct.code;
-
-          const matchingOffer = offers.find(o => `offer-${o.id}` === it.productId || o.id === it.productId);
-          if (matchingOffer || it.isOffer || (it.bundleItems && it.bundleItems.length > 0)) {
-            if (!code && matchingOffer?.code) code = matchingOffer.code;
-            const rawBundle = it.bundleItems && it.bundleItems.length > 0 
-              ? it.bundleItems 
-              : (matchingOffer?.items || []);
-            const bundleItems = rawBundle.map(sub => {
-              const prod = products.find(p => p.id === sub.productId);
-              return {
-                productId: sub.productId,
-                productName: sub.productName,
-                productCode: sub.productCode || prod?.code || '',
-                quantity: sub.quantity
-              };
-            });
-            return {
-              ...it,
-              productCode: code,
-              isOffer: true,
-              bundleItems
-            };
-          }
-
-          return { ...it, productCode: code };
-        });
+        const enrichedItems = enrichOrderItems(order.items);
 
         try {
           const res = await fetch('/api/shipping/create-order', {
@@ -1501,6 +1597,7 @@ export default function StorePage() {
             };
 
             await updateDoc(doc(db, 'orders', order.id), {
+              items: enrichedItems,
               shippingInfo: shippingInfoData,
               status: 'preparing'
             });
@@ -1542,6 +1639,79 @@ export default function StorePage() {
       setIsBulkSyncing(false);
       setBulkSyncProgress(null);
     }
+  };
+
+  // Bulk update all waybills that contain cartons/offers to individual product SKUs
+  const handleBulkUpdateAllWaybillSkus = async () => {
+    // Find all active orders that have a waybill and are not yet picked up by courier
+    const targetOrders = allOrders.filter(ord => {
+      if (!ord.id || !ord.shippingInfo?.billCode) return false;
+      if (ord.status === 'shipping' || ord.status === 'delivered' || ord.status === 'cancelled') return false;
+      return true;
+    });
+
+    if (targetOrders.length === 0) {
+      alert('لا توجد أي طلبات نشطة مسجلة في الشحن (بوليصة موجودة قبل خروج المندوب) لتحديثها.');
+      return;
+    }
+
+    // Filter those that have offers/cartons OR include all waybills to ensure clean product SKUs
+    const cartonOrders = targetOrders.filter(ord => {
+      return (ord.items || []).some(it => {
+        const isOffer = it.isOffer || (typeof it.productId === 'string' && it.productId.startsWith('offer-'));
+        const matchingOffer = offers.find(o => 
+          `offer-${o.id}` === it.productId || 
+          o.id === it.productId ||
+          (it.productCode && o.code && o.code.toLowerCase() === it.productCode.toLowerCase()) ||
+          (it.productName && o.title && o.title.trim().toLowerCase() === it.productName.trim().toLowerCase())
+        );
+        return Boolean(isOffer) || Boolean(matchingOffer) || Boolean(it.bundleItems && it.bundleItems.length > 0);
+      });
+    });
+
+    const ordersToProcess = cartonOrders.length > 0 ? cartonOrders : targetOrders;
+
+    const confirmMsg =
+      `🔄 تحديث كود المنتجات في بوالص الشحن J&T:\n\n` +
+      `تم العثور على (${ordersToProcess.length}) بوليصة شحن${cartonOrders.length > 0 ? ' تحتوي على كراتين/عروض' : ''}.\n\n` +
+      `سيتم إرسال أمر تعديل لشركة الشحن لاستبدال كود الكرتونة بأكواد وكميات المنتجات الفردية (بدون تكرار البوليصة وبدون أي تكلفة إضافية).\n\n` +
+      `هل تريد بدء تحديث جميع هذه البوالص الآن؟`;
+
+    if (!confirm(confirmMsg)) return;
+
+    setIsBulkUpdatingSkus(true);
+    setBulkSkuProgress({ current: 0, total: ordersToProcess.length });
+
+    let successCount = 0;
+    let pickedUpCount = 0;
+    let failedCount = 0;
+
+    for (let i = 0; i < ordersToProcess.length; i++) {
+      const ord = ordersToProcess[i];
+      setBulkSkuProgress({ current: i + 1, total: ordersToProcess.length });
+
+      const result = await handleUpdateOrderSkuWithShipping(ord, true);
+      if (result.success) {
+        successCount++;
+      } else if (result.isPickedUp) {
+        pickedUpCount++;
+      } else {
+        failedCount++;
+      }
+
+      await new Promise(r => setTimeout(r, 250));
+    }
+
+    setIsBulkUpdatingSkus(false);
+    setBulkSkuProgress(null);
+
+    alert(
+      `🎉 تم الانتهاء من عملية تحديث بوالص الشحن:\n\n` +
+      `✅ تم تحديثها بنجاح بأكواد المنتجات: ${successCount}\n` +
+      (pickedUpCount > 0 ? `🔒 مقفلة لدى الشحن (استلمها المندوب): ${pickedUpCount}\n` : '') +
+      (failedCount > 0 ? `⚠️ لم تتم (أخطاء أخرى): ${failedCount}\n` : '') +
+      `\nتم تحديث قاعدة البيانات وأوامر الشحن في J&T Express بنجاح.`
+    );
   };
 
   // Merchant Log (Bypassed if logged in via Manager Gmail account)
@@ -2133,6 +2303,24 @@ export default function StorePage() {
     cancelled: allOrders.filter(o => o.status === 'cancelled').length,
   };
 
+  // Active waybills with carton/offer items that can be updated to individual product SKUs
+  const waybillOrdersWithCartons = useMemo(() => {
+    return allOrders.filter(ord => {
+      if (!ord.id || !ord.shippingInfo?.billCode) return false;
+      if (ord.status === 'shipping' || ord.status === 'delivered' || ord.status === 'cancelled') return false;
+      return (ord.items || []).some(it => {
+        const isOffer = it.isOffer || (typeof it.productId === 'string' && it.productId.startsWith('offer-'));
+        const matchingOffer = offers.find(o => 
+          `offer-${o.id}` === it.productId || 
+          o.id === it.productId ||
+          (it.productCode && o.code && o.code.toLowerCase() === it.productCode.toLowerCase()) ||
+          (it.productName && o.title && o.title.trim().toLowerCase() === it.productName.trim().toLowerCase())
+        );
+        return Boolean(isOffer) || Boolean(matchingOffer) || Boolean(it.bundleItems && it.bundleItems.length > 0);
+      });
+    });
+  }, [allOrders, offers]);
+
   // Admin filtered orders by status and search query
   const filteredOrders = allOrders.filter((ord) => {
     const statusMatch = adminOrderFilter === 'all' || ord.status === adminOrderFilter;
@@ -2618,6 +2806,21 @@ export default function StorePage() {
                           </button>
 
                           <button
+                            type="button"
+                            onClick={handleBulkUpdateAllWaybillSkus}
+                            disabled={isBulkUpdatingSkus || waybillOrdersWithCartons.length === 0}
+                            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                            title="تحديث جميع البوالص المسجلة في الشحن واستبدال كود الكرتونة بأكواد المنتجات الفردية"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 ${isBulkUpdatingSkus ? 'animate-spin' : ''}`} />
+                            <span>
+                              {isBulkUpdatingSkus
+                                ? `جاري تحديث SKU (${bulkSkuProgress?.current || 0}/${bulkSkuProgress?.total || 0})...`
+                                : `تحديث كود المنتجات لكل البوالص (${waybillOrdersWithCartons.length}) 🔄`}
+                            </span>
+                          </button>
+
+                          <button
                             onClick={handleSyncAllPendingOrdersWithShipping}
                             disabled={isBulkSyncing || orderCounts.pending === 0}
                             className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
@@ -2695,18 +2898,48 @@ export default function StorePage() {
                                 </p>
                                 <ul className="space-y-1.5 text-slate-500 pr-3">
                                   {ord.items.map((it, idx) => {
-                                    const codeDisplay = it.productCode || products.find(p => p.id === it.productId)?.code || offers.find(o => `offer-${o.id}` === it.productId)?.code;
+                                    const isOffer = it.isOffer || (typeof it.productId === 'string' && it.productId.startsWith('offer-'));
+                                    const matchingOffer = offers.find(o => `offer-${o.id}` === it.productId || o.id === it.productId);
+                                    const bundle = it.bundleItems && it.bundleItems.length > 0 
+                                      ? it.bundleItems 
+                                      : (matchingOffer?.items || null);
+                                    const codeDisplay = it.productCode || products.find(p => p.id === it.productId)?.code || matchingOffer?.code;
+
                                     return (
-                                      <li key={idx} className="flex justify-between items-center text-[11px] gap-2">
-                                        <span className="flex items-center gap-1.5 flex-wrap">
-                                          <span>• {it.productName} (الكمية: {it.quantity})</span>
-                                          {codeDisplay && (
-                                            <span className="font-mono text-[9px] bg-blue-50 text-blue-700 px-1.5 py-0.2 rounded border border-blue-200 font-bold">
-                                              كود الشحن: {codeDisplay}
-                                            </span>
-                                          )}
-                                        </span>
-                                        <span className="font-mono text-slate-700 font-bold shrink-0">{it.price.toFixed(2)} جنيه</span>
+                                      <li key={idx} className="flex flex-col text-[11px] gap-1 py-1 border-b border-slate-100 last:border-b-0">
+                                        <div className="flex justify-between items-center gap-2">
+                                          <span className="flex items-center gap-1.5 flex-wrap">
+                                            <span className="font-bold text-slate-800">• {it.productName} (الكمية: {it.quantity})</span>
+                                            {codeDisplay && !bundle && (
+                                              <span className="font-mono text-[9px] bg-blue-50 text-blue-700 px-1.5 py-0.2 rounded border border-blue-200 font-bold">
+                                                كود الشحن: {codeDisplay}
+                                              </span>
+                                            )}
+                                          </span>
+                                          <span className="font-mono text-slate-700 font-bold shrink-0">{it.price.toFixed(2)} جنيه</span>
+                                        </div>
+                                        {bundle && Array.isArray(bundle) && bundle.length > 0 && (
+                                          <div className="mr-3 space-y-1 bg-blue-50/60 p-2 rounded-lg border border-blue-100/80 text-[10px]">
+                                            <span className="text-blue-900 font-black block">محتويات الكرتونة (SKU المنتجات الفعلية):</span>
+                                            <div className="flex flex-wrap gap-1.5">
+                                              {bundle.map((sub, sIdx) => {
+                                                const subProd = products.find(p => p.id === sub.productId);
+                                                const subCode = sub.productCode || subProd?.code || '';
+                                                const subQty = (Number(sub.quantity) || 1) * (Number(it.quantity) || 1);
+                                                return (
+                                                  <span key={sIdx} className="inline-flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-blue-200 text-slate-700 shadow-2xs">
+                                                    <span>{subQty}x {sub.productName}</span>
+                                                    {subCode && (
+                                                      <span className="font-mono font-black text-blue-700 bg-blue-100/80 px-1 rounded text-[9px]">
+                                                        {subCode}
+                                                      </span>
+                                                    )}
+                                                  </span>
+                                                );
+                                              })}
+                                            </div>
+                                          </div>
+                                        )}
                                       </li>
                                     );
                                   })}
@@ -2794,18 +3027,30 @@ export default function StorePage() {
                                       {ord.status === 'shipping' || ord.status === 'delivered' ? (
                                         <span className="text-emerald-700 font-bold text-[9px] flex items-center gap-1">
                                           <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                                          <span>تم الاستلام / بالشحن (مقفلة ضد التكرار)</span>
+                                          <span>تم الاستلام / بالشحن (مقفلة ضد التعديل)</span>
                                         </span>
                                       ) : (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleSyncOrderWithShipping(ord, false)}
-                                          disabled={syncingOrderId === ord.id}
-                                          className="text-slate-400 hover:text-rose-600 transition-colors text-[9px] cursor-pointer"
-                                          title="إعادة إرسال استثنائية (تطلب تأكيد لمنع التكرار)"
-                                        >
-                                          {syncingOrderId === ord.id ? 'جارِ التحقق...' : 'إعادة إرسال استثنائية'}
-                                        </button>
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          {ord.shippingInfo?.skuUpdated && (
+                                            <span
+                                              className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-100 text-emerald-800 font-black text-[9px] rounded border border-emerald-200"
+                                              title={ord.shippingInfo.skuUpdatedSummary || 'تم استبدال كود الكرتونة بأكواد المنتجات الفردية'}
+                                            >
+                                              <Check className="w-2.5 h-2.5 text-emerald-600" />
+                                              <span>محدث بـ SKU المنتجات</span>
+                                            </span>
+                                          )}
+                                          <button
+                                            type="button"
+                                            onClick={() => handleUpdateOrderSkuWithShipping(ord)}
+                                            disabled={syncingOrderId === ord.id}
+                                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[9.5px] rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+                                            title="استبدال SKU الكرتونة بـ SKU المنتجات الفردية لدى شركة الشحن وفي قاعدة البيانات"
+                                          >
+                                            <RefreshCw className={`w-3 h-3 ${syncingOrderId === ord.id ? 'animate-spin' : ''}`} />
+                                            <span>تحديث كود المنتجات (استبدال كود الكرتونة)</span>
+                                          </button>
+                                        </div>
                                       )}
                                     </div>
                                   </div>

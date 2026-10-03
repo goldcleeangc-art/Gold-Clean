@@ -95,7 +95,9 @@ export async function POST(req: NextRequest) {
     // Prevent duplicate orders in J&T Express:
     // If the order already has an assigned billCode (Waybill) and forceRecreate is false,
     // prevent re-submitting to J&T API to avoid duplicate orders / parcels.
-    if (billCode && !forceRecreate) {
+    // However, if operateType is explicitly 2 (modifying an existing waybill), allow it to pass through to J&T API.
+    const isExplicitModify = Number(operateType) === 2;
+    if (billCode && !forceRecreate && !isExplicitModify) {
       return NextResponse.json({
         success: true,
         duplicatePrevented: true,
@@ -417,15 +419,22 @@ export async function POST(req: NextRequest) {
     if (isDuplicateError) {
       let duplicateMsg = 'الطلب مسجل بالفعل في نظام شركة الشحن بنفس رقم الطلب (تم منع التكرار بنجاح).';
       if (isPickedUpCode) {
-        duplicateMsg = 'تم منع التكرار: الشحنة تم استلامها بالفعل من المندوب (Picked Up) في نظام J&T ولا يمكن تكرارها أو تعديلها.';
+        duplicateMsg = finalOperateType === 2
+          ? 'تعذر تعديل البوليصة: الشحنة تم استلامها بالفعل من المندوب (Picked Up) في نظام J&T ولا يمكن تعديلها.'
+          : 'تم منع التكرار: الشحنة تم استلامها بالفعل من المندوب (Picked Up) في نظام J&T ولا يمكن تكرارها أو تعديلها.';
       } else if (isCancelledCode) {
-        duplicateMsg = 'تم منع التكرار: الشحنة ملغاة مسبقاً في نظام شركة الشحن (Cancelled).';
+        duplicateMsg = finalOperateType === 2
+          ? 'تعذر تعديل البوليصة: الشحنة ملغاة مسبقاً في نظام شركة الشحن (Cancelled).'
+          : 'تم منع التكرار: الشحنة ملغاة مسبقاً في نظام شركة الشحن (Cancelled).';
       }
 
+      const updateFailed = finalOperateType === 2 && (isPickedUpCode || isCancelledCode);
+
       return NextResponse.json({
-        success: true,
-        duplicatePrevented: true,
+        success: !updateFailed,
+        duplicatePrevented: !updateFailed,
         isPickedUp: isPickedUpCode,
+        isCancelled: isCancelledCode,
         code: responseData.code,
         msg: duplicateMsg,
         data: responseData.data || null,
@@ -449,7 +458,7 @@ export async function POST(req: NextRequest) {
     };
 
     let friendlyMsg = isSuccess
-      ? (responseData.msg || 'تم إرسال الطلب لشركة الشحن بنجاح')
+      ? (responseData.msg || (finalOperateType === 2 ? 'تم تحديث بيانات الشحنة و SKU المنتجات لدى شركة الشحن بنجاح' : 'تم إرسال الطلب لشركة الشحن بنجاح'))
       : (jtErrorMessages[String(responseData.code)] || responseData.msg || 'استجابة شركة الشحن');
 
     if (!isSuccess && String(responseData.msg || '').toLowerCase().includes('abnormal contact')) {
