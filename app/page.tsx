@@ -103,6 +103,7 @@ interface Product {
 interface OfferItem {
   productId: string;
   productName: string;
+  productCode?: string;
   quantity: number;
   unitPrice: number;
   image?: string;
@@ -164,6 +165,13 @@ interface Order {
     productCode?: string;
     quantity: number;
     price: number;
+    isOffer?: boolean;
+    bundleItems?: Array<{
+      productId: string;
+      productName: string;
+      productCode?: string;
+      quantity: number;
+    }>;
   }>;
   subtotal?: number;
   shippingCost?: number;
@@ -774,7 +782,13 @@ export default function StorePage() {
         isOffer: true,
         offerDetails: {
           offerId: offer.id,
-          items: offer.items,
+          items: (offer.items || []).map(it => {
+            const prod = products.find(p => p.id === it.productId);
+            return {
+              ...it,
+              productCode: it.productCode || prod?.code || ''
+            };
+          }),
           originalPrice: offer.originalPrice,
           offerPrice: offer.offerPrice,
           savings: offer.savings || Math.max(0, offer.originalPrice - offer.offerPrice),
@@ -865,14 +879,22 @@ export default function StorePage() {
     });
   }, [cart, offers]);
 
+  // Check if cart contains any offer bundle
+  const hasAnyOffer = useMemo(() => {
+    return cart.some(item => item.isOffer);
+  }, [cart]);
+
   // Dynamic shipping cost calculation based on chosen city and parcel weight
   const cartTotalWeight = calculateCartTotalWeight(cart);
   const shippingCalculation = checkoutForm.city
     ? calculateShipping(checkoutForm.city, cartTotalWeight)
     : null;
+  const rawShippingCost = shippingCalculation ? shippingCalculation.shippingCost : 0;
   const currentShippingCost = hasFreeShippingOffer
     ? 0
-    : (shippingCalculation ? shippingCalculation.shippingCost : 0);
+    : hasAnyOffer && shippingCalculation
+      ? Math.max(0, rawShippingCost - 20)
+      : rawShippingCost;
   const checkoutGrandTotal = getSubtotal() + currentShippingCost;
 
   // Real-time listener for the logged-in user's or guest device orders
@@ -1047,7 +1069,11 @@ export default function StorePage() {
       const itemsSubtotal = getSubtotal();
       const currentCartWeight = calculateCartTotalWeight(cart);
       const shipCalc = calculateShipping(checkoutForm.city, currentCartWeight);
-      const calculatedShipCost = hasFreeShippingOffer ? 0 : (shipCalc ? shipCalc.shippingCost : 0);
+      const calculatedShipCost = hasFreeShippingOffer 
+        ? 0 
+        : hasAnyOffer && shipCalc 
+          ? Math.max(0, shipCalc.shippingCost - 20) 
+          : (shipCalc ? shipCalc.shippingCost : 0);
       const finalGrandTotal = itemsSubtotal + calculatedShipCost;
 
       const orderPayload: Order = {
@@ -1065,17 +1091,37 @@ export default function StorePage() {
             const matchingOffer = offers.find(o => `offer-${o.id}` === item.product.id || o.id === item.product.id);
             if (matchingOffer?.code) code = matchingOffer.code;
           }
+
+          let bundleItems: Array<{ productId: string; productName: string; productCode?: string; quantity: number }> | undefined = undefined;
+          if (item.isOffer && item.offerDetails?.items && item.offerDetails.items.length > 0) {
+            bundleItems = item.offerDetails.items.map(sub => {
+              const matchedProd = products.find(p => p.id === sub.productId);
+              return {
+                productId: sub.productId,
+                productName: sub.productName,
+                productCode: sub.productCode || matchedProd?.code || '',
+                quantity: sub.quantity
+              };
+            });
+          }
+
           return {
             productId: item.product.id,
             productName: item.product.name,
             productCode: code,
             quantity: item.quantity,
-            price: item.product.price
+            price: item.product.price,
+            isOffer: Boolean(item.isOffer),
+            ...(bundleItems && bundleItems.length > 0 ? { bundleItems } : {})
           };
         }),
         subtotal: itemsSubtotal,
         shippingCost: calculatedShipCost,
-        shippingZone: hasFreeShippingOffer ? `${shipCalc?.zone.name || 'شحن مجاني'} (عرض شحن مجاني)` : (shipCalc?.zone.name || ''),
+        shippingZone: hasFreeShippingOffer 
+          ? `${shipCalc?.zone.name || 'شحن مجاني'} (عرض شحن مجاني)` 
+          : hasAnyOffer && shipCalc 
+            ? `${shipCalc.zone.name} (خصم 20 ج باقة عرض)` 
+            : (shipCalc?.zone.name || ''),
         shippingWeight: currentCartWeight,
         totalPrice: finalGrandTotal,
         status: 'pending',
@@ -1213,14 +1259,35 @@ export default function StorePage() {
 
     setSyncingOrderId(order.id);
     try {
-      // Ensure each item has productCode (look up in products or offers if previously saved without code)
+      // Ensure each item has productCode and bundleItems unpacked
       const enrichedItems = (order.items || []).map(it => {
-        if (it.productCode) return it;
+        let code = it.productCode;
         const matchingProduct = products.find(p => p.id === it.productId);
-        if (matchingProduct?.code) return { ...it, productCode: matchingProduct.code };
-        const matchingOffer = offers.find(o => `offer-${o.id}` === it.productId);
-        if (matchingOffer?.code) return { ...it, productCode: matchingOffer.code };
-        return it;
+        if (!code && matchingProduct?.code) code = matchingProduct.code;
+
+        const matchingOffer = offers.find(o => `offer-${o.id}` === it.productId || o.id === it.productId);
+        if (matchingOffer) {
+          if (!code && matchingOffer.code) code = matchingOffer.code;
+          const bundleItems = it.bundleItems && it.bundleItems.length > 0 
+            ? it.bundleItems 
+            : (matchingOffer.items || []).map(sub => {
+                const prod = products.find(p => p.id === sub.productId);
+                return {
+                  productId: sub.productId,
+                  productName: sub.productName,
+                  productCode: sub.productCode || prod?.code || '',
+                  quantity: sub.quantity
+                };
+              });
+          return {
+            ...it,
+            productCode: code,
+            isOffer: true,
+            bundleItems
+          };
+        }
+
+        return { ...it, productCode: code };
       });
 
       const isModifying = !!existingBillCode;
@@ -1369,14 +1436,36 @@ export default function StorePage() {
           continue;
         }
 
-        // Prepare enriched items with product codes
+        // Prepare enriched items with product codes and unpacked bundle items
         const enrichedItems = (order.items || []).map(it => {
-          if (it.productCode) return it;
+          let code = it.productCode;
           const matchingProduct = products.find(p => p.id === it.productId);
-          if (matchingProduct?.code) return { ...it, productCode: matchingProduct.code };
-          const matchingOffer = offers.find(o => `offer-${o.id}` === it.productId);
-          if (matchingOffer?.code) return { ...it, productCode: matchingOffer.code };
-          return it;
+          if (!code && matchingProduct?.code) code = matchingProduct.code;
+
+          const matchingOffer = offers.find(o => `offer-${o.id}` === it.productId || o.id === it.productId);
+          if (matchingOffer || it.isOffer || (it.bundleItems && it.bundleItems.length > 0)) {
+            if (!code && matchingOffer?.code) code = matchingOffer.code;
+            const rawBundle = it.bundleItems && it.bundleItems.length > 0 
+              ? it.bundleItems 
+              : (matchingOffer?.items || []);
+            const bundleItems = rawBundle.map(sub => {
+              const prod = products.find(p => p.id === sub.productId);
+              return {
+                productId: sub.productId,
+                productName: sub.productName,
+                productCode: sub.productCode || prod?.code || '',
+                quantity: sub.quantity
+              };
+            });
+            return {
+              ...it,
+              productCode: code,
+              isOffer: true,
+              bundleItems
+            };
+          }
+
+          return { ...it, productCode: code };
         });
 
         try {
@@ -1604,6 +1693,7 @@ export default function StorePage() {
       updatedItems.push({
         productId: product.id,
         productName: product.name,
+        productCode: product.code || '',
         quantity: qty,
         unitPrice: product.price,
         image: product.image,
@@ -1979,9 +2069,24 @@ export default function StorePage() {
     ];
 
     const rows = targetOrders.map((ord) => {
-      // Format order items details cleanly (e.g. 2x صابون لافندر + 1x معقم)
+      // Format order items details cleanly (e.g. 2x صابون لافندر (GC02) + [باقة التوفير: 2x صابون (GC02) + 1x معقم (GC03)])
       const itemsDetail = (ord.items || [])
         .map(it => {
+          const isOffer = it.isOffer || (typeof it.productId === 'string' && it.productId.startsWith('offer-'));
+          const bundle = it.bundleItems && it.bundleItems.length > 0
+            ? it.bundleItems
+            : (isOffer ? offers.find(o => `offer-${o.id}` === it.productId || o.id === it.productId)?.items : null);
+
+          if (bundle && Array.isArray(bundle) && bundle.length > 0) {
+            const bundleDesc = bundle.map(sub => {
+              const subCode = sub.productCode || products.find(p => p.id === sub.productId)?.code || '';
+              const codeLabel = subCode ? ` (${subCode})` : '';
+              const subQty = (Number(sub.quantity) || 1) * (Number(it.quantity) || 1);
+              return `${subQty}x ${sub.productName}${codeLabel}`;
+            }).join(' + ');
+            return `[${it.productName}: ${bundleDesc}]`;
+          }
+
           const code = it.productCode || products.find(p => p.id === it.productId)?.code || offers.find(o => `offer-${o.id}` === it.productId)?.code || '';
           const codeLabel = code ? ` (${code})` : '';
           return `${it.quantity}x ${it.productName}${codeLabel}`;
@@ -4296,10 +4401,15 @@ export default function StorePage() {
                                   خصم {discountPercent}%
                                 </span>
                               )}
-                              {offer.isFreeShipping && (
+                              {offer.isFreeShipping ? (
                                 <span className="bg-emerald-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg shadow-xs flex items-center gap-1">
                                   <Truck className="w-3 h-3" />
                                   <span>شحن مجاني 🚚</span>
+                                </span>
+                              ) : (
+                                <span className="bg-blue-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg shadow-xs flex items-center gap-1">
+                                  <Truck className="w-3 h-3" />
+                                  <span>خصم 20 ج شحن 🚚</span>
                                 </span>
                               )}
                             </div>
@@ -4438,11 +4548,16 @@ export default function StorePage() {
                             </div>
                           </div>
 
-                          {/* Free Shipping Banner */}
-                          {offer.isFreeShipping && (
+                          {/* Shipping Banner */}
+                          {offer.isFreeShipping ? (
                             <div className="p-2 bg-gradient-to-r from-blue-50 to-emerald-50 rounded-xl border border-blue-200/80 flex items-center justify-center gap-1.5 text-blue-900 text-[11px] font-bold shadow-2xs">
                               <Truck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                               <span>العرض يشمل شحن وتوصيل مجاني بالكامل 🎁</span>
+                            </div>
+                          ) : (
+                            <div className="p-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200/80 flex items-center justify-center gap-1.5 text-blue-900 text-[11px] font-bold shadow-2xs">
+                              <Truck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                              <span>خصم 20 جنيه على مصاريف الشحن والتوصيل 🚚</span>
                             </div>
                           )}
 
@@ -5098,6 +5213,11 @@ export default function StorePage() {
                           <Truck className="w-3.5 h-3.5" />
                           <span>شحن مجاني بالكامل 🎁</span>
                         </span>
+                      ) : hasAnyOffer ? (
+                        <span className="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-200 text-[11px] flex items-center gap-1 shadow-2xs">
+                          <Truck className="w-3.5 h-3.5" />
+                          <span>خصم 20 ج على الشحن (باقة عرض) 🔥</span>
+                        </span>
                       ) : (
                         <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
                           معاينة عند كتابة العنوان (شركة J&T)
@@ -5393,11 +5513,15 @@ export default function StorePage() {
                             ({shippingCalculation.zone.name})
                           </span>
                         )}
-                        {hasFreeShippingOffer && (
+                        {hasFreeShippingOffer ? (
                           <span className="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-1.5 py-0.5 rounded border border-emerald-200">
                             عرض شحن مجاني 🎁
                           </span>
-                        )}
+                        ) : hasAnyOffer ? (
+                          <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded border border-blue-200">
+                            خصم 20 ج (باقة عرض) 🔥
+                          </span>
+                        ) : null}
                       </div>
                       {hasFreeShippingOffer ? (
                         <div className="flex items-center gap-1.5">
@@ -5411,9 +5535,16 @@ export default function StorePage() {
                           </span>
                         </div>
                       ) : shippingCalculation ? (
-                        <span className="font-mono font-bold text-emerald-700">
-                          +{shippingCalculation.shippingCost.toFixed(2)} جنيه
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {hasAnyOffer && (
+                            <span className="font-mono text-slate-400 line-through text-[10px]">
+                              +{shippingCalculation.shippingCost.toFixed(2)} ج
+                            </span>
+                          )}
+                          <span className="font-mono font-bold text-emerald-700">
+                            +{currentShippingCost.toFixed(2)} جنيه
+                          </span>
+                        </div>
                       ) : (
                         <span className="text-amber-600 font-bold text-[10px]">
                           اختر المحافظة لحساب الشحن

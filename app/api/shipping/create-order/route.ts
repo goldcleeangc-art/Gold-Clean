@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { db } from '@/lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 // Helper to normalize Arabic-Indic and Eastern Arabic-Indic numerals (٠-٩ and ۰-۹) to standard Latin digits (0-9)
 function normalizeArabicNumerals(str: any): string {
@@ -149,46 +151,140 @@ export async function POST(req: NextRequest) {
     const sanitizedOrderId = orderId ? String(orderId).replace(/[^a-zA-Z0-9_-]/g, '') : `ORD${Date.now()}`;
     const txlogisticId = sanitizedOrderId.length > 50 ? sanitizedOrderId.slice(0, 50) : sanitizedOrderId;
 
+    // Helper to extract clean SKU code from productCode or text (name/id)
+    const extractSkuCode = (rawCode?: any, rawName?: any, rawId?: any, fallbackIndex: number = 1): string => {
+      let code = String(rawCode || '').trim();
+      if (!code) {
+        const text = String(rawName || rawId || '');
+        const match = text.match(/\b([A-Za-z]{1,4}[-_]?\d{1,4})\b/);
+        if (match) {
+          code = match[1].toUpperCase().replace('-', '');
+        }
+      }
+      return code || `GC0${fallbackIndex}`;
+    };
+
+    // Fallback: If an item is an offer (or marked as offer) but missing bundleItems, fetch directly from Firestore 'offers' collection
+    for (const it of (items || [])) {
+      const isOffer = (typeof it.productId === 'string' && it.productId.startsWith('offer-')) || Boolean(it.isOffer);
+      const hasNoBundleItems = !it.bundleItems || !Array.isArray(it.bundleItems) || it.bundleItems.length === 0;
+      if (isOffer && hasNoBundleItems) {
+        try {
+          const offerDocId = String(it.productId || it.id || '').replace(/^offer-/, '');
+          if (offerDocId) {
+            const offerSnap = await getDoc(doc(db, 'offers', offerDocId));
+            if (offerSnap.exists()) {
+              const offerData = offerSnap.data();
+              if (Array.isArray(offerData.items) && offerData.items.length > 0) {
+                it.bundleItems = offerData.items;
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('Fallback fetch for offer bundle items failed:', err);
+        }
+      }
+    }
+
+    // Expand offer/bundle items into individual physical product SKUs
+    // User requirement: Send individual product SKUs (e.g. GC02 * 2; GC03 * 1) instead of the offer bundle SKU!
+    interface PhysicalItem {
+      code: string;
+      name: string;
+      quantity: number;
+    }
+
+    const physicalItems: PhysicalItem[] = [];
+
+    for (let itemIdx = 0; itemIdx < (items || []).length; itemIdx++) {
+      const it = (items || [])[itemIdx];
+      const parentQty = Number(it.quantity) || 1;
+      const subItems = it.bundleItems || it.items || it.subItems;
+
+      if (Array.isArray(subItems) && subItems.length > 0) {
+        // Expand bundle into its individual constituent products
+        for (let subIdx = 0; subIdx < subItems.length; subIdx++) {
+          const sub = subItems[subIdx];
+          let subCode = sub.productCode || sub.code;
+
+          // If product code is missing on the sub item, attempt lookup from Firestore 'products' collection
+          if (!subCode && sub.productId) {
+            try {
+              const prodSnap = await getDoc(doc(db, 'products', sub.productId));
+              if (prodSnap.exists()) {
+                subCode = prodSnap.data()?.code || '';
+              }
+            } catch (err) {
+              // fallback
+            }
+          }
+
+          const cleanSubCode = extractSkuCode(subCode, sub.productName || sub.name, sub.productId || sub.id, subIdx + 1);
+          const perBundleQty = Number(sub.quantity) || 1;
+          const totalSubQty = perBundleQty * parentQty;
+          physicalItems.push({
+            code: cleanSubCode,
+            name: String(sub.productName || sub.name || cleanSubCode),
+            quantity: totalSubQty
+          });
+        }
+      } else {
+        // Regular individual product
+        let itemCode = it.productCode || it.code;
+
+        // If product code is missing, attempt lookup from Firestore 'products' collection
+        if (!itemCode && it.productId) {
+          try {
+            const prodSnap = await getDoc(doc(db, 'products', it.productId));
+            if (prodSnap.exists()) {
+              itemCode = prodSnap.data()?.code || '';
+            }
+          } catch (err) {
+            // fallback
+          }
+        }
+
+        const cleanItemCode = extractSkuCode(itemCode, it.productName || it.itemName, it.productId || it.id, itemIdx + 1);
+        physicalItems.push({
+          code: cleanItemCode,
+          name: String(it.productName || it.itemName || cleanItemCode),
+          quantity: parentQty
+        });
+      }
+    }
+
+    // Group/aggregate quantities by product SKU code
+    const skuAggregatedMap = new Map<string, { code: string; name: string; quantity: number }>();
+    physicalItems.forEach(item => {
+      const existing = skuAggregatedMap.get(item.code);
+      if (existing) {
+        existing.quantity += item.quantity;
+      } else {
+        skuAggregatedMap.set(item.code, { ...item });
+      }
+    });
+    const finalPhysicalItems = Array.from(skuAggregatedMap.values());
+
     // Calculate parcel weight (J&T range: 0.01 - 30 kg)
     const incomingWeight = Number(body.weight);
     const calculatedWeight = incomingWeight > 0
       ? incomingWeight
-      : items.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 1) * 0.5, 0);
+      : finalPhysicalItems.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 1) * 0.5, 0);
     const finalWeight = Math.min(30, Math.max(0.5, Number(calculatedWeight.toFixed(2))));
 
-    // Calculate total quantity of items
-    const totalItemQuantity = items && items.length > 0
-      ? items.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 1), 0)
+    // Calculate total quantity of physical items
+    const totalItemQuantity = finalPhysicalItems && finalPhysicalItems.length > 0
+      ? finalPhysicalItems.reduce((sum: number, it: any) => sum + (Number(it.quantity) || 1), 0)
       : 1;
 
-    // Prepare aggregated single item for J&T Express
-    // In J&T Express web portal and waybill labels, only the first item in items array is printed.
-    // By aggregating all items into a single combined item entry, all ordered items and quantities are displayed together.
-    let aggregatedItemName = 'منظفات جولد كلين';
-    let aggregatedDesc = 'منظفات عالية الجودة من مصنع جولد كلين';
-    let contentSummary = '';
+    // Build Code-based summary: e.g. "2x GC02 + 1x GC03"
+    const shortParts = finalPhysicalItems.map((it: any) => `${it.quantity}x ${it.code}`);
+    const shortSummary = shortParts.join(' + ');
 
-    if (items && items.length > 0) {
-      // 1. Code-based only summary: e.g. "2x GC01 + 1x GC02"
-      const shortParts = items.map((it: any, idx: number) => {
-        let code = String(it.productCode || it.code || '').trim();
-        if (!code) {
-          const rawName = String(it.productName || it.itemName || it.productId || '');
-          const match = rawName.match(/\b([A-Za-z]{1,4}[-_]?\d{1,4})\b/);
-          if (match) code = match[1].toUpperCase().replace('-', '');
-        }
-        if (!code) code = `GC0${idx + 1}`;
-        const qty = Number(it.quantity) || 1;
-        return `${qty}x ${code}`;
-      });
-
-      const shortSummary = shortParts.join(' + ');
-
-      // Use strictly code-based summary for itemName (capped at 30 chars per J&T String(30))
-      aggregatedItemName = shortSummary.length <= 30 ? shortSummary : shortSummary.slice(0, 30);
-      aggregatedDesc = shortSummary.slice(0, 100);
-      contentSummary = shortSummary;
-    }
+    // Use strictly code-based summary for itemName (capped at 30 chars per J&T String(30))
+    let aggregatedItemName = shortSummary.length <= 30 ? shortSummary : shortSummary.slice(0, 30);
+    let aggregatedDesc = shortSummary.slice(0, 100);
+    let contentSummary = shortSummary;
 
     const formattedItems = [
       {
@@ -213,28 +309,9 @@ export async function POST(req: NextRequest) {
       finalRemark = String(notes).slice(0, 200);
     }
 
-    // Build Customer's pickup information (pickInfo) with ONLY product shipping codes and quantities
-    // User requirement: Strictly codes and quantities only (e.g. GC01 * 2; GC02 * 1) without product names!
-    const pickupCodesList = (items || []).map((it: any, idx: number) => {
-      let code = String(it.productCode || it.code || '').trim();
-
-      // If code was not provided, look for standard codes (e.g. GC01, GC02, OF01) in the item name or ID
-      if (!code) {
-        const rawName = String(it.productName || it.itemName || it.productId || '');
-        const match = rawName.match(/\b([A-Za-z]{1,4}[-_]?\d{1,4})\b/);
-        if (match) {
-          code = match[1].toUpperCase().replace('-', '');
-        }
-      }
-
-      // If still no code, fallback to clean code format (e.g. GC01, GC02) - NEVER output product name!
-      if (!code) {
-        code = `GC0${idx + 1}`;
-      }
-
-      const qty = Number(it.quantity) || 1;
-      return `${code} * ${qty}`;
-    });
+    // Build Customer's pickup information (pickInfo) with individual product shipping codes and quantities
+    // User requirement: Product-by-product SKU codes and quantities (e.g. GC02 * 2; GC03 * 1) instead of offer bundle SKU!
+    const pickupCodesList = finalPhysicalItems.map((it: any) => `${it.code} * ${it.quantity}`);
 
     const pickInfoString = pickupCodesList.length > 0
       ? pickupCodesList.join('; ').slice(0, 500)
