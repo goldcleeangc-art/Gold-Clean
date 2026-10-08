@@ -6,4 +6,6 @@ coverage/
 .env*
 !.env.example
 GoldClean.zip
-J&T OPEN PLATFORM*
+*.tsbuildinfo
+scratch/
+*.docx

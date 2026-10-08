@@ -3,12 +3,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Global Safety Net
+    // Global Safety Net: Deny all by default
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Reuseable global helpers
+    // Reuseable global authentication & role helpers
     function isSignedIn() {
       return request.auth != null;
     }
@@ -19,7 +19,10 @@ service cloud.firestore {
 
     function isManager() {
       return isSignedIn() && 
-        (('email' in request.auth.token && request.auth.token.email == 'jalalmahmoud8000@gmail.com') ||
+        (('email' in request.auth.token && (
+          request.auth.token.email == 'jalalmahmoud8000@gmail.com' ||
+          request.auth.token.email == 'jalalmahmoud8000%40gmail.com'
+        )) ||
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
           (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'manager' ||
            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')));
@@ -27,7 +30,10 @@ service cloud.firestore {
 
     function isAdmin() {
       return isSignedIn() && 
-        (('email' in request.auth.token && request.auth.token.email == 'jalalmahmoud8000@gmail.com') ||
+        (('email' in request.auth.token && (
+          request.auth.token.email == 'jalalmahmoud8000@gmail.com' ||
+          request.auth.token.email == 'jalalmahmoud8000%40gmail.com'
+        )) ||
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
     }
@@ -39,19 +45,29 @@ service cloud.firestore {
     // Validation structures
     function isValidProduct(p) {
       return p.name is string && p.name.size() <= 200 &&
-             p.description is string && p.description.size() <= 1000 &&
+             p.description is string && p.description.size() <= 2000 &&
              p.price is number && p.price >= 0 &&
              p.category is string && p.category.size() <= 50 &&
-             p.volume is string && p.volume.size() <= 50 &&
-             p.stock is number && p.stock >= 0;
+             p.volume is string && p.volume.size() <= 50;
+    }
+
+    // Helper to allow regular customers to update only rating fields without altering product data/price
+    function isOnlyRatingUpdate() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratingsMap', 'rating', 'reviewsCount']) &&
+             request.resource.data.rating is number &&
+             request.resource.data.rating >= 0 &&
+             request.resource.data.rating <= 5 &&
+             request.resource.data.reviewsCount is number &&
+             request.resource.data.reviewsCount >= 0;
     }
 
     function isValidOrder(o) {
-      return o.customerName is string && o.customerName.size() <= 100 &&
-             o.customerPhone is string && o.customerPhone.size() <= 30 &&
+      return o.customerName is string && o.customerName.size() >= 2 && o.customerName.size() <= 100 &&
+             o.customerPhone is string && o.customerPhone.size() >= 10 && o.customerPhone.size() <= 30 &&
              o.customerCity is string && o.customerCity.size() <= 60 &&
-             o.customerAddress is string && o.customerAddress.size() <= 300 &&
+             o.customerAddress is string && o.customerAddress.size() >= 3 && o.customerAddress.size() <= 300 &&
              o.totalPrice is number && o.totalPrice >= 0 &&
+             o.items is list && o.items.size() > 0 && o.items.size() <= 50 &&
              o.status is string && (o.status == 'pending' || o.status == 'preparing' || o.status == 'shipping' || o.status == 'delivered' || o.status == 'cancelled') &&
              (!('userId' in o) || o.userId is string) &&
              (!('customerEmail' in o) || o.customerEmail is string) &&
@@ -69,21 +85,21 @@ service cloud.firestore {
              c.key is string && c.key.size() <= 50;
     }
 
-    // Products Rules
+    // Products Rules: Public read, Manager write, Customer rating-only update
     match /products/{productId} {
       allow read: if true;
       allow create, delete: if isManager();
-      allow update: if true;
+      allow update: if isManager() || isOnlyRatingUpdate();
     }
 
-    // Categories Rules
+    // Categories Rules: Public read, Manager write
     match /categories/{categoryId} {
       allow read: if true;
       allow create, update: if isManager() && isValidCategory(request.resource.data);
       allow delete: if isManager();
     }
 
-    // Offers Rules
+    // Offers Rules: Public read, Manager write
     match /offers/{offerId} {
       allow read: if true;
       allow create, update, delete: if isManager();
@@ -97,16 +113,22 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Orders Rules
+    // Orders Rules: 
+    // - Creation: validated order structure
+    // - List/Query: Managers or Authenticated User viewing own orders (BLOCKS guest bulk-scraping)
+    // - Get (single order): Managers, Authenticated User owner, or Guest by specific orderId
+    // - Update: Manager or User cancellation only
+    // - Delete: Manager only
     match /orders/{orderId} {
       allow create: if isValidOrder(request.resource.data);
-      allow read: if isManager() || (isSignedIn() && resource.data.userId == request.auth.uid) || (resource.data.userId == 'guest');
+      allow list: if isManager() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow get: if isManager() || (isSignedIn() && resource.data.userId == request.auth.uid) || (resource.data.userId == 'guest');
       allow update: if isManager() || (
         isSignedIn() &&
         resource.data.userId == request.auth.uid && 
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']) &&
         request.resource.data.status == 'cancelled' &&
-        resource.data.status != 'delivered' &&
-        request.resource.data.totalPrice == resource.data.totalPrice
+        resource.data.status != 'delivered'
       );
       allow delete: if isManager();
     }

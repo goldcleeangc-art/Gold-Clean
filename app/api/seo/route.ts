@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { NextRequest, NextResponse } from "next/server";
+import { verifyManagerAuth } from "@/lib/auth-server";
 
 const SEO_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
@@ -21,6 +22,15 @@ function getErrorMessage(error: unknown) {
 
 export async function POST(req: NextRequest) {
   try {
+    // Enforce manager authorization to prevent token drainage
+    const authResult = await verifyManagerAuth(req);
+    if (!authResult.isAuthorized) {
+      return NextResponse.json(
+        { error: authResult.error || "غير مصرح لك بتوليد بيانات SEO بالذكاء الاصطناعي" },
+        { status: 403 }
+      );
+    }
+
     if (!process.env.GEMINI_API_KEY) {
       return NextResponse.json(
         { error: "GEMINI_API_KEY is not configured" },

@@ -187,7 +187,17 @@ interface Order {
   shippingInfo?: ShippingInfo;
 }
 
-// Initial seed if Firebase collection is completely empt
+const ADMIN_EMAILS = [
+  process.env.NEXT_PUBLIC_ADMIN_EMAIL,
+  'jalalmahmoud8000@gmail.com',
+  'jalalmahmoud8000%40gmail.com'
+].filter(Boolean) as string[];
+
+const isUserMasterAdmin = (email?: string | null) => {
+  if (!email) return false;
+  const clean = email.toLowerCase().trim();
+  return ADMIN_EMAILS.some(adm => adm.toLowerCase() === clean);
+};
 
 export default function StorePage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -207,7 +217,7 @@ export default function StorePage() {
       if (currentUser) {
         // Sync or register user in Firestore
         const userRef = doc(db, 'users', currentUser.uid);
-        const isAdminEmail = currentUser.email === 'jalalmahmoud8000@gmail.com' || currentUser.email === 'jalalmahmoud8000%40gmail.com';
+        const isAdminEmail = isUserMasterAdmin(currentUser.email);
         
         getDoc(userRef).then((snap) => {
           let finalRole = isAdminEmail ? 'admin' : 'user';
@@ -300,11 +310,7 @@ export default function StorePage() {
   });
   const [isShippingRatesOpen, setIsShippingRatesOpen] = useState<boolean>(false);
   const [orderInProgress, setOrderInProgress] = useState<boolean>(false);
-  const [syncingOrderId, setSyncingOrderId] = useState<string | null>(null);
-  const [isBulkSyncing, setIsBulkSyncing] = useState<boolean>(false);
-  const [bulkSyncProgress, setBulkSyncProgress] = useState<{ current: number; total: number } | null>(null);
-  const [isBulkUpdatingSkus, setIsBulkUpdatingSkus] = useState<boolean>(false);
-  const [bulkSkuProgress, setBulkSkuProgress] = useState<{ current: number; total: number } | null>(null);
+  const [isBulkPreparing, setIsBulkPreparing] = useState<boolean>(false);
   const [successOrder, setSuccessOrder] = useState<Order | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -373,7 +379,7 @@ export default function StorePage() {
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [userSearchQuery, setUserSearchQuery] = useState<string>('');
   const [adminTab, setAdminTab] = useState<'orders' | 'products' | 'offers' | 'categories' | 'stats' | 'users'>('orders');
-  const [adminOrderFilter, setAdminOrderFilter] = useState<'all' | 'pending' | 'preparing' | 'shipping' | 'delivered' | 'cancelled' | 'sku_updated'>('all');
+  const [adminOrderFilter, setAdminOrderFilter] = useState<'all' | 'pending' | 'preparing' | 'shipping' | 'delivered' | 'cancelled'>('all');
   const [adminOrderSearch, setAdminOrderSearch] = useState<string>('');
 
   // New product editing/adding form
@@ -397,7 +403,6 @@ export default function StorePage() {
   // Success Bubble Notification
   const [addedItemName, setAddedItemName] = useState<string | null>(null);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
-  const [copiedBillCode, setCopiedBillCode] = useState<string | null>(null);
 
   // Fly-to-cart Star Animation State
   const [flyingParticles, setFlyingParticles] = useState<Array<{
@@ -843,15 +848,6 @@ export default function StorePage() {
     setTimeout(() => setCopiedLinkId(null), 2000);
   };
 
-  const handleCopyBillCode = (code?: string) => {
-    if (!code) return;
-    if (typeof navigator !== 'undefined' && navigator.clipboard) {
-      navigator.clipboard.writeText(code);
-      setCopiedBillCode(code);
-      setTimeout(() => setCopiedBillCode(null), 2000);
-    }
-  };
-
   const handleUpdateQty = (productId: string, diff: number) => {
     const newCart = cart.map(item => {
       if (item.product.id === productId) {
@@ -980,7 +976,7 @@ export default function StorePage() {
       
       // Save profile to users collection in Firestore
       const userRef = doc(db, 'users', loggedUser.uid);
-      const isAdminEmail = loggedUser.email === 'jalalmahmoud8000@gmail.com' || loggedUser.email === 'jalalmahmoud8000%40gmail.com';
+      const isAdminEmail = isUserMasterAdmin(loggedUser.email);
       
       const snap = await getDoc(userRef);
       let finalRole = isAdminEmail ? 'admin' : 'user';
@@ -1134,44 +1130,10 @@ export default function StorePage() {
         customerEmail: guestEmail
       };
 
-      // 1. Generate unique order reference and ID in memory before saving
+      // 1. Generate unique order reference and ID in memory and record order in Firestore
       const orderDocRef = doc(collection(db, 'orders'));
       const generatedOrderId = orderDocRef.id;
 
-      // 2. Transmit to J&T Express Shipping Logistics API first to obtain waybill immediately
-      try {
-        const shippingRes = await fetch('/api/shipping/create-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            orderId: generatedOrderId,
-            customerName: checkoutForm.name,
-            customerPhone: cleanPhone,
-            customerCity: checkoutForm.city,
-            customerAddress: checkoutForm.address,
-            notes: checkoutForm.notes,
-            items: orderPayload.items,
-            totalPrice: orderPayload.totalPrice,
-            weight: currentCartWeight
-          })
-        });
-        const shippingData = await shippingRes.json();
-        if (shippingData && (shippingData.billCode || shippingData.success)) {
-          const shippingInfoData: ShippingInfo = {
-            billCode: shippingData.billCode || '',
-            sortingCode: shippingData.sortingCode || '',
-            courier: 'J&T Express',
-            status: 'created',
-            txlogisticId: shippingData.txlogisticId || generatedOrderId,
-            syncedAt: new Date().toISOString()
-          };
-          orderPayload.shippingInfo = shippingInfoData;
-        }
-      } catch (shippingErr) {
-        console.error('Shipping API sync during checkout error:', shippingErr);
-      }
-
-      // 3. Atomically record order in Firestore with shippingInfo and waybill already attached
       await setDoc(orderDocRef, orderPayload);
 
       // Save order reference in localStorage for guest tracking
@@ -1231,487 +1193,33 @@ export default function StorePage() {
     }
   };
 
-  // Centralized helper to unpack carton/offer bundle items into individual constituent products with SKUs
-  const enrichOrderItems = (rawItems: Order['items']) => {
-    return (rawItems || []).map(it => {
-      let code = it.productCode;
-      const matchingProduct = products.find(p => p.id === it.productId);
-      if (!code && matchingProduct?.code) code = matchingProduct.code;
-
-      const matchingOffer = offers.find(o => 
-        `offer-${o.id}` === it.productId || 
-        o.id === it.productId ||
-        (it.productCode && o.code && o.code.toLowerCase() === it.productCode.toLowerCase()) ||
-        (it.productName && o.title && o.title.trim().toLowerCase() === it.productName.trim().toLowerCase())
-      );
-
-      const isOffer = Boolean(it.isOffer) || Boolean(matchingOffer) || (typeof it.productId === 'string' && it.productId.startsWith('offer-'));
-
-      if (isOffer) {
-        if (!code && matchingOffer?.code) code = matchingOffer.code;
-        const rawBundle = (it.bundleItems && it.bundleItems.length > 0)
-          ? it.bundleItems
-          : (matchingOffer?.items || []);
-
-        const bundleItems = rawBundle.map(sub => {
-          const prod = products.find(p => p.id === sub.productId);
-          return {
-            productId: sub.productId,
-            productName: sub.productName,
-            productCode: sub.productCode || prod?.code || '',
-            quantity: sub.quantity
-          };
-        });
-
-        return {
-          ...it,
-          productCode: code,
-          isOffer: true,
-          bundleItems
-        };
-      }
-
-      return { ...it, productCode: code };
-    });
-  };
-
-  // Manual or Re-Sync order with J&T Express API
-  const handleSyncOrderWithShipping = async (order: Order, allowRecreate = false) => {
-    if (!order.id) return;
-
-    const existingBillCode = order.shippingInfo?.billCode || '';
-
-    // Strict Lock: If order was already collected by courier (Picked Up) or delivered, completely forbid re-sending to prevent duplicate waybills
-    if (order.status === 'shipping' || order.status === 'delivered') {
-      alert(
-        `⛔ محظور إعادة إرسال هذا الطلب:\n\n` +
-        `هذا الطلب تم التقاطه واستلامه بالفعل من قِبل مندوب شركة الشحن (Picked Up) أو تم تسليمه للعميل.\n` +
-        `إعادة الإرسال محظورة تماماً لحمايتك من فتح بوليصة مكررة وتكبد مصاريف شحن إضافية.\n\n` +
-        `رقم البوليصة الثابت للشحنة: ${existingBillCode || 'مسجل'}`
-      );
-      return;
-    }
-
-    // Safeguard: Prevent accidental re-submission if order already has a waybill
-    if (existingBillCode && !allowRecreate) {
-      const confirmResend = confirm(
-        `⚠️ تنبيه هـام لمنع تكرار الأوردر:\n\n` +
-        `هذا الطلب مسجل بالفعل لدى شركة الشحن J&T Express!\n` +
-        `رقم بوليصة الشحن الحالية: ${existingBillCode}\n\n` +
-        `إعادة الإرسال قد تؤدي إلى إنشاء بوليصة ثانية مكررة في حساب شركة الشحن وتكبد تكاليف شحن إضافية.\n\n` +
-        `هل تريد بالتأكيد الاستمرار وإعادة الإرسال لشركة الشحن؟`
-      );
-      if (!confirmResend) return;
-      allowRecreate = true;
-    }
-
-    setSyncingOrderId(order.id);
-    try {
-      const enrichedItems = enrichOrderItems(order.items);
-      const isModifying = !!existingBillCode;
-
-      const res = await fetch('/api/shipping/create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderId: order.shippingInfo?.txlogisticId || order.id,
-          billCode: existingBillCode,
-          operateType: isModifying ? 2 : 1,
-          forceRecreate: allowRecreate,
-          customerName: order.customerName,
-          customerPhone: sanitizeEgyptianPhone(order.customerPhone),
-          customerCity: order.customerCity,
-          customerAddress: order.customerAddress,
-          notes: order.notes,
-          items: enrichedItems,
-          totalPrice: order.totalPrice,
-          weight: order.shippingWeight || 1
-        })
-      });
-      const data = await res.json();
-      if (data && (data.billCode || data.success)) {
-        if (data.duplicatePrevented) {
-          if (data.isPickedUp) {
-            // Update order status to 'shipping' so it clearly shows it was collected by courier!
-            await updateDoc(doc(db, 'orders', order.id), {
-              status: 'shipping'
-            });
-            alert(`🔒 تم حماية الطلب ومنع التكرار بنجاح:\n\n${data.msg}\nتم تثبيت حالة الطلب على "خرج مع المندوب / تم الالتقاط (Picked Up)".`);
-            return;
-          }
-          alert(`✅ تم التحقق ومنع التكرار:\n${data.msg || 'الطلب مسجل بالفعل في شركة الشحن برقم البوليصة الثابت.'}`);
-          return;
-        }
-        const returnedBillCode = data.billCode || existingBillCode;
-        const shippingInfoData: ShippingInfo = {
-          billCode: returnedBillCode || '',
-          sortingCode: data.sortingCode || order.shippingInfo?.sortingCode || '',
-          courier: 'J&T Express',
-          status: 'created',
-          txlogisticId: data.txlogisticId || order.shippingInfo?.txlogisticId || order.id,
-          syncedAt: new Date().toISOString()
-        };
-        await updateDoc(doc(db, 'orders', order.id), {
-          items: enrichedItems,
-          shippingInfo: shippingInfoData
-        });
-        if (isModifying) {
-          alert(`تم تحديث بيانات الشحنة في J&T بنجاح دون تكرار!\nرقم البوليصة الثابت: ${returnedBillCode}`);
-        } else {
-          alert(`تم إرسال الطلب لشركة الشحن J&T Express بنجاح!\nرقم بوليصة الشحن والتتبع: ${returnedBillCode}`);
-        }
-      } else {
-        alert(`رد شركة الشحن J&T Express: ${data.msg || data.error || 'لم يتم إصدار البوليصة'}`);
-      }
-    } catch (err: any) {
-      console.error(err);
-      alert('حدث خطأ أثناء الاتصال بواجهة شركة الشحن J&T Express');
-    } finally {
-      setSyncingOrderId(null);
-    }
-  };
-
-  // Update Waybill SKU at J&T Express (replaces carton SKU with constituent individual product SKUs)
-  const handleUpdateOrderSkuWithShipping = async (order: Order, silent = false) => {
-    if (!order.id) return { success: false, error: 'رقم الطلب غير متوفر' };
-
-    const billCode = order.shippingInfo?.billCode;
-    if (!billCode) {
-      if (!silent) alert('هذا الطلب ليس له بوليصة شحن مسجلة بعد.');
-      return { success: false, error: 'لا يوجد بوليصة شحن مسجلة' };
-    }
-
-    if (order.status === 'shipping' || order.status === 'delivered') {
-      const msg = `⛔ تعذر تعديل البوليصة (${billCode}): الشحنة خرجت مع المندوب أو تم تسليمها بالفعل. شركة الشحن تمنع تعديل الشحنات بعد الاستلام (Picked Up).`;
-      if (!silent) alert(msg);
-      return { success: false, error: msg, isPickedUp: true };
-    }
-
-    setSyncingOrderId(order.id);
-    try {
-      const enrichedItems = enrichOrderItems(order.items);
-
-      // Build summary of product codes for tracking
-      const extractedPhysicalCodes: string[] = [];
-      enrichedItems.forEach(it => {
-        if (it.isOffer && Array.isArray(it.bundleItems) && it.bundleItems.length > 0) {
-          it.bundleItems.forEach(sub => {
-            const qty = (Number(sub.quantity) || 1) * (Number(it.quantity) || 1);
-            extractedPhysicalCodes.push(`${qty}x ${sub.productCode || sub.productName}`);
-          });
-        } else {
-          extractedPhysicalCodes.push(`${it.quantity}x ${it.productCode || it.productName}`);
-        }
-      });
-
-      const res = await fetch('/api/shipping/create-order', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          orderId: order.shippingInfo?.txlogisticId || order.id,
-          billCode: billCode,
-          operateType: 2, // Explicitly 2 = Modifying existing order in J&T
-          forceRecreate: true,
-          customerName: order.customerName,
-          customerPhone: sanitizeEgyptianPhone(order.customerPhone),
-          customerCity: order.customerCity,
-          customerAddress: order.customerAddress,
-          notes: order.notes,
-          items: enrichedItems,
-          totalPrice: order.totalPrice,
-          weight: order.shippingWeight || 1
-        })
-      });
-
-      const data = await res.json();
-
-      if (data && (data.success || data.code === '1' || data.code === 1)) {
-        const returnedBillCode = data.billCode || billCode;
-        const shippingInfoData: ShippingInfo = {
-          ...(order.shippingInfo || {}),
-          billCode: returnedBillCode,
-          sortingCode: data.sortingCode || order.shippingInfo?.sortingCode || '',
-          courier: 'J&T Express',
-          status: 'created',
-          txlogisticId: data.txlogisticId || order.shippingInfo?.txlogisticId || order.id,
-          syncedAt: new Date().toISOString(),
-          skuUpdated: true,
-          skuUpdatedSummary: extractedPhysicalCodes.join(' + ')
-        };
-
-        await updateDoc(doc(db, 'orders', order.id), {
-          items: enrichedItems,
-          shippingInfo: shippingInfoData
-        });
-
-        if (!silent) {
-          alert(
-            `✅ تم تعديل البوليصة لدى شركة الشحن J&T Express بنجاح!\n\n` +
-            `رقم البوليصة الثابت: ${returnedBillCode}\n\n` +
-            `تم استبدال كود الكرتونة بأكواد المنتجات الفردية:\n` +
-            `📦 ${extractedPhysicalCodes.join(' + ')}\n\n` +
-            `تم تحديث بيانات الشحنة للمندوب ولقاعدة البيانات دون أي تكرار للبوليصة.`
-          );
-        }
-        return { success: true, billCode: returnedBillCode };
-      } else {
-        if (data?.isPickedUp) {
-          await updateDoc(doc(db, 'orders', order.id), {
-            status: 'shipping'
-          });
-          const msg = `🔒 تم قفل التعديل من J&T: الشحنة تم استلامها بالفعل من المندوب (Picked Up) ولا يمكن تعديلها.`;
-          if (!silent) alert(msg);
-          return { success: false, error: msg, isPickedUp: true };
-        }
-        const errorMsg = data?.msg || data?.error || 'فشل تحديث الشحنة لدى شركة الشحن';
-        if (!silent) alert(`رد شركة الشحن J&T: ${errorMsg}`);
-        return { success: false, error: errorMsg };
-      }
-    } catch (err: any) {
-      console.error('Error updating order SKU with shipping:', err);
-      const errStr = err?.message || 'حدث خطأ في الاتصال بواجهة شركة الشحن';
-      if (!silent) alert(errStr);
-      return { success: false, error: errStr };
-    } finally {
-      setSyncingOrderId(null);
-    }
-  };
-
-  // Manually attach an existing J&T waybill (billCode) to an order that was entered into J&T portal manually
-  const handleManualAttachWaybill = async (order: Order) => {
-    if (!order.id) return;
-    const currentCode = order.shippingInfo?.billCode || '';
-    const input = prompt(
-      `🔗 ربط رقم بوليصة شحن يدوياً:\n\n` +
-      `أدخل رقم بوليصة الشحن (Waybill / Bill Code) الصادر لهذا الطلب من J&T Express:`,
-      currentCode
-    );
-
-    if (!input || !input.trim()) return;
-    const cleanBillCode = input.trim();
-
-    try {
-      const shippingInfoData: ShippingInfo = {
-        billCode: cleanBillCode,
-        sortingCode: order.shippingInfo?.sortingCode || '',
-        courier: 'J&T Express',
-        status: 'picked_up',
-        txlogisticId: order.shippingInfo?.txlogisticId || order.id,
-        syncedAt: new Date().toISOString()
-      };
-
-      await updateDoc(doc(db, 'orders', order.id), {
-        shippingInfo: shippingInfoData,
-        status: order.status === 'pending' ? 'preparing' : order.status
-      });
-
-      alert(`✅ تم ربط وحفظ رقم البوليصة (${cleanBillCode}) بالطلب بنجاح!`);
-    } catch (e: any) {
-      console.error(e);
-      alert(`حدث خطأ أثناء حفظ رقم البوليصة: ${e.message}`);
-    }
-  };
-
-  // Bulk sync all pending orders with J&T Express and change status to 'preparing'
-  const handleSyncAllPendingOrdersWithShipping = async () => {
+  // Move all pending orders to preparing status in bulk
+  const handleBulkMovePendingToPreparing = async () => {
     const pendingOrders = allOrders.filter(o => o.status === 'pending');
-
     if (pendingOrders.length === 0) {
-      alert('لا توجد أي طلبات معلقة (Pending) حالياً للإرسال.');
+      alert('لا توجد أي طلبات معلقة (Pending) حالياً.');
       return;
     }
 
-    const confirmMsg =
-      `🚚 تأكيد إرسال وتجهيز الطلبات المعلقة:\n\n` +
-      `تم العثور على (${pendingOrders.length}) طلب بحالة معلق.\n\n` +
-      `سيقوم النظام بالتالي:\n` +
-      `1. إرسال الطلبات لشركة الشحن J&T Express لإصدار بوالص الشحن.\n` +
-      `2. تحويل حالة الطلبات الناجحة تلقائياً إلى "جاري التجهيز 📦".\n\n` +
-      `هل تريد بالتأكيد المتابعة الآن؟`;
+    if (!confirm(`هل تريد تحويل جميع الطلبات المعلقة (${pendingOrders.length} طلب) إلى حالة "جاري التجهيز 📦"؟`)) return;
 
-    if (!confirm(confirmMsg)) return;
-
-    setIsBulkSyncing(true);
-    setBulkSyncProgress({ current: 0, total: pendingOrders.length });
-
+    setIsBulkPreparing(true);
     let successCount = 0;
-    let failCount = 0;
-    const errorsList: string[] = [];
-
     try {
-      for (let i = 0; i < pendingOrders.length; i++) {
-        const order = pendingOrders[i];
+      for (const order of pendingOrders) {
         if (!order.id) continue;
-
-        setBulkSyncProgress({ current: i + 1, total: pendingOrders.length });
-
-        const existingBillCode = order.shippingInfo?.billCode || '';
-
-        // If order already has a waybill, don't recreate with shipping API; simply update status to 'preparing'
-        if (existingBillCode) {
-          try {
-            await updateDoc(doc(db, 'orders', order.id), {
-              status: 'preparing'
-            });
-            successCount++;
-          } catch (err: any) {
-            failCount++;
-            errorsList.push(`الطلب #${order.id?.slice(0, 7)}: ${err.message}`);
-          }
-          continue;
-        }
-
-        // Prepare enriched items with product codes and unpacked bundle items
-        const enrichedItems = enrichOrderItems(order.items);
-
-        try {
-          const res = await fetch('/api/shipping/create-order', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              orderId: order.shippingInfo?.txlogisticId || order.id,
-              billCode: '',
-              operateType: 1,
-              forceRecreate: false,
-              customerName: order.customerName,
-              customerPhone: sanitizeEgyptianPhone(order.customerPhone),
-              customerCity: order.customerCity,
-              customerAddress: order.customerAddress,
-              notes: order.notes,
-              items: enrichedItems,
-              totalPrice: order.totalPrice,
-              weight: order.shippingWeight || 1
-            })
-          });
-
-          const data = await res.json();
-          if (data && (data.billCode || data.success)) {
-            const returnedBillCode = data.billCode || '';
-            const shippingInfoData: ShippingInfo = {
-              billCode: returnedBillCode || '',
-              sortingCode: data.sortingCode || '',
-              courier: 'J&T Express',
-              status: 'created',
-              txlogisticId: data.txlogisticId || order.id,
-              syncedAt: new Date().toISOString()
-            };
-
-            await updateDoc(doc(db, 'orders', order.id), {
-              items: enrichedItems,
-              shippingInfo: shippingInfoData,
-              status: 'preparing'
-            });
-            successCount++;
-          } else {
-            failCount++;
-            const errMsg = data?.msg || data?.error || 'فشل إصدار البوليصة';
-            errorsList.push(`الطلب #${order.id?.slice(0, 7)} (${order.customerName}): ${errMsg}`);
-          }
-        } catch (fetchErr: any) {
-          failCount++;
-          errorsList.push(`الطلب #${order.id?.slice(0, 7)} (${order.customerName}): ${fetchErr.message}`);
-        }
-
-        // Small breathing delay between API calls (200ms)
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
-
-      // Final alert
-      if (failCount === 0) {
-        alert(
-          `🎉 تم بنجاح!\n\n` +
-          `تم إرسال جميع الطلبات المعلقة (${successCount} طلب) لشركة الشحن J&T Express بنجاح.\n` +
-          `وتم تحويل حالتها جميعاً إلى "جاري التجهيز 📦".`
-        );
-      } else {
-        const sampleErrors = errorsList.slice(0, 4).join('\n• ');
-        alert(
-          `📊 تقرير معالجة الطلبات:\n\n` +
-          `✅ تم بنجاح: ${successCount} طلب (تم إصدار البوالص وتحويلها لجاري التجهيز).\n` +
-          `⚠️ تعذر إرسال: ${failCount} طلب.\n\n` +
-          (sampleErrors ? `أمثلة على الأخطاء:\n• ${sampleErrors}\n\n(تم الإبقاء على الطلبات غير الناجحة بحالة "معلق" لتصحيحها).` : '')
-        );
-      }
-    } catch (globalErr: any) {
-      console.error('Error during bulk shipping sync:', globalErr);
-      alert('حدث خطأ عام أثناء معالجة الطلبات المعلقة.');
-    } finally {
-      setIsBulkSyncing(false);
-      setBulkSyncProgress(null);
-    }
-  };
-
-  // Bulk update all waybills that contain cartons/offers to individual product SKUs
-  const handleBulkUpdateAllWaybillSkus = async () => {
-    // Find all active orders that have a waybill and are not yet picked up by courier
-    const targetOrders = allOrders.filter(ord => {
-      if (!ord.id || !ord.shippingInfo?.billCode) return false;
-      if (ord.status === 'shipping' || ord.status === 'delivered' || ord.status === 'cancelled') return false;
-      return true;
-    });
-
-    if (targetOrders.length === 0) {
-      alert('لا توجد أي طلبات نشطة مسجلة في الشحن (بوليصة موجودة قبل خروج المندوب) لتحديثها.');
-      return;
-    }
-
-    // Filter those that have offers/cartons OR include all waybills to ensure clean product SKUs
-    const cartonOrders = targetOrders.filter(ord => {
-      return (ord.items || []).some(it => {
-        const isOffer = it.isOffer || (typeof it.productId === 'string' && it.productId.startsWith('offer-'));
-        const matchingOffer = offers.find(o => 
-          `offer-${o.id}` === it.productId || 
-          o.id === it.productId ||
-          (it.productCode && o.code && o.code.toLowerCase() === it.productCode.toLowerCase()) ||
-          (it.productName && o.title && o.title.trim().toLowerCase() === it.productName.trim().toLowerCase())
-        );
-        return Boolean(isOffer) || Boolean(matchingOffer) || Boolean(it.bundleItems && it.bundleItems.length > 0);
-      });
-    });
-
-    const ordersToProcess = cartonOrders.length > 0 ? cartonOrders : targetOrders;
-
-    const confirmMsg =
-      `🔄 تحديث كود المنتجات في بوالص الشحن J&T:\n\n` +
-      `تم العثور على (${ordersToProcess.length}) بوليصة شحن${cartonOrders.length > 0 ? ' تحتوي على كراتين/عروض' : ''}.\n\n` +
-      `سيتم إرسال أمر تعديل لشركة الشحن لاستبدال كود الكرتونة بأكواد وكميات المنتجات الفردية (بدون تكرار البوليصة وبدون أي تكلفة إضافية).\n\n` +
-      `هل تريد بدء تحديث جميع هذه البوالص الآن؟`;
-
-    if (!confirm(confirmMsg)) return;
-
-    setIsBulkUpdatingSkus(true);
-    setBulkSkuProgress({ current: 0, total: ordersToProcess.length });
-
-    let successCount = 0;
-    let pickedUpCount = 0;
-    let failedCount = 0;
-
-    for (let i = 0; i < ordersToProcess.length; i++) {
-      const ord = ordersToProcess[i];
-      setBulkSkuProgress({ current: i + 1, total: ordersToProcess.length });
-
-      const result = await handleUpdateOrderSkuWithShipping(ord, true);
-      if (result.success) {
+        await updateDoc(doc(db, 'orders', order.id), {
+          status: 'preparing'
+        });
         successCount++;
-      } else if (result.isPickedUp) {
-        pickedUpCount++;
-      } else {
-        failedCount++;
       }
-
-      await new Promise(r => setTimeout(r, 250));
+      alert(`🎉 تم بنجاح تحويل (${successCount}) طلب إلى "جاري التجهيز 📦".`);
+    } catch (err: any) {
+      console.error('Error updating pending orders to preparing:', err);
+      alert('حدث خطأ أثناء تحديث حالة الطلبات.');
+    } finally {
+      setIsBulkPreparing(false);
     }
-
-    setIsBulkUpdatingSkus(false);
-    setBulkSkuProgress(null);
-
-    alert(
-      `🎉 تم الانتهاء من عملية تحديث بوالص الشحن:\n\n` +
-      `✅ تم تحديثها بنجاح بأكواد المنتجات: ${successCount}\n` +
-      (pickedUpCount > 0 ? `🔒 مقفلة لدى الشحن (استلمها المندوب): ${pickedUpCount}\n` : '') +
-      (failedCount > 0 ? `⚠️ لم تتم (أخطاء أخرى): ${failedCount}\n` : '') +
-      `\nتم تحديث قاعدة البيانات وأوامر الشحن في J&T Express بنجاح.`
-    );
   };
 
   // Merchant Log (Bypassed if logged in via Manager Gmail account)
@@ -1747,9 +1255,13 @@ export default function StorePage() {
     }
     setIsGeneratingSeo(true);
     try {
+      const token = await auth.currentUser?.getIdToken();
       const response = await fetch('/api/seo', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({ name: productForm.name, description: productForm.description }),
       });
       const rawResponse = await response.text();
@@ -2203,174 +1715,8 @@ export default function StorePage() {
     }
   };
 
-  // Helper to check if an order had its offer/carton SKU modified/replaced with constituent product SKUs
-  const isSkuModifiedOrder = (ord: Order) => {
-    if (ord.shippingInfo?.skuUpdated) return true;
-    if (ord.shippingInfo?.skuUpdatedSummary) return true;
-    const hasUnpackedBundle = (ord.items || []).some(it => {
-      const isOffer = it.isOffer || (typeof it.productId === 'string' && it.productId.startsWith('offer-'));
-      return isOffer && Array.isArray(it.bundleItems) && it.bundleItems.length > 0;
-    });
-    return Boolean(hasUnpackedBundle);
-  };
-
-  // Orders where offer/carton SKU was modified/replaced with individual product SKUs
-  const skuUpdatedOrders = useMemo(() => {
-    return allOrders.filter(isSkuModifiedOrder);
-  }, [allOrders]);
-
-  // Export orders modified from offer SKU to constituent product SKUs into Excel
-  const handleExportSkuUpdatedOrdersToExcel = () => {
-    if (skuUpdatedOrders.length === 0) {
-      alert('لا توجد أي طلبات تم تعديل SKU العرض فيها بأكواد المنتجات الفردية حتى الآن لتصديرها.');
-      return;
-    }
-
-    const headers = [
-      'م',
-      'رقم بوليصة الشحن (J&T)',
-      'اسم العميل',
-      'رقم الهاتف',
-      'أكواد SKU المنتجات المستبدلة',
-      'كود العرض / الكرتونة الأصلي',
-      'تفاصيل محتويات الطلب والمنتجات الفردية',
-      'إجمالي المبلغ (ج.م)',
-      'حالة الطلب',
-      'المحافظة',
-      'العنوان بالتفصيل',
-      'ملاحظات العميل',
-      'رقم الطلب',
-      'تاريخ الطلب',
-      'تاريخ تعديل SKU والمزامنة'
-    ];
-
-    const statusArabicMap: Record<string, string> = {
-      pending: 'معلق في الانتظار',
-      preparing: 'جاري التجهيز',
-      shipping: 'خرج مع المندوب',
-      delivered: 'تم الاستلام والمحاسبة',
-      cancelled: 'ملغي'
-    };
-
-    const rows = skuUpdatedOrders.map((ord, idx) => {
-      const cleanPhone = ord.customerPhone ? sanitizeEgyptianPhone(ord.customerPhone, ord.customerPhone) : '';
-      const billCode = ord.shippingInfo?.billCode || '';
-
-      // Replaced physical product SKUs
-      let replacedSkus = ord.shippingInfo?.skuUpdatedSummary || '';
-      if (!replacedSkus) {
-        const extractedCodes: string[] = [];
-        (ord.items || []).forEach(it => {
-          const isOffer = it.isOffer || (typeof it.productId === 'string' && it.productId.startsWith('offer-'));
-          const bundle = (it.bundleItems && it.bundleItems.length > 0)
-            ? it.bundleItems
-            : (isOffer ? offers.find(o => `offer-${o.id}` === it.productId || o.id === it.productId)?.items : null);
-
-          if (bundle && Array.isArray(bundle) && bundle.length > 0) {
-            bundle.forEach((sub: any) => {
-              const prod = products.find(p => p.id === sub.productId);
-              const subCode = sub.productCode || prod?.code || sub.productName;
-              const subQty = (Number(sub.quantity) || 1) * (Number(it.quantity) || 1);
-              extractedCodes.push(`${subQty}x ${subCode}`);
-            });
-          } else {
-            const code = it.productCode || products.find(p => p.id === it.productId)?.code || it.productName;
-            extractedCodes.push(`${it.quantity}x ${code}`);
-          }
-        });
-        replacedSkus = extractedCodes.join(' + ');
-      }
-
-      // Original Offer / Carton code
-      const originalOfferCodes: string[] = [];
-      (ord.items || []).forEach(it => {
-        const matchingOffer = offers.find(o => 
-          `offer-${o.id}` === it.productId || 
-          o.id === it.productId ||
-          (it.productCode && o.code && o.code.toLowerCase() === it.productCode.toLowerCase()) ||
-          (it.productName && o.title && o.title.trim().toLowerCase() === it.productName.trim().toLowerCase())
-        );
-        const isOffer = Boolean(it.isOffer) || Boolean(matchingOffer) || (typeof it.productId === 'string' && it.productId.startsWith('offer-'));
-        if (isOffer) {
-          const cartonCode = it.productCode || matchingOffer?.code || 'عرض';
-          originalOfferCodes.push(`${cartonCode} (${it.productName})`);
-        }
-      });
-      const originalOfferStr = originalOfferCodes.length > 0 ? originalOfferCodes.join(' + ') : 'عرض مخصص';
-
-      // Full items and constituent products breakdown
-      const itemsDetail = (ord.items || [])
-        .map(it => {
-          const isOffer = it.isOffer || (typeof it.productId === 'string' && it.productId.startsWith('offer-'));
-          const bundle = (it.bundleItems && it.bundleItems.length > 0)
-            ? it.bundleItems
-            : (isOffer ? offers.find(o => `offer-${o.id}` === it.productId || o.id === it.productId)?.items : null);
-
-          if (bundle && Array.isArray(bundle) && bundle.length > 0) {
-            const bundleDesc = bundle.map((sub: any) => {
-              const prod = products.find(p => p.id === sub.productId);
-              const subCode = sub.productCode || prod?.code || '';
-              const codeLabel = subCode ? ` [SKU: ${subCode}]` : '';
-              const subQty = (Number(sub.quantity) || 1) * (Number(it.quantity) || 1);
-              return `${subQty}x ${sub.productName}${codeLabel}`;
-            }).join(' + ');
-            return `[محتويات ${it.productName}: ${bundleDesc}]`;
-          }
-
-          const code = it.productCode || products.find(p => p.id === it.productId)?.code || '';
-          const codeLabel = code ? ` [SKU: ${code}]` : '';
-          return `${it.quantity}x ${it.productName}${codeLabel}`;
-        })
-        .join(' + ');
-
-      const statusArabic = statusArabicMap[ord.status] || ord.status;
-      const orderDate = formatOrderDate(ord.createdAt);
-      const updateDate = ord.shippingInfo?.syncedAt ? formatOrderDate(ord.shippingInfo.syncedAt) : '';
-
-      return [
-        idx + 1,
-        billCode ? `="${billCode}"` : 'بدون بوليصة',
-        ord.customerName || '',
-        cleanPhone ? `="${cleanPhone}"` : '',
-        replacedSkus || '',
-        originalOfferStr,
-        itemsDetail || '',
-        Number(ord.totalPrice || 0).toFixed(2),
-        statusArabic,
-        ord.customerCity || '',
-        ord.customerAddress || '',
-        ord.notes || '',
-        ord.id ? `#${ord.id.slice(0, 8)}` : '',
-        orderDate,
-        updateDate
-      ];
-    });
-
-    const csvContent =
-      '\uFEFF' +
-      [
-        headers.map(h => `"${String(h).replace(/"/g, '""')}"`).join(','),
-        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      ].join('\r\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    const today = new Date().toISOString().slice(0, 10);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `طلبات_معدلة_بـ_SKU_المنتجات_${today}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
-
   // Export orders to Excel (CSV with UTF-8 BOM for native Arabic support in Microsoft Excel)
   const handleExportOrdersToExcel = (targetStatus: string = 'preparing') => {
-    if (targetStatus === 'sku_updated') {
-      handleExportSkuUpdatedOrdersToExcel();
-      return;
-    }
 
     let targetOrders: Order[] = [];
     let filenamePrefix = '';
@@ -2468,42 +1814,19 @@ export default function StorePage() {
     shipping: allOrders.filter(o => o.status === 'shipping').length,
     delivered: allOrders.filter(o => o.status === 'delivered').length,
     cancelled: allOrders.filter(o => o.status === 'cancelled').length,
-    skuUpdated: skuUpdatedOrders.length,
   };
-
-  // Active waybills with carton/offer items that can be updated to individual product SKUs
-  const waybillOrdersWithCartons = useMemo(() => {
-    return allOrders.filter(ord => {
-      if (!ord.id || !ord.shippingInfo?.billCode) return false;
-      if (ord.status === 'shipping' || ord.status === 'delivered' || ord.status === 'cancelled') return false;
-      return (ord.items || []).some(it => {
-        const isOffer = it.isOffer || (typeof it.productId === 'string' && it.productId.startsWith('offer-'));
-        const matchingOffer = offers.find(o => 
-          `offer-${o.id}` === it.productId || 
-          o.id === it.productId ||
-          (it.productCode && o.code && o.code.toLowerCase() === it.productCode.toLowerCase()) ||
-          (it.productName && o.title && o.title.trim().toLowerCase() === it.productName.trim().toLowerCase())
-        );
-        return Boolean(isOffer) || Boolean(matchingOffer) || Boolean(it.bundleItems && it.bundleItems.length > 0);
-      });
-    });
-  }, [allOrders, offers]);
 
   // Admin filtered orders by status and search query
   const filteredOrders = allOrders.filter((ord) => {
     const statusMatch = adminOrderFilter === 'all'
       ? true
-      : adminOrderFilter === 'sku_updated'
-        ? isSkuModifiedOrder(ord)
-        : ord.status === adminOrderFilter;
+      : ord.status === adminOrderFilter;
     const query = adminOrderSearch.trim().toLowerCase();
     if (!query) return statusMatch;
     const nameMatch = ord.customerName?.toLowerCase().includes(query);
     const phoneMatch = ord.customerPhone?.includes(query);
     const idMatch = ord.id?.toLowerCase().includes(query);
-    const billCodeMatch = ord.shippingInfo?.billCode?.toLowerCase().includes(query);
-    const skuMatch = ord.shippingInfo?.skuUpdatedSummary?.toLowerCase().includes(query);
-    return statusMatch && (nameMatch || phoneMatch || idMatch || billCodeMatch || skuMatch);
+    return statusMatch && (nameMatch || phoneMatch || idMatch);
   });
 
   // Filter computation
@@ -2835,7 +2158,7 @@ export default function StorePage() {
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-1">
                         <div>
                           <h4 className="font-extrabold text-sm text-slate-900">الطلبات الواردة من العملاء</h4>
-                          <p className="text-[11px] text-slate-400 mt-0.5">متابعة وتحديث حالات الطلبات وتواريخها والمزامنة مع شركة الشحن</p>
+                          <p className="text-[11px] text-slate-400 mt-0.5">متابعة وتحديث حالات الطلبات وتواريخها وتصدير البيانات</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="bg-blue-50 text-blue-700 font-bold px-2.5 py-1 rounded-lg text-[10px] border border-blue-100">
@@ -2877,7 +2200,6 @@ export default function StorePage() {
                               { id: 'shipping', label: '🛵 بالشحن', count: orderCounts.shipping },
                               { id: 'delivered', label: '✅ تم الاستلام', count: orderCounts.delivered },
                               { id: 'cancelled', label: '❌ ملغي', count: orderCounts.cancelled },
-                              { id: 'sku_updated', label: '🔄 معدل بـ SKU المنتجات', count: orderCounts.skuUpdated },
                             ].map((tab) => {
                               const isActive = adminOrderFilter === tab.id;
                               return (
@@ -2906,17 +2228,6 @@ export default function StorePage() {
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <button
                               type="button"
-                              onClick={handleExportSkuUpdatedOrdersToExcel}
-                              disabled={skuUpdatedOrders.length === 0}
-                              className="inline-flex items-center gap-1 px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-800 font-extrabold text-[11px] rounded-xl border border-blue-300 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
-                              title="تنزيل شيت إكسيل بجميع الطلبات التي تم استبدال SKU العرض فيها بأكواد المنتجات الفردية"
-                            >
-                              <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600" />
-                              <span>إكسيل المعدل بـ SKU ({orderCounts.skuUpdated}) 📥</span>
-                            </button>
-
-                            <button
-                              type="button"
                               onClick={() => handleExportOrdersToExcel('preparing')}
                               className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-extrabold text-[11px] rounded-xl border border-emerald-300 shadow-2xs transition-colors cursor-pointer"
                               title="تنزيل شيت إكسيل بجميع الطلبات الجاري تجهيزها (الاسم، الرقم، وتفاصيل الطلب)"
@@ -2940,15 +2251,15 @@ export default function StorePage() {
                         </div>
                       </div>
 
-                      {/* Bulk Sync Action Bar for Pending Orders */}
-                      <div className="bg-gradient-to-r from-amber-50 via-amber-50/50 to-orange-50/30 border border-amber-200/90 rounded-2xl p-3.5 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-xs">
+                      {/* Action Bar for Orders Management */}
+                      <div className="bg-gradient-to-r from-slate-50 via-blue-50/40 to-indigo-50/20 border border-slate-200 rounded-2xl p-3.5 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-xs">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
-                            <Truck className="w-5 h-5" />
+                          <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                            <FileSpreadsheet className="w-5 h-5" />
                           </div>
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
-                              <h5 className="font-extrabold text-xs text-slate-900">إرسال كل الطلبات المعلقة لشركة الشحن J&T</h5>
+                              <h5 className="font-extrabold text-xs text-slate-900">إدارة ومعالجة الطلبات</h5>
                               <span className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${
                                 orderCounts.pending > 0
                                   ? 'bg-amber-100 text-amber-800 border-amber-200'
@@ -2958,7 +2269,7 @@ export default function StorePage() {
                               </span>
                             </div>
                             <p className="text-[11px] text-slate-500 mt-0.5">
-                              إصدار بوالص الشحن لجميع الطلبات المعلقة بضغطة زر واحدة وتحديث حالتها تلقائياً إلى &quot;جاري التجهيز 📦&quot;
+                              تصدير شيتات الإكسيل للطلبات وتحديث الحالات وحذف الطلبات القديمة بالتاريخ
                             </p>
                           </div>
                         </div>
@@ -2972,17 +2283,6 @@ export default function StorePage() {
                           >
                             <FileSpreadsheet className="w-3.5 h-3.5" />
                             <span>سحب إكسيل جاري التجهيز ({orderCounts.preparing}) 📊</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={handleExportSkuUpdatedOrdersToExcel}
-                            disabled={skuUpdatedOrders.length === 0}
-                            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-                            title="تنزيل شيت إكسيل بجميع الطلبات التي تم استبدال SKU العرض فيها بأكواد المنتجات الفردية"
-                          >
-                            <FileSpreadsheet className="w-3.5 h-3.5" />
-                            <span>سحب إكسيل المعدل بـ SKU ({orderCounts.skuUpdated}) 📥</span>
                           </button>
 
                           <button
@@ -3003,31 +2303,18 @@ export default function StorePage() {
 
                           <button
                             type="button"
-                            onClick={handleBulkUpdateAllWaybillSkus}
-                            disabled={isBulkUpdatingSkus || waybillOrdersWithCartons.length === 0}
-                            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-                            title="تحديث جميع البوالص المسجلة في الشحن واستبدال كود الكرتونة بأكواد المنتجات الفردية"
+                            onClick={handleBulkMovePendingToPreparing}
+                            disabled={isBulkPreparing || orderCounts.pending === 0}
+                            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                            title="تحويل جميع الطلبات المعلقة إلى جاري التجهيز دفعة واحدة"
                           >
-                            <RefreshCw className={`w-3.5 h-3.5 ${isBulkUpdatingSkus ? 'animate-spin' : ''}`} />
+                            <RefreshCw className={`w-3.5 h-3.5 ${isBulkPreparing ? 'animate-spin' : ''}`} />
                             <span>
-                              {isBulkUpdatingSkus
-                                ? `جاري تحديث SKU (${bulkSkuProgress?.current || 0}/${bulkSkuProgress?.total || 0})...`
-                                : `تحديث كود المنتجات لكل البوالص (${waybillOrdersWithCartons.length}) 🔄`}
-                            </span>
-                          </button>
-
-                          <button
-                            onClick={handleSyncAllPendingOrdersWithShipping}
-                            disabled={isBulkSyncing || orderCounts.pending === 0}
-                            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
-                          >
-                            <RefreshCw className={`w-3.5 h-3.5 ${isBulkSyncing ? 'animate-spin' : ''}`} />
-                            <span>
-                              {isBulkSyncing
-                                ? `جاري الإرسال (${bulkSyncProgress?.current || 0}/${bulkSyncProgress?.total || orderCounts.pending})...`
+                              {isBulkPreparing
+                                ? 'جاري التحويل...'
                                 : orderCounts.pending === 0
                                   ? 'لا توجد طلبات معلقة حالياً'
-                                  : `إرسال كل المعلق (${orderCounts.pending}) للشحن وجاري التجهيز 📦`}
+                                  : `تحويل كل المعلق (${orderCounts.pending}) إلى جاري التجهيز 📦`}
                             </span>
                           </button>
                         </div>
@@ -3147,113 +2434,6 @@ export default function StorePage() {
                                 )}
                               </div>
 
-                              {/* J&T Express Shipping Integration Section */}
-                              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-1.5 font-bold text-slate-800 text-[11px]">
-                                    <Truck className="w-3.5 h-3.5 text-blue-600" />
-                                    <span>شركة الشحن J&T Express</span>
-                                  </div>
-                                  {ord.shippingInfo?.billCode ? (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-100/80 text-emerald-800 font-bold text-[10px] rounded-full border border-emerald-300">
-                                      <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                                      <span>مسجل في الشحن</span>
-                                    </span>
-                                  ) : (
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleManualAttachWaybill(ord)}
-                                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 font-bold text-[10px] rounded-lg border border-slate-200 transition-colors cursor-pointer shadow-2xs"
-                                        title="إذا تم إدخال هذا الطلب في J&T يدوياً أو تم التقاطه، يمكنك كتابة رقم البوليصة هنا لحمايته ومنع تكراره"
-                                      >
-                                        <Link2 className="w-3 h-3 text-blue-600" />
-                                        <span>ربط بوليصة يدوياً</span>
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleSyncOrderWithShipping(ord)}
-                                        disabled={syncingOrderId === ord.id}
-                                        className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] rounded-lg shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
-                                      >
-                                        <RefreshCw className={`w-3 h-3 ${syncingOrderId === ord.id ? 'animate-spin' : ''}`} />
-                                        <span>إرسال لشركة الشحن</span>
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                                {ord.shippingInfo?.billCode ? (
-                                  <div className="bg-emerald-50/90 border border-emerald-200 p-2.5 rounded-lg text-[10px] space-y-2">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <div className="space-y-0.5">
-                                        <span className="text-emerald-800 font-bold block text-[10px]">رقم بوليصة الشحن (Waybill):</span>
-                                        <div className="flex items-center gap-1.5">
-                                          <span className="font-mono font-black text-emerald-800 bg-white px-2 py-0.5 rounded border border-emerald-300 inline-block shadow-xs text-[11px]">{ord.shippingInfo.billCode}</span>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleCopyBillCode(ord.shippingInfo?.billCode)}
-                                            className="p-1 hover:bg-white text-emerald-700 rounded border border-transparent hover:border-emerald-200 transition-colors cursor-pointer"
-                                            title="نسخ رقم البوليصة"
-                                          >
-                                            {copiedBillCode === ord.shippingInfo.billCode ? (
-                                              <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                            ) : (
-                                              <Copy className="w-3.5 h-3.5" />
-                                            )}
-                                          </button>
-                                        </div>
-                                      </div>
-                                      {ord.shippingInfo.sortingCode && (
-                                        <div className="text-left shrink-0">
-                                          <span className="text-emerald-800 font-bold block text-[9px]">كود الفرز:</span>
-                                          <span className="text-emerald-700 font-mono text-[9px] bg-emerald-100/80 px-1.5 py-0.5 rounded border border-emerald-200 inline-block">{ord.shippingInfo.sortingCode}</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center justify-between pt-1.5 border-t border-emerald-200/60 text-[9px]">
-                                      <a
-                                        href={`https://www.jtexpress.eg/trajectoryQuery?bills=${ord.shippingInfo.billCode}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1 text-emerald-700 hover:text-emerald-900 font-bold hover:underline"
-                                      >
-                                        <ExternalLink className="w-3 h-3" />
-                                        <span>تتبع الشحنة أونلاين</span>
-                                      </a>
-                                      {ord.status === 'shipping' || ord.status === 'delivered' ? (
-                                        <span className="text-emerald-700 font-bold text-[9px] flex items-center gap-1">
-                                          <ShieldCheck className="w-3 h-3 text-emerald-600" />
-                                          <span>تم الاستلام / بالشحن (مقفلة ضد التعديل)</span>
-                                        </span>
-                                      ) : (
-                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                          {ord.shippingInfo?.skuUpdated && (
-                                            <span
-                                              className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-100 text-emerald-800 font-black text-[9px] rounded border border-emerald-200"
-                                              title={ord.shippingInfo.skuUpdatedSummary || 'تم استبدال كود الكرتونة بأكواد المنتجات الفردية'}
-                                            >
-                                              <Check className="w-2.5 h-2.5 text-emerald-600" />
-                                              <span>محدث بـ SKU المنتجات</span>
-                                            </span>
-                                          )}
-                                          <button
-                                            type="button"
-                                            onClick={() => handleUpdateOrderSkuWithShipping(ord)}
-                                            disabled={syncingOrderId === ord.id}
-                                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-[9.5px] rounded-lg shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
-                                            title="استبدال SKU الكرتونة بـ SKU المنتجات الفردية لدى شركة الشحن وفي قاعدة البيانات"
-                                          >
-                                            <RefreshCw className={`w-3 h-3 ${syncingOrderId === ord.id ? 'animate-spin' : ''}`} />
-                                            <span>تحديث كود المنتجات (استبدال كود الكرتونة)</span>
-                                          </button>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <p className="text-[10px] text-slate-400">لم يتم تأكيد بوليصة شحن لهذا الطلب بعد (اضغط إرسال لشركة الشحن لإصدار البوليصة).</p>
-                                )}
-                              </div>
 
                               <div className="flex justify-between items-center text-[11px] pt-1 border-t border-slate-50">
                                 <div>
@@ -3356,7 +2536,7 @@ export default function StorePage() {
                               />
                             </div>
                             <div>
-                              <label className="block text-[10px] text-slate-500 mb-1">كود المنتج لدى شركة الشحن (SKU / Code)</label>
+                              <label className="block text-[10px] text-slate-500 mb-1">كود المنتج (SKU / Code)</label>
                               <input 
                                 type="text"
                                 value={productForm.code || ''}
@@ -3680,7 +2860,7 @@ export default function StorePage() {
                             </div>
 
                             <div>
-                              <label className="block text-slate-700 font-bold mb-1.5 text-xs">كود العرض لشركة الشحن (Offer Code / SKU)</label>
+                              <label className="block text-slate-700 font-bold mb-1.5 text-xs">كود العرض (Offer Code / SKU)</label>
                               <input 
                                 id="offer-code-input"
                                 type="text"
@@ -5661,7 +4841,7 @@ export default function StorePage() {
                         </span>
                       ) : (
                         <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
-                          معاينة عند كتابة العنوان (شركة J&T)
+                          معاينة عند كتابة العنوان
                         </span>
                       )}
                     </div>
@@ -5741,23 +4921,6 @@ export default function StorePage() {
 
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-right space-y-2.5 text-xs">
                     <p><strong>رقم المرجع للطلب:</strong> <span className="font-mono text-blue-600 text-sm">{successOrder.id}</span></p>
-                    
-                    {successOrder.shippingInfo?.billCode && (
-                      <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-900 space-y-1">
-                        <div className="flex items-center gap-1.5 font-black text-xs text-emerald-800">
-                          <Truck className="w-4 h-4 text-emerald-600" />
-                          <span>تم تسجيل الشحنة لدى J&T Express بنجاح</span>
-                        </div>
-                        <p className="text-[11px]">
-                          <strong>رقم بوليصة الشحن والتتبع:</strong> <span className="font-mono font-black text-emerald-700 bg-white px-2 py-0.5 rounded border border-emerald-200">{successOrder.shippingInfo.billCode}</span>
-                        </p>
-                        {successOrder.shippingInfo.sortingCode && (
-                          <p className="text-[10px] text-emerald-700">
-                            كود الفرز والتوزيع: {successOrder.shippingInfo.sortingCode}
-                          </p>
-                        )}
-                      </div>
-                    )}
 
                     <p><strong>اسم العميل:</strong> {successOrder.customerName}</p>
                     <p><strong>المحافظة والمدينة:</strong> {successOrder.customerCity} {successOrder.shippingZone ? `(${successOrder.shippingZone})` : ''}</p>
@@ -5894,7 +5057,7 @@ export default function StorePage() {
                     >
                       <div className="flex items-center gap-1.5 font-bold text-blue-900">
                         <Truck className="w-3.5 h-3.5 text-blue-600" />
-                        <span>أسعار الشحن الرسمية حسب المحافظات (عبر J&T Express):</span>
+                        <span>أسعار الشحن والتوصيل حسب المحافظات:</span>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {SHIPPING_ZONES.map(z => (
@@ -6066,7 +5229,7 @@ export default function StorePage() {
                   <div className="space-y-2">
                     <h4 className="font-bold text-slate-900 text-sm">لا توجد طلبات مسجلة حالياً</h4>
                     <p className="text-xs text-slate-500 leading-relaxed">
-                      عندما تقوم بطلب أي منظفات من المتجر، ستظهر طلبياتك وحالة الشحن وبوالص التوصيل هنا تلقائياً دون الحاجة لتسجيل أي حساب.
+                      عندما تقوم بطلب أي منظفات من المتجر، ستظهر طلبياتك وحالة التوصيل هنا تلقائياً دون الحاجة لتسجيل أي حساب.
                     </p>
                   </div>
                   <button 
@@ -6199,19 +5362,6 @@ export default function StorePage() {
                                 </div>
                               </div>
 
-                              {/* J&T Express Shipping info */}
-                              {order.shippingInfo?.billCode && (
-                                <div className="p-2.5 bg-emerald-50/80 border border-emerald-200 rounded-xl text-emerald-900 flex items-center justify-between text-xs">
-                                  <div className="flex items-center gap-1.5 font-bold">
-                                    <Truck className="w-3.5 h-3.5 text-emerald-600" />
-                                    <span>شحنة J&T Express:</span>
-                                    <span className="font-mono text-emerald-900 bg-white px-2 py-0.5 rounded border border-emerald-200 text-[11px]">{order.shippingInfo.billCode}</span>
-                                  </div>
-                                  {order.shippingInfo.sortingCode && (
-                                    <span className="text-[9px] text-emerald-700 font-mono bg-emerald-100/60 px-1.5 py-0.5 rounded">{order.shippingInfo.sortingCode}</span>
-                                  )}
-                                </div>
-                              )}
 
                               {/* Footer details */}
                               <div className="flex justify-between items-center pt-2.5 border-t border-slate-100 text-xs">
@@ -6313,7 +5463,7 @@ export default function StorePage() {
                 </div>
                 <h3 className="font-black text-slate-900 text-lg">بوابة تسجيل دخول الإدارة</h3>
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  هذه البوابة مخصصة حصرياً لمدراء ومشرفي متجر Gold Clean لمتابعة الطلبات، تعديل المنتجات، الأسعار، العروض، ومزامنة بوالص الشحن.
+                  هذه البوابة مخصصة حصرياً لمدراء ومشرفي متجر Gold Clean لمتابعة الطلبات، تعديل المنتجات، الأسعار، العروض، وإدارة المتجر.
                 </p>
               </div>
 

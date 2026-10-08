@@ -88,7 +88,7 @@ export function normalizeArabicNumerals(text: any): string {
     .replace(/[٩۹]/g, '9');
 }
 
-// Helper to format Egyptian mobile/phone to strict 11 digits required by J&T API (String(11))
+// Helper to format Egyptian mobile/phone to strict 11 digits (010, 011, 012, 015)
 // Handles Arabic numerals, international codes (+20, 0020, 20), and strips unwanted prefixes like "02" before mobile numbers.
 export function sanitizeEgyptianPhone(raw: any, fallback: string = '01000000000'): string {
   if (!raw) return fallback;
