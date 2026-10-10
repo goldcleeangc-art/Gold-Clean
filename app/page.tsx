@@ -46,7 +46,8 @@ import {
   Calendar,
   AlertTriangle,
   FileSpreadsheet,
-  Download
+  Download,
+  Printer
 } from 'lucide-react';
 import { db, auth, googleProvider } from '../lib/firebase';
 import {
@@ -143,6 +144,8 @@ interface CartItem {
 
 interface ShippingInfo {
   billCode?: string;
+  trackingNumber?: string;
+  deliveryId?: string;
   sortingCode?: string;
   courier?: string;
   status?: string;
@@ -311,6 +314,10 @@ export default function StorePage() {
   const [isShippingRatesOpen, setIsShippingRatesOpen] = useState<boolean>(false);
   const [orderInProgress, setOrderInProgress] = useState<boolean>(false);
   const [isBulkPreparing, setIsBulkPreparing] = useState<boolean>(false);
+  const [syncingOrderId, setSyncingOrderId] = useState<string | null>(null);
+  const [isBulkSyncing, setIsBulkSyncing] = useState<boolean>(false);
+  const [bulkSyncProgress, setBulkSyncProgress] = useState<{ current: number; total: number } | null>(null);
+  const [copiedBillCode, setCopiedBillCode] = useState<string | null>(null);
   const [successOrder, setSuccessOrder] = useState<Order | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -379,7 +386,7 @@ export default function StorePage() {
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [userSearchQuery, setUserSearchQuery] = useState<string>('');
   const [adminTab, setAdminTab] = useState<'orders' | 'products' | 'offers' | 'categories' | 'stats' | 'users'>('orders');
-  const [adminOrderFilter, setAdminOrderFilter] = useState<'all' | 'pending' | 'preparing' | 'shipping' | 'delivered' | 'cancelled'>('all');
+  const [adminOrderFilter, setAdminOrderFilter] = useState<'all' | 'pending' | 'preparing' | 'shipping' | 'delivered' | 'cancelled' | 'bosta_unsynced' | 'bosta_synced'>('all');
   const [adminOrderSearch, setAdminOrderSearch] = useState<string>('');
 
   // New product editing/adding form
@@ -1134,6 +1141,42 @@ export default function StorePage() {
       const orderDocRef = doc(collection(db, 'orders'));
       const generatedOrderId = orderDocRef.id;
 
+      // 2. Transmit to Bosta Shipping Logistics API (if configured)
+      try {
+        const shippingRes = await fetch('/api/shipping/create-order', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId: generatedOrderId,
+            customerName: checkoutForm.name,
+            customerPhone: cleanPhone,
+            customerCity: checkoutForm.city,
+            customerAddress: checkoutForm.address,
+            customerEmail: guestEmail,
+            notes: checkoutForm.notes,
+            items: orderPayload.items,
+            totalPrice: orderPayload.totalPrice,
+            weight: currentCartWeight
+          })
+        });
+        const shippingData = await shippingRes.json();
+        if (shippingData && (shippingData.trackingNumber || shippingData.billCode || shippingData.success)) {
+          const tracking = shippingData.trackingNumber || shippingData.billCode || '';
+          const shippingInfoData: ShippingInfo = {
+            billCode: tracking,
+            trackingNumber: tracking,
+            deliveryId: shippingData.deliveryId || tracking,
+            courier: 'Bosta',
+            status: shippingData.state || 'created',
+            txlogisticId: generatedOrderId,
+            syncedAt: new Date().toISOString()
+          };
+          orderPayload.shippingInfo = shippingInfoData;
+        }
+      } catch (shippingErr) {
+        console.warn('Bosta Shipping API sync during checkout:', shippingErr);
+      }
+
       await setDoc(orderDocRef, orderPayload);
 
       // Save order reference in localStorage for guest tracking
@@ -1559,6 +1602,173 @@ export default function StorePage() {
     }
   };
 
+  const handleCopyBillCode = (code?: string) => {
+    if (!code) return;
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(code);
+      setCopiedBillCode(code);
+      setTimeout(() => setCopiedBillCode(null), 2000);
+    }
+  };
+
+  const handleSyncOrderWithShipping = async (order: Order, allowRecreate = false) => {
+    if (!order.id) return;
+    const existingCode = order.shippingInfo?.trackingNumber || order.shippingInfo?.billCode || '';
+
+    if (order.status === 'delivered') {
+      alert(
+        `⛔ هذا الطلب تم تسليمه للعميل مسبقاً.\n\n` +
+        `رقم شحنة بوسطة: ${existingCode || 'مسجل'}`
+      );
+      return;
+    }
+
+    if (existingCode && !allowRecreate) {
+      const confirmResend = confirm(
+        `⚠️ تنبيه لمنع تكرار الشحنة:\n\n` +
+        `هذا الطلب مسجل بالفعل لدى شركة بوسطة برقم الشحنة: ${existingCode}\n\n` +
+        `هل تريد بالتأكيد إعادة إرساله لشركة بوسطة لإنشاء بوليصة جديدة؟`
+      );
+      if (!confirmResend) return;
+      allowRecreate = true;
+    }
+
+    setSyncingOrderId(order.id);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/shipping/create-order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          orderId: order.id,
+          trackingNumber: existingCode,
+          forceRecreate: allowRecreate,
+          customerName: order.customerName,
+          customerPhone: order.customerPhone,
+          customerCity: order.customerCity,
+          customerAddress: order.customerAddress,
+          customerEmail: order.customerEmail,
+          notes: order.notes,
+          items: order.items,
+          totalPrice: order.totalPrice,
+          weight: order.shippingWeight || 1
+        })
+      });
+
+      const data = await res.json();
+      if (data.success && (data.trackingNumber || data.billCode)) {
+        const tracking = data.trackingNumber || data.billCode;
+        const updatedShippingInfo: ShippingInfo = {
+          billCode: tracking,
+          trackingNumber: tracking,
+          deliveryId: data.deliveryId || tracking,
+          courier: 'Bosta',
+          status: data.state || 'created',
+          txlogisticId: order.id,
+          syncedAt: new Date().toISOString()
+        };
+
+        await updateDoc(doc(db, 'orders', order.id), {
+          shippingInfo: updatedShippingInfo,
+          status: order.status === 'pending' ? 'preparing' : order.status
+        });
+
+        alert(`✅ تم إرسال الطلب بنجاح إلى شركة بوسطة!\nرقم الشحنة: ${tracking}`);
+      } else {
+        alert(`❌ فشل الإرسال لشركة بوسطة:\n${data.error || data.msg || 'حدث خطأ غير معروف'}`);
+      }
+    } catch (err: any) {
+      console.error('Error syncing order with Bosta:', err);
+      alert(`❌ خطأ في الاتصال بشركة بوسطة: ${err.message || err}`);
+    } finally {
+      setSyncingOrderId(null);
+    }
+  };
+
+  const handleBulkSyncOrdersWithShipping = async () => {
+    const unsyncedOrders = allOrders.filter(
+      ord => !ord.shippingInfo?.trackingNumber && !ord.shippingInfo?.billCode && ord.status !== 'cancelled' && ord.status !== 'delivered'
+    );
+
+    if (unsyncedOrders.length === 0) {
+      alert('جميع الطلبات الحالية مسجلة بالفعل لدى شركة بوسطة!');
+      return;
+    }
+
+    const confirmBulk = confirm(
+      `📦 تأكيد الإرسال الجماعي:\n\n` +
+      `هل تريد إرسال (${unsyncedOrders.length}) طلب غير مسجل إلى شركة بوسطة لإنشاء بوالص الشحن؟`
+    );
+    if (!confirmBulk) return;
+
+    setIsBulkSyncing(true);
+    setBulkSyncProgress({ current: 0, total: unsyncedOrders.length });
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < unsyncedOrders.length; i++) {
+      const ord = unsyncedOrders[i];
+      setBulkSyncProgress({ current: i + 1, total: unsyncedOrders.length });
+
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        const res = await fetch('/api/shipping/create-order', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            orderId: ord.id,
+            customerName: ord.customerName,
+            customerPhone: ord.customerPhone,
+            customerCity: ord.customerCity,
+            customerAddress: ord.customerAddress,
+            customerEmail: ord.customerEmail,
+            notes: ord.notes,
+            items: ord.items,
+            totalPrice: ord.totalPrice,
+            weight: ord.shippingWeight || 1
+          })
+        });
+
+        const data = await res.json();
+        if (data.success && (data.trackingNumber || data.billCode)) {
+          const tracking = data.trackingNumber || data.billCode;
+          const updatedShippingInfo: ShippingInfo = {
+            billCode: tracking,
+            trackingNumber: tracking,
+            deliveryId: data.deliveryId || tracking,
+            courier: 'Bosta',
+            status: data.state || 'created',
+            txlogisticId: ord.id,
+            syncedAt: new Date().toISOString()
+          };
+
+          if (ord.id) {
+            await updateDoc(doc(db, 'orders', ord.id), {
+              shippingInfo: updatedShippingInfo,
+              status: ord.status === 'pending' ? 'preparing' : ord.status
+            });
+          }
+          successCount++;
+        } else {
+          failCount++;
+        }
+      } catch {
+        failCount++;
+      }
+    }
+
+    setIsBulkSyncing(false);
+    setBulkSyncProgress(null);
+    alert(`🏁 اكتمل الإرسال لشركة بوسطة:\n\n✅ نجح: ${successCount}\n❌ فشل: ${failCount}`);
+  };
+
   const formatOrderDate = (createdAt: any) => {
     if (!createdAt) return 'تاريخ غير محدد';
     try {
@@ -1814,19 +2024,29 @@ export default function StorePage() {
     shipping: allOrders.filter(o => o.status === 'shipping').length,
     delivered: allOrders.filter(o => o.status === 'delivered').length,
     cancelled: allOrders.filter(o => o.status === 'cancelled').length,
+    bostaUnsynced: allOrders.filter(o => !o.shippingInfo?.trackingNumber && !o.shippingInfo?.billCode && o.status !== 'cancelled' && o.status !== 'delivered').length,
+    bostaSynced: allOrders.filter(o => !!(o.shippingInfo?.trackingNumber || o.shippingInfo?.billCode)).length,
   };
 
   // Admin filtered orders by status and search query
   const filteredOrders = allOrders.filter((ord) => {
-    const statusMatch = adminOrderFilter === 'all'
-      ? true
-      : ord.status === adminOrderFilter;
+    let statusMatch = true;
+    if (adminOrderFilter === 'all') {
+      statusMatch = true;
+    } else if (adminOrderFilter === 'bosta_unsynced') {
+      statusMatch = !ord.shippingInfo?.trackingNumber && !ord.shippingInfo?.billCode && ord.status !== 'cancelled' && ord.status !== 'delivered';
+    } else if (adminOrderFilter === 'bosta_synced') {
+      statusMatch = !!(ord.shippingInfo?.trackingNumber || ord.shippingInfo?.billCode);
+    } else {
+      statusMatch = ord.status === adminOrderFilter;
+    }
     const query = adminOrderSearch.trim().toLowerCase();
     if (!query) return statusMatch;
     const nameMatch = ord.customerName?.toLowerCase().includes(query);
     const phoneMatch = ord.customerPhone?.includes(query);
     const idMatch = ord.id?.toLowerCase().includes(query);
-    return statusMatch && (nameMatch || phoneMatch || idMatch);
+    const waybillMatch = (ord.shippingInfo?.trackingNumber || ord.shippingInfo?.billCode || '').toLowerCase().includes(query);
+    return statusMatch && (nameMatch || phoneMatch || idMatch || waybillMatch);
   });
 
   // Filter computation
@@ -2200,6 +2420,8 @@ export default function StorePage() {
                               { id: 'shipping', label: '🛵 بالشحن', count: orderCounts.shipping },
                               { id: 'delivered', label: '✅ تم الاستلام', count: orderCounts.delivered },
                               { id: 'cancelled', label: '❌ ملغي', count: orderCounts.cancelled },
+                              { id: 'bosta_unsynced', label: '🚚 غير مسجل ببوسطة', count: orderCounts.bostaUnsynced },
+                              { id: 'bosta_synced', label: '📦 مسجل ببوسطة', count: orderCounts.bostaSynced },
                             ].map((tab) => {
                               const isActive = adminOrderFilter === tab.id;
                               return (
@@ -2299,6 +2521,23 @@ export default function StorePage() {
                           >
                             <Trash2 className="w-3.5 h-3.5 text-rose-600" />
                             <span>حذف الطلبات بالتاريخ 🗑️</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleBulkSyncOrdersWithShipping}
+                            disabled={isBulkSyncing || orderCounts.bostaUnsynced === 0}
+                            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                            title="إرسال جميع الطلبات غير المسجلة لشركة بوسطة لإنشاء بوالص الشحن دفعة واحدة"
+                          >
+                            <Truck className={`w-3.5 h-3.5 ${isBulkSyncing ? 'animate-spin' : ''}`} />
+                            <span>
+                              {isBulkSyncing
+                                ? `جاري الإرسال لبوسطة (${bulkSyncProgress?.current}/${bulkSyncProgress?.total})...`
+                                : orderCounts.bostaUnsynced === 0
+                                  ? 'جميع الطلبات مسجلة ببوسطة ✅'
+                                  : `إرسال كل الجديد لبوسطة (${orderCounts.bostaUnsynced}) 🚚`}
+                            </span>
                           </button>
 
                           <button
@@ -2433,7 +2672,95 @@ export default function StorePage() {
                                   </div>
                                 )}
                               </div>
+                              {/* Bosta Shipping Waybill & Sync Section */}
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between gap-2 flex-wrap">
+                                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700">
+                                    <Truck className="w-3.5 h-3.5 text-blue-600" />
+                                    <span>شركة الشحن (بوسطة):</span>
+                                  </div>
+                                  {!ord.shippingInfo?.trackingNumber && !ord.shippingInfo?.billCode ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSyncOrderWithShipping(ord)}
+                                      disabled={syncingOrderId === ord.id}
+                                      className="inline-flex items-center gap-1 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg shadow-2xs transition-colors disabled:opacity-50 cursor-pointer"
+                                      title="إرسال الطلب لشركة بوسطة وتوليد بوليصة الشحن"
+                                    >
+                                      <RefreshCw className={`w-3 h-3 ${syncingOrderId === ord.id ? 'animate-spin' : ''}`} />
+                                      <span>إرسال لشركة بوسطة 🚚</span>
+                                    </button>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSyncOrderWithShipping(ord, true)}
+                                      disabled={syncingOrderId === ord.id}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[9px] rounded-md transition-colors disabled:opacity-50 cursor-pointer"
+                                      title="إعادة إنشاء بوليصة لدى بوسطة"
+                                    >
+                                      <RefreshCw className={`w-2.5 h-2.5 ${syncingOrderId === ord.id ? 'animate-spin' : ''}`} />
+                                      <span>إعادة إرسال</span>
+                                    </button>
+                                  )}
+                                </div>
 
+                                {ord.shippingInfo?.trackingNumber || ord.shippingInfo?.billCode ? (
+                                  <div className="bg-emerald-50/90 border border-emerald-200 p-2.5 rounded-xl text-[10px] space-y-2">
+                                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                                      <div className="space-y-0.5">
+                                        <span className="text-emerald-800 font-bold block text-[10px]">رقم شحنة بوسطة (Tracking No):</span>
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="font-mono font-black text-emerald-800 bg-white px-2 py-0.5 rounded border border-emerald-300 inline-block shadow-2xs text-[11px]">
+                                            {ord.shippingInfo.trackingNumber || ord.shippingInfo.billCode}
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleCopyBillCode(ord.shippingInfo?.trackingNumber || ord.shippingInfo?.billCode)}
+                                            className="p-1 hover:bg-white text-emerald-700 rounded border border-transparent hover:border-emerald-200 transition-colors cursor-pointer"
+                                            title="نسخ رقم الشحنة"
+                                          >
+                                            {copiedBillCode === (ord.shippingInfo.trackingNumber || ord.shippingInfo.billCode) ? (
+                                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                            ) : (
+                                              <Copy className="w-3.5 h-3.5" />
+                                            )}
+                                          </button>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-1.5">
+                                        <a
+                                          href={`https://bosta.co/tracking-shipments?trackingNumber=${encodeURIComponent(ord.shippingInfo.trackingNumber || ord.shippingInfo.billCode || '')}`}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded-lg border border-emerald-300 shadow-2xs transition-colors cursor-pointer"
+                                          title="تتبع الشحنة على موقع بوسطة الرسمي"
+                                        >
+                                          <ExternalLink className="w-3 h-3 text-emerald-600" />
+                                          <span>تتبع الشحنة</span>
+                                        </a>
+
+                                        {ord.shippingInfo.deliveryId && (
+                                          <a
+                                            href={`/api/shipping/awb?deliveryId=${encodeURIComponent(ord.shippingInfo.deliveryId)}`}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] rounded-lg shadow-2xs transition-colors cursor-pointer"
+                                            title="طباعة وتحميل بوليصة الشحن (AWB PDF)"
+                                          >
+                                            <Printer className="w-3 h-3" />
+                                            <span>طباعة البوليصة</span>
+                                          </a>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="bg-slate-50 border border-slate-200/80 p-2 rounded-xl text-[10px] text-slate-500 flex items-center justify-between">
+                                    <span>⏳ الشحنة لم تُسجل على بوسطة بعد.</span>
+                                    <span className="text-[9px] text-slate-400">اضغط "إرسال لشركة بوسطة" لتوليد البوليصة فوراً</span>
+                                  </div>
+                                )}
+                              </div>
 
                               <div className="flex justify-between items-center text-[11px] pt-1 border-t border-slate-50">
                                 <div>
