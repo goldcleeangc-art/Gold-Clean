@@ -317,6 +317,14 @@ export const DEFAULT_CITY_DISTRICTS: Record<string, BostaDistrictInfo> = {
 
 const districtsCache = new Map<string, any[]>();
 
+export interface ResolvedDistrict {
+  cityId: string;
+  districtId: string;
+  districtName: string;
+  zoneId?: string;
+  zoneName?: string;
+}
+
 /**
  * Intelligently matches a customer's address to a specific Bosta district,
  * or reliably falls back to the default district of the governorate.
@@ -325,11 +333,13 @@ export async function resolveBostaDistrict(
   cityCode: string,
   cityId: string,
   fullAddressText: string
-): Promise<{ districtId: string; districtName: string; zoneName?: string }> {
+): Promise<ResolvedDistrict> {
   const defaultEntry = DEFAULT_CITY_DISTRICTS[cityCode] || DEFAULT_CITY_DISTRICTS['EG-01'];
+  const effectiveCityId = cityId || defaultEntry.cityId;
 
-  if (!cityId) {
+  if (!effectiveCityId) {
     return {
+      cityId: defaultEntry.cityId,
       districtId: defaultEntry.districtId,
       districtName: defaultEntry.districtName,
       zoneName: defaultEntry.zoneName
@@ -337,10 +347,10 @@ export async function resolveBostaDistrict(
   }
 
   try {
-    let districts: any[] = districtsCache.get(cityId) || [];
+    let districts: any[] = districtsCache.get(effectiveCityId) || [];
     if (districts.length === 0) {
       const baseUrl = getBostaBaseUrl();
-      const res = await fetch(`${baseUrl}/api/v2/cities/${encodeURIComponent(cityId)}/districts`, {
+      const res = await fetch(`${baseUrl}/api/v2/cities/${encodeURIComponent(effectiveCityId)}/districts`, {
         headers: {
           'User-Agent': 'Gold-Clean-Store/1.0',
           'Accept': 'application/json'
@@ -352,7 +362,7 @@ export async function resolveBostaDistrict(
         const list = Array.isArray(json?.data) ? json.data : [];
         if (list.length > 0) {
           districts = list;
-          districtsCache.set(cityId, list);
+          districtsCache.set(effectiveCityId, list);
         }
       }
     }
@@ -371,8 +381,10 @@ export async function resolveBostaDistrict(
           (normZone && normZone.length > 3 && normAddr.includes(normZone))
         ) {
           return {
+            cityId: effectiveCityId,
             districtId: d.districtId,
             districtName: d.districtName,
+            zoneId: d.zoneId,
             zoneName: d.zoneName
           };
         }
@@ -383,8 +395,10 @@ export async function resolveBostaDistrict(
   }
 
   return {
+    cityId: defaultEntry.cityId,
     districtId: defaultEntry.districtId,
     districtName: defaultEntry.districtName,
+    zoneId: defaultEntry.zoneId,
     zoneName: defaultEntry.zoneName
   };
 }
@@ -550,6 +564,7 @@ export async function createBostaDelivery(
     dropOffAddress: {
       firstLine: addressLine,
       city: cityCode,
+      cityId: resolvedDistrict.cityId,
       districtId: resolvedDistrict.districtId,
       districtName: resolvedDistrict.districtName,
       ...(resolvedDistrict.zoneName ? { zone: resolvedDistrict.zoneName } : {})
