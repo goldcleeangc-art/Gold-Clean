@@ -79,9 +79,320 @@ export function getBostaCity(rawCityName: string): BostaCity | null {
   return null;
 }
 
+export interface BostaDistrictInfo {
+  cityId: string;
+  districtId: string;
+  districtName: string;
+  districtOtherName: string;
+  zoneId?: string;
+  zoneName?: string;
+}
+
+export const DEFAULT_CITY_DISTRICTS: Record<string, BostaDistrictInfo> = {
+  'EG-01': {
+    cityId: 'FceDyHXwpSYYF9zGW',
+    districtId: 'KV9fhG8LRCU',
+    districtName: 'Downtown Cairo',
+    districtOtherName: 'وسط البلد',
+    zoneId: 'dQOR0q4COjC',
+    zoneName: 'Abdeen'
+  },
+  'EG-25': {
+    cityId: '0064Qb0OgcA',
+    districtId: 'pNtaVaw0Ng',
+    districtName: 'New Giza',
+    districtOtherName: 'نيو جيزه',
+    zoneId: 'QoHN-zG2tF',
+    zoneName: '6 October'
+  },
+  'EG-02': {
+    cityId: 'Jrb6X6ucjiYgMP4T7',
+    districtId: 'zoJP71_5Ca1',
+    districtName: 'Abu Yousef',
+    districtOtherName: 'ابو يوسف',
+    zoneId: '9mih4NXL1GF',
+    zoneName: 'Abu Yousef'
+  },
+  'EG-06': {
+    cityId: 'yp3atroeTwnyiBNKE',
+    districtId: 'IzSqkmeUlJ',
+    districtName: 'Benha',
+    districtOtherName: 'بنها',
+    zoneId: 'BP6fpVl1MP7',
+    zoneName: 'Benha'
+  },
+  'EG-09': {
+    cityId: 'ruBSjGBDX9wpRa3cc',
+    districtId: 'UNMFP-3KCSj',
+    districtName: 'ElSadat (Monufia)',
+    districtOtherName: 'السادات (المنوفيه)',
+    zoneId: 'FtEAV-c0_3P',
+    zoneName: 'ElSadat'
+  },
+  'EG-07': {
+    cityId: 'K3RwC677J8kJytdZD',
+    districtId: '67isVHr3M8t',
+    districtName: 'ElMahala ElKobra Center',
+    districtOtherName: 'مركز المحله الكبري',
+    zoneId: 'e3ZdTfP0usv',
+    zoneName: 'ElMahala ElKobra'
+  },
+  'EG-05': {
+    cityId: 'RrDhS8YYsXAwZ9Zfo',
+    districtId: 'oB75rIF334-',
+    districtName: 'ElHafir w ElAmal',
+    districtOtherName: 'الحفير والامل - المركزيه',
+    zoneId: 'HAb9EN1Q6z5',
+    zoneName: 'Belkas'
+  },
+  'EG-04': {
+    cityId: 'g3GchTSmCgR2JynsJ',
+    districtId: 'EDNt_rmL5B',
+    districtName: 'Markaz Kafr ElDawar',
+    districtOtherName: 'مركز كفر الدوار',
+    zoneId: 'FwhfuxIXJc2',
+    zoneName: 'Kafr ElDawar'
+  },
+  'EG-08': {
+    cityId: 'ByP7rFCjL6XzF6j4S',
+    districtId: 'FbKbOMG2T2i',
+    districtName: 'Kafr ElSheikh',
+    districtOtherName: 'كفر الشيخ',
+    zoneId: 'nFA25mUoSu9',
+    zoneName: 'Kafr ElSheikh'
+  },
+  'EG-14': {
+    cityId: 'qoZvYcZ8Cqji4pGp5',
+    districtId: 'GR9gktcF5n',
+    districtName: 'Damietta',
+    districtOtherName: 'دمياط',
+    zoneId: 'uspCr4p34j-',
+    zoneName: 'Damietta'
+  },
+  'EG-13': {
+    cityId: 'skFtf6ZmKo8kBEBDK',
+    districtId: 'qO4ilVPaT8',
+    districtName: 'ElManasrah',
+    districtOtherName: 'المناصره',
+    zoneId: '11ZRk1PSZ0p',
+    zoneName: 'ElManasrah'
+  },
+  'EG-11': {
+    cityId: 'PJqNriLtFtx2cfkKP',
+    districtId: 'vroLjP8YY',
+    districtName: 'Isamilia Center',
+    districtOtherName: 'مركز الاسماعيليه',
+    zoneId: 'hL4_6FWz9xv',
+    zoneName: 'Isamilia Center'
+  },
+  'EG-12': {
+    cityId: 'PickurJ5uJZ9rDTHW',
+    districtId: 'LS06gEqmz09A',
+    districtName: 'Hai Eswees',
+    districtOtherName: 'حي السويس',
+    zoneId: 'yrdTOW2LcHM9',
+    zoneName: 'Hai Eswees'
+  },
+  'EG-10': {
+    cityId: '6ExcoGbpYHnggP8JD',
+    districtId: '1Y1QtXKWXDa',
+    districtName: 'Zakazik Center',
+    districtOtherName: 'مركز الزقازيق',
+    zoneId: 'qj1cLDrTnYR',
+    zoneName: 'ElZakazik'
+  },
+  'EG-16': {
+    cityId: 'LzbbvTzZ7D2CgE2PL',
+    districtId: 'nfBeyBeQsR8',
+    districtName: 'Beni Suef',
+    districtOtherName: 'بني سويف',
+    zoneId: 'B_7aviisBY7',
+    zoneName: 'Beni Suef'
+  },
+  'EG-15': {
+    cityId: 'BW5MiNxEirB7tuz2y',
+    districtId: 'WW0EFPxOAqk',
+    districtName: 'ElFayoum ElGadida',
+    districtOtherName: 'الفيوم الجديده',
+    zoneId: 'NdiDsNPtfWN',
+    zoneName: 'ElFayoum ElGadida'
+  },
+  'EG-19': {
+    cityId: 'si6eLnKjXqTFTMBj9',
+    districtId: 'sCvZCt5FL9m',
+    districtName: 'ElMinya',
+    districtOtherName: 'المنيا',
+    zoneId: 'ja03e0agN4c',
+    zoneName: 'ElMinya'
+  },
+  'EG-17': {
+    cityId: '7mDPAohM3ArSZmWTm',
+    districtId: 'q666sjR_3XO',
+    districtName: 'Asyut',
+    districtOtherName: 'اسيوط',
+    zoneId: 'CysfLBKevjl',
+    zoneName: 'Asyut'
+  },
+  'EG-18': {
+    cityId: 'n3EENg2adhuR9xBZK',
+    districtId: '-jXZ1r_Nr1i',
+    districtName: 'Markaz Akhmim',
+    districtOtherName: 'مركز اخميم',
+    zoneId: 'L9XAfaCBbZK',
+    zoneName: 'Akhmim'
+  },
+  'EG-20': {
+    cityId: 'vfTHTes3uGjAszgtg',
+    districtId: 'fLXDk3zBk2',
+    districtName: 'Qena',
+    districtOtherName: 'قنا',
+    zoneId: 'y4biTJ94x7Z',
+    zoneName: 'Qena'
+  },
+  'EG-22': {
+    cityId: 'wgYEdH2WMzxGE2Ztp',
+    districtId: 'CJO76x72b9-',
+    districtName: 'Luxor',
+    districtOtherName: 'الاقصر',
+    zoneId: 'O9AYBM01B1A',
+    zoneName: 'Luxor'
+  },
+  'EG-21': {
+    cityId: 'kLvZ5JY6LJPL5chzN',
+    districtId: 'f-yQ-51BV',
+    districtName: 'Aswan Center',
+    districtOtherName: 'مركز اسوان',
+    zoneId: 'NJDIJ8i4ty',
+    zoneName: 'Aswan Center'
+  },
+  'EG-23': {
+    cityId: 'r5TscLCNSjR2GimxQ',
+    districtId: 'fXt0YGPatGVJ',
+    districtName: 'El Kawthar',
+    districtOtherName: 'الكوثر',
+    zoneId: 'EjqVG71e9m6X',
+    zoneName: 'El Kawthar'
+  },
+  'EG-28': {
+    cityId: 'KBpGiRZJMIx',
+    districtId: 'EOy6GalfgW',
+    districtName: 'K 144 to K 295 towards Matrouh',
+    districtOtherName: 'ك 144 الي ك 295 في اتجاه مطروح',
+    zoneId: 'ssbXuFadEG',
+    zoneName: 'K 144 to K 295 towards Matrouh'
+  },
+  'EG-24': {
+    cityId: 'w4yDVHVJWqa4HpbzA',
+    districtId: '-gFKRSDhig7',
+    districtName: 'Markaz Baris',
+    districtOtherName: 'مركز باريس',
+    zoneId: 'F3T_tzy9viA',
+    zoneName: 'Markaz Baris'
+  },
+  'EG-26': {
+    cityId: 'nG_c44vHQht',
+    districtId: 'oM-nJGjDy4',
+    districtName: 'Abu Rudeis',
+    districtOtherName: 'ابو رديس',
+    zoneId: 'Us2zESWsx5R',
+    zoneName: 'Abu Rudeis'
+  },
+  'EG-27': {
+    cityId: 'ZuCaDAVQlPT',
+    districtId: 'K1PCz745a1l',
+    districtName: 'ElArish',
+    districtOtherName: 'العريش',
+    zoneId: 'ur9NCqG_HVD',
+    zoneName: 'ElArish'
+  },
+  'EG-03': {
+    cityId: '2hGtNLfRgqGrJjnW9',
+    districtId: 'hNaNaHxOnC9D',
+    districtName: 'Kilo 102-Row Marina Village',
+    districtOtherName: 'قريه رو مارينا الساحل الشمالي - كيلو 102',
+    zoneId: 'tGhYX6zeDHEV',
+    zoneName: 'Kilo 102-Row Marina Village'
+  }
+};
+
+const districtsCache = new Map<string, any[]>();
+
+/**
+ * Intelligently matches a customer's address to a specific Bosta district,
+ * or reliably falls back to the default district of the governorate.
+ */
+export async function resolveBostaDistrict(
+  cityCode: string,
+  cityId: string,
+  fullAddressText: string
+): Promise<{ districtId: string; districtName: string; zoneName?: string }> {
+  const defaultEntry = DEFAULT_CITY_DISTRICTS[cityCode] || DEFAULT_CITY_DISTRICTS['EG-01'];
+
+  if (!cityId) {
+    return {
+      districtId: defaultEntry.districtId,
+      districtName: defaultEntry.districtName,
+      zoneName: defaultEntry.zoneName
+    };
+  }
+
+  try {
+    let districts: any[] = districtsCache.get(cityId) || [];
+    if (districts.length === 0) {
+      const baseUrl = getBostaBaseUrl();
+      const res = await fetch(`${baseUrl}/api/v2/cities/${encodeURIComponent(cityId)}/districts`, {
+        headers: {
+          'User-Agent': 'Gold-Clean-Store/1.0',
+          'Accept': 'application/json'
+        },
+        signal: AbortSignal.timeout(3500)
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const list = Array.isArray(json?.data) ? json.data : [];
+        if (list.length > 0) {
+          districts = list;
+          districtsCache.set(cityId, list);
+        }
+      }
+    }
+
+    if (districts.length > 0) {
+      const normAddr = normalizeArabicText(fullAddressText || '').toLowerCase();
+
+      for (const d of districts) {
+        const normOther = normalizeArabicText(d.districtOtherName || '').toLowerCase();
+        const normName = String(d.districtName || '').toLowerCase();
+        const normZone = normalizeArabicText(d.zoneOtherName || '').toLowerCase();
+
+        if (
+          (normOther && normOther.length > 3 && normAddr.includes(normOther)) ||
+          (normName && normName.length > 3 && normAddr.includes(normName)) ||
+          (normZone && normZone.length > 3 && normAddr.includes(normZone))
+        ) {
+          return {
+            districtId: d.districtId,
+            districtName: d.districtName,
+            zoneName: d.zoneName
+          };
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Dynamic Bosta district matching error:', err);
+  }
+
+  return {
+    districtId: defaultEntry.districtId,
+    districtName: defaultEntry.districtName,
+    zoneName: defaultEntry.zoneName
+  };
+}
+
 // Cached token for email/password authentication
 let cachedToken: string | null = null;
 let tokenExpiresAt: number = 0;
+
 
 /**
  * Resolves the Bosta Base URL (production or staging).
@@ -218,6 +529,13 @@ export async function createBostaDelivery(
     deliveryNotes = String(params.notes).slice(0, 250);
   }
 
+  // Resolve valid district for Bosta routing
+  const resolvedDistrict = await resolveBostaDistrict(
+    cityCode,
+    bostaCity?.id || DEFAULT_CITY_DISTRICTS[cityCode]?.cityId || 'FceDyHXwpSYYF9zGW',
+    `${params.customerCity} ${params.customerAddress} ${params.notes || ''}`
+  );
+
   const payload: any = {
     type: 10, // 10 = Forward / Standard Delivery
     specs: {
@@ -231,7 +549,10 @@ export async function createBostaDelivery(
     cod: Math.max(0, Math.round(Number(params.totalPrice) || 0)),
     dropOffAddress: {
       firstLine: addressLine,
-      city: cityCode
+      city: cityCode,
+      districtId: resolvedDistrict.districtId,
+      districtName: resolvedDistrict.districtName,
+      ...(resolvedDistrict.zoneName ? { zone: resolvedDistrict.zoneName } : {})
     },
     businessReference: String(params.orderId || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 50),
     receiver: {
