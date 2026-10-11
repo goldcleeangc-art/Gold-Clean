@@ -557,7 +557,7 @@ export async function createBostaDelivery(
       size: 'SMALL',
       packageDetails: {
         itemsCount: Math.max(1, params.itemsCount || 1),
-        description: (params.itemsDescription || 'منتجات جولد كلين').slice(0, 100)
+        description: (params.itemsDescription || 'منتجات جولد كلين').slice(0, 200)
       }
     },
     cod: Math.max(0, Math.round(Number(params.totalPrice) || 0)),

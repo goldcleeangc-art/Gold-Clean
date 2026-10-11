@@ -127,70 +127,77 @@ export async function POST(req: NextRequest) {
         for (let subIdx = 0; subIdx < subItems.length; subIdx++) {
           const sub = subItems[subIdx];
           let subCode = sub.productCode || sub.code;
+          let subName = sub.productName || sub.name;
 
-          if (!subCode && sub.productId) {
+          if ((!subCode || !subName) && sub.productId) {
             try {
               const prodSnap = await getDoc(doc(db, 'products', sub.productId));
               if (prodSnap.exists()) {
-                subCode = prodSnap.data()?.code || '';
+                const prodData = prodSnap.data();
+                if (!subCode) subCode = prodData?.code || '';
+                if (!subName) subName = prodData?.name || '';
               }
             } catch (err) {
               // fallback
             }
           }
 
-          const cleanSubCode = extractSkuCode(subCode, sub.productName || sub.name, sub.productId || sub.id, subIdx + 1);
+          const cleanSubCode = extractSkuCode(subCode, subName, sub.productId || sub.id, subIdx + 1);
           const perBundleQty = Number(sub.quantity) || 1;
           const totalSubQty = perBundleQty * parentQty;
           physicalItems.push({
             code: cleanSubCode,
-            name: String(sub.productName || sub.name || cleanSubCode),
+            name: String(subName || cleanSubCode),
             quantity: totalSubQty
           });
         }
       } else {
         // Regular individual product
         let itemCode = it.productCode || it.code;
+        let itemName = it.productName || it.itemName || it.name;
 
-        if (!itemCode && it.productId) {
+        if ((!itemCode || !itemName) && it.productId) {
           try {
             const prodSnap = await getDoc(doc(db, 'products', it.productId));
             if (prodSnap.exists()) {
-              itemCode = prodSnap.data()?.code || '';
+              const prodData = prodSnap.data();
+              if (!itemCode) itemCode = prodData?.code || '';
+              if (!itemName) itemName = prodData?.name || '';
             }
           } catch (err) {
             // fallback
           }
         }
 
-        const cleanItemCode = extractSkuCode(itemCode, it.productName || it.itemName, it.productId || it.id, itemIdx + 1);
+        const cleanItemCode = extractSkuCode(itemCode, itemName, it.productId || it.id, itemIdx + 1);
         physicalItems.push({
           code: cleanItemCode,
-          name: String(it.productName || it.itemName || cleanItemCode),
+          name: String(itemName || cleanItemCode),
           quantity: parentQty
         });
       }
     }
 
-    // Aggregate quantities by product SKU code
-    const skuAggregatedMap = new Map<string, { code: string; name: string; quantity: number }>();
+    // Aggregate quantities by product name
+    const itemsAggregatedMap = new Map<string, { code: string; name: string; quantity: number }>();
     physicalItems.forEach(item => {
-      const existing = skuAggregatedMap.get(item.code);
+      const displayName = (item.name || item.code || 'منتج').trim();
+      const existing = itemsAggregatedMap.get(displayName);
       if (existing) {
         existing.quantity += item.quantity;
       } else {
-        skuAggregatedMap.set(item.code, { ...item });
+        itemsAggregatedMap.set(displayName, { ...item, name: displayName });
       }
     });
-    const finalPhysicalItems = Array.from(skuAggregatedMap.values());
+    const finalPhysicalItems = Array.from(itemsAggregatedMap.values());
 
     const totalItemQuantity = finalPhysicalItems.length > 0
       ? finalPhysicalItems.reduce((sum, it) => sum + (Number(it.quantity) || 1), 0)
       : 1;
 
-    // Build Code-based summary: e.g. "2x GC02 + 1x GC03"
-    const shortParts = finalPhysicalItems.map(it => `${it.quantity}x ${it.code}`);
-    const shortSummary = shortParts.join(' + ') || 'منتجات جولد كلين';
+    // Build Name and Quantity summary: e.g. "2x جل منظف الذهب + 1x ملمع الفضة"
+    const nameParts = finalPhysicalItems.map(it => `${it.quantity}x ${it.name}`);
+    const itemsSummary = nameParts.join(' + ') || 'منتجات جولد كلين';
 
     // Submit to Bosta API
     const bostaResult = await createBostaDelivery({
@@ -203,7 +210,7 @@ export async function POST(req: NextRequest) {
       notes,
       totalPrice: Number(totalPrice) || 0,
       itemsCount: totalItemQuantity,
-      itemsDescription: shortSummary
+      itemsDescription: itemsSummary
     });
 
     return NextResponse.json({
