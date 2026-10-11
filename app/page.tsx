@@ -30,6 +30,10 @@ import {
   Banknote,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   Droplet,
   Tag,
   LayoutGrid,
@@ -388,6 +392,13 @@ export default function StorePage() {
   const [adminTab, setAdminTab] = useState<'orders' | 'products' | 'offers' | 'categories' | 'stats' | 'users'>('orders');
   const [adminOrderFilter, setAdminOrderFilter] = useState<'all' | 'pending' | 'preparing' | 'shipping' | 'delivered' | 'cancelled' | 'bosta_unsynced' | 'bosta_synced'>('all');
   const [adminOrderSearch, setAdminOrderSearch] = useState<string>('');
+
+  // Admin Orders Pagination & Date Period Filter States
+  const [orderDatePreset, setOrderDatePreset] = useState<'all' | 'today' | 'yesterday' | 'last_7_days' | 'last_30_days' | 'this_month' | 'custom'>('all');
+  const [orderStartDate, setOrderStartDate] = useState<string>('');
+  const [orderEndDate, setOrderEndDate] = useState<string>('');
+  const [ordersCurrentPage, setOrdersCurrentPage] = useState<number>(1);
+  const [ordersPerPage, setOrdersPerPage] = useState<number>(10);
 
   // New product editing/adding form
   const [isProductFormOpen, setIsProductFormOpen] = useState<boolean>(false);
@@ -1925,20 +1936,63 @@ export default function StorePage() {
     }
   };
 
-  // Export orders to Excel (CSV with UTF-8 BOM for native Arabic support in Microsoft Excel)
-  const handleExportOrdersToExcel = (targetStatus: string = 'preparing') => {
+  const handleApplyDatePreset = (preset: 'all' | 'today' | 'yesterday' | 'last_7_days' | 'last_30_days' | 'this_month' | 'custom') => {
+    setOrderDatePreset(preset);
+    const now = new Date();
+    const formatYMD = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
 
+    if (preset === 'all') {
+      setOrderStartDate('');
+      setOrderEndDate('');
+    } else if (preset === 'today') {
+      const todayStr = formatYMD(now);
+      setOrderStartDate(todayStr);
+      setOrderEndDate(todayStr);
+    } else if (preset === 'yesterday') {
+      const yest = new Date(Date.now() - 86400000);
+      const yestStr = formatYMD(yest);
+      setOrderStartDate(yestStr);
+      setOrderEndDate(yestStr);
+    } else if (preset === 'last_7_days') {
+      const past7 = new Date(Date.now() - 6 * 86400000);
+      setOrderStartDate(formatYMD(past7));
+      setOrderEndDate(formatYMD(now));
+    } else if (preset === 'last_30_days') {
+      const past30 = new Date(Date.now() - 29 * 86400000);
+      setOrderStartDate(formatYMD(past30));
+      setOrderEndDate(formatYMD(now));
+    } else if (preset === 'this_month') {
+      const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+      setOrderStartDate(formatYMD(firstDay));
+      setOrderEndDate(formatYMD(now));
+    }
+  };
+
+  // Export orders to Excel (CSV with UTF-8 BOM for native Arabic support in Microsoft Excel)
+  const handleExportOrdersToExcel = (
+    targetStatus: string = 'preparing',
+    exportFormat: 'comprehensive' | 'standard_3_cols' = 'standard_3_cols'
+  ) => {
     let targetOrders: Order[] = [];
     let filenamePrefix = '';
 
     if (targetStatus === 'all') {
-      targetOrders = allOrders;
+      targetOrders = (orderStartDate || orderEndDate) ? dateScopedOrders : allOrders;
       filenamePrefix = 'جميع_طلبات_المتجر';
     } else if (targetStatus === 'current_filter') {
       targetOrders = filteredOrders;
-      filenamePrefix = `طلبات_مفلترة_${adminOrderFilter}`;
+      const periodLabel = orderStartDate || orderEndDate
+        ? `_من_${orderStartDate || 'البداية'}_إلى_${orderEndDate || 'اليوم'}`
+        : '';
+      filenamePrefix = `طلبات_مفلترة_${adminOrderFilter}${periodLabel}`;
     } else {
-      targetOrders = allOrders.filter(o => o.status === targetStatus);
+      const baseList = (orderStartDate || orderEndDate) ? dateScopedOrders : allOrders;
+      targetOrders = baseList.filter(o => o.status === targetStatus);
       const statusNames: Record<string, string> = {
         preparing: 'جاري_التجهيز',
         pending: 'معلق',
@@ -1950,20 +2004,13 @@ export default function StorePage() {
     }
 
     if (targetOrders.length === 0) {
-      alert(`لا توجد أي طلبات بحالة (${targetStatus === 'preparing' ? 'جاري التجهيز' : targetStatus}) حالياً لتصديرها.`);
+      alert(`لا توجد أي طلبات تطابق المعايير أو الفترة المحددة حالياً لتصديرها.`);
       return;
     }
 
-    // Strictly 3 columns as requested: الاسم، الرقم، تفاصيل منتجات الطلب
-    const headers = [
-      'الاسم',
-      'الرقم',
-      'تفاصيل منتجات الطلب'
-    ];
-
-    const rows = targetOrders.map((ord) => {
-      // Format order items details cleanly (e.g. 2x صابون لافندر (GC02) + [باقة التوفير: 2x صابون (GC02) + 1x معقم (GC03)])
-      const itemsDetail = (ord.items || [])
+    // Helper to format order items with real product names & quantities
+    const formatItemsText = (ord: Order) => {
+      return (ord.items || [])
         .map(it => {
           const isOffer = it.isOffer || (typeof it.productId === 'string' && it.productId.startsWith('offer-'));
           const bundle = it.bundleItems && it.bundleItems.length > 0
@@ -1972,29 +2019,76 @@ export default function StorePage() {
 
           if (bundle && Array.isArray(bundle) && bundle.length > 0) {
             const bundleDesc = bundle.map(sub => {
-              const subCode = sub.productCode || products.find(p => p.id === sub.productId)?.code || '';
-              const codeLabel = subCode ? ` (${subCode})` : '';
               const subQty = (Number(sub.quantity) || 1) * (Number(it.quantity) || 1);
-              return `${subQty}x ${sub.productName}${codeLabel}`;
+              return `${subQty}x ${sub.productName}`;
             }).join(' + ');
             return `[${it.productName}: ${bundleDesc}]`;
           }
 
-          const code = it.productCode || products.find(p => p.id === it.productId)?.code || offers.find(o => `offer-${o.id}` === it.productId)?.code || '';
-          const codeLabel = code ? ` (${code})` : '';
-          return `${it.quantity}x ${it.productName}${codeLabel}`;
+          return `${it.quantity}x ${it.productName}`;
         })
         .join(' + ');
+    };
 
-      const cleanPhone = ord.customerPhone ? sanitizeEgyptianPhone(ord.customerPhone, ord.customerPhone) : '';
+    let headers: string[] = [];
+    let rows: string[][] = [];
 
-      return [
-        ord.customerName || '',
-        // Force Excel to preserve leading zero
-        cleanPhone ? `="${cleanPhone}"` : '',
-        itemsDetail || ''
+    const statusNamesAr: Record<string, string> = {
+      pending: 'معلق في الانتظار',
+      preparing: 'جاري التجهيز',
+      shipping: 'خرج مع المندوب',
+      delivered: 'تم الاستلام والمحاسبة',
+      cancelled: 'ملغي'
+    };
+
+    if (exportFormat === 'comprehensive') {
+      headers = [
+        'كود الطلب',
+        'تاريخ الطلب',
+        'الاسم',
+        'الرقم',
+        'المحافظة',
+        'العنوان',
+        'تفاصيل منتجات الطلب',
+        'إجمالي المبلغ (ج.م)',
+        'حالة الطلب',
+        'رقم بوليصة الشحن',
+        'شركة الشحن',
+        'ملاحظات العميل'
       ];
-    });
+
+      rows = targetOrders.map(ord => {
+        const cleanPhone = ord.customerPhone ? sanitizeEgyptianPhone(ord.customerPhone, ord.customerPhone) : '';
+        const itemsDetail = formatItemsText(ord);
+        const trackingNum = ord.shippingInfo?.trackingNumber || ord.shippingInfo?.billCode || '';
+        return [
+          ord.id || '',
+          formatOrderDate(ord.createdAt),
+          ord.customerName || '',
+          cleanPhone ? `="${cleanPhone}"` : '',
+          ord.customerCity || '',
+          ord.customerAddress || '',
+          itemsDetail || '',
+          String(ord.totalPrice ?? 0),
+          statusNamesAr[ord.status] || ord.status,
+          trackingNum ? `="${trackingNum}"` : 'غير مسجل',
+          ord.shippingInfo?.courier || 'بوسطة',
+          ord.notes || ''
+        ];
+      });
+    } else {
+      // Strictly 3 columns format
+      headers = ['الاسم', 'الرقم', 'تفاصيل منتجات الطلب'];
+      rows = targetOrders.map(ord => {
+        const cleanPhone = ord.customerPhone ? sanitizeEgyptianPhone(ord.customerPhone, ord.customerPhone) : '';
+        const itemsDetail = formatItemsText(ord);
+        return [
+          ord.customerName || '',
+          cleanPhone ? `="${cleanPhone}"` : '',
+          itemsDetail || ''
+        ];
+      });
+    }
 
     // Construct CSV with UTF-8 BOM (\uFEFF)
     const csvContent =
@@ -2007,47 +2101,94 @@ export default function StorePage() {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
+    const periodTag = (orderStartDate || orderEndDate)
+      ? `_فترة_${orderStartDate || 'البداية'}_إلى_${orderEndDate || 'اليوم'}`
+      : '';
     const today = new Date().toISOString().slice(0, 10);
     link.setAttribute('href', url);
-    link.setAttribute('download', `${filenamePrefix}_${today}.csv`);
+    link.setAttribute('download', `${filenamePrefix}${periodTag}_${today}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
 
-  // Order status counts for Admin
-  const orderCounts = {
-    all: allOrders.length,
-    pending: allOrders.filter(o => o.status === 'pending').length,
-    preparing: allOrders.filter(o => o.status === 'preparing').length,
-    shipping: allOrders.filter(o => o.status === 'shipping').length,
-    delivered: allOrders.filter(o => o.status === 'delivered').length,
-    cancelled: allOrders.filter(o => o.status === 'cancelled').length,
-    bostaUnsynced: allOrders.filter(o => !o.shippingInfo?.trackingNumber && !o.shippingInfo?.billCode && o.status !== 'cancelled' && o.status !== 'delivered').length,
-    bostaSynced: allOrders.filter(o => !!(o.shippingInfo?.trackingNumber || o.shippingInfo?.billCode)).length,
-  };
+  // Base orders for admin status counts (filtered by date if date range is active)
+  const dateScopedOrders = useMemo(() => {
+    if (!orderStartDate && !orderEndDate) return allOrders;
+    return allOrders.filter(ord => {
+      const orderDate = getOrderDateObj(ord.createdAt);
+      if (!orderDate) return false;
+      const time = orderDate.getTime();
+      if (orderStartDate) {
+        const parts = orderStartDate.split('-').map(Number);
+        if (parts.length === 3) {
+          const startMs = new Date(parts[0], parts[1] - 1, parts[2], 0, 0, 0, 0).getTime();
+          if (time < startMs) return false;
+        }
+      }
+      if (orderEndDate) {
+        const parts = orderEndDate.split('-').map(Number);
+        if (parts.length === 3) {
+          const endMs = new Date(parts[0], parts[1] - 1, parts[2], 23, 59, 59, 999).getTime();
+          if (time > endMs) return false;
+        }
+      }
+      return true;
+    });
+  }, [allOrders, orderStartDate, orderEndDate]);
 
-  // Admin filtered orders by status and search query
-  const filteredOrders = allOrders.filter((ord) => {
-    let statusMatch = true;
-    if (adminOrderFilter === 'all') {
-      statusMatch = true;
-    } else if (adminOrderFilter === 'bosta_unsynced') {
-      statusMatch = !ord.shippingInfo?.trackingNumber && !ord.shippingInfo?.billCode && ord.status !== 'cancelled' && ord.status !== 'delivered';
-    } else if (adminOrderFilter === 'bosta_synced') {
-      statusMatch = !!(ord.shippingInfo?.trackingNumber || ord.shippingInfo?.billCode);
-    } else {
-      statusMatch = ord.status === adminOrderFilter;
-    }
-    const query = adminOrderSearch.trim().toLowerCase();
-    if (!query) return statusMatch;
-    const nameMatch = ord.customerName?.toLowerCase().includes(query);
-    const phoneMatch = ord.customerPhone?.includes(query);
-    const idMatch = ord.id?.toLowerCase().includes(query);
-    const waybillMatch = (ord.shippingInfo?.trackingNumber || ord.shippingInfo?.billCode || '').toLowerCase().includes(query);
-    return statusMatch && (nameMatch || phoneMatch || idMatch || waybillMatch);
-  });
+  // Order status counts for Admin (scoped to active date period if filtered)
+  const orderCounts = useMemo(() => ({
+    all: dateScopedOrders.length,
+    pending: dateScopedOrders.filter(o => o.status === 'pending').length,
+    preparing: dateScopedOrders.filter(o => o.status === 'preparing').length,
+    shipping: dateScopedOrders.filter(o => o.status === 'shipping').length,
+    delivered: dateScopedOrders.filter(o => o.status === 'delivered').length,
+    cancelled: dateScopedOrders.filter(o => o.status === 'cancelled').length,
+    bostaUnsynced: dateScopedOrders.filter(o => !o.shippingInfo?.trackingNumber && !o.shippingInfo?.billCode && o.status !== 'cancelled' && o.status !== 'delivered').length,
+    bostaSynced: dateScopedOrders.filter(o => !!(o.shippingInfo?.trackingNumber || o.shippingInfo?.billCode)).length,
+  }), [dateScopedOrders]);
+
+  // Admin filtered orders by status, date range, and search query
+  const filteredOrders = useMemo(() => {
+    return dateScopedOrders.filter((ord) => {
+      let statusMatch = true;
+      if (adminOrderFilter === 'all') {
+        statusMatch = true;
+      } else if (adminOrderFilter === 'bosta_unsynced') {
+        statusMatch = !ord.shippingInfo?.trackingNumber && !ord.shippingInfo?.billCode && ord.status !== 'cancelled' && ord.status !== 'delivered';
+      } else if (adminOrderFilter === 'bosta_synced') {
+        statusMatch = !!(ord.shippingInfo?.trackingNumber || ord.shippingInfo?.billCode);
+      } else {
+        statusMatch = ord.status === adminOrderFilter;
+      }
+      if (!statusMatch) return false;
+
+      const query = adminOrderSearch.trim().toLowerCase();
+      if (!query) return true;
+      const nameMatch = ord.customerName?.toLowerCase().includes(query);
+      const phoneMatch = ord.customerPhone?.includes(query);
+      const idMatch = ord.id?.toLowerCase().includes(query);
+      const waybillMatch = (ord.shippingInfo?.trackingNumber || ord.shippingInfo?.billCode || '').toLowerCase().includes(query);
+      return nameMatch || phoneMatch || idMatch || waybillMatch;
+    });
+  }, [dateScopedOrders, adminOrderFilter, adminOrderSearch]);
+
+  // Reset pagination page when filters change
+  useEffect(() => {
+    setOrdersCurrentPage(1);
+  }, [adminOrderFilter, adminOrderSearch, orderStartDate, orderEndDate, ordersPerPage]);
+
+  // Orders Pagination calculations
+  const totalOrders = filteredOrders.length;
+  const totalOrderPages = Math.max(1, Math.ceil(totalOrders / ordersPerPage));
+  const validOrderPage = Math.min(Math.max(1, ordersCurrentPage), totalOrderPages);
+  const startIndex = (validOrderPage - 1) * ordersPerPage;
+  const endIndex = Math.min(startIndex + ordersPerPage, totalOrders);
+  const paginatedOrders = useMemo(() => {
+    return filteredOrders.slice(startIndex, endIndex);
+  }, [filteredOrders, startIndex, endIndex]);
 
   // Filter computation
   const filteredProducts = products.filter((prod) => {
@@ -2473,6 +2614,119 @@ export default function StorePage() {
                         </div>
                       </div>
 
+                      {/* Date Range & Period Filter Card */}
+                      <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                          {/* Presets and Title */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[11px] font-bold text-slate-600 flex items-center gap-1 ml-1">
+                              <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                              <span>تحديد الفترة الزمنية:</span>
+                            </span>
+                            {[
+                              { id: 'all', label: 'كل الفترات' },
+                              { id: 'today', label: 'اليوم' },
+                              { id: 'yesterday', label: 'أمس' },
+                              { id: 'last_7_days', label: 'آخر 7 أيام' },
+                              { id: 'last_30_days', label: 'آخر 30 يوماً' },
+                              { id: 'this_month', label: 'هذا الشهر' },
+                              { id: 'custom', label: 'فترة مخصصة' }
+                            ].map((p) => {
+                              const isActive = orderDatePreset === p.id;
+                              return (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  onClick={() => handleApplyDatePreset(p.id as any)}
+                                  className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all cursor-pointer border ${
+                                    isActive
+                                      ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                      : 'bg-white hover:bg-slate-50 text-slate-600 border-slate-200'
+                                  }`}
+                                >
+                                  {p.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Excel Export Buttons for Filtered Period */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => handleExportOrdersToExcel('current_filter', 'comprehensive')}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] rounded-xl shadow-xs transition-colors cursor-pointer"
+                              title="تصدير شيت إكسيل شامل للطلبات المحددة بالفترة الحالية"
+                            >
+                              <FileSpreadsheet className="w-3.5 h-3.5" />
+                              <span>تصدير إكسيل الفترة ({filteredOrders.length}) 📊</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleExportOrdersToExcel('current_filter', 'standard_3_cols')}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-[11px] rounded-xl border border-emerald-300 transition-colors cursor-pointer"
+                              title="تصدير شيت الـ 3 أعمدة (الاسم، الرقم، وتفاصيل الطلب) للفترة المحددة"
+                            >
+                              <Download className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>إكسيل 3 أعمدة ({filteredOrders.length}) 📥</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Custom Date Pickers Row */}
+                        {(orderDatePreset === 'custom' || orderStartDate || orderEndDate) && (
+                          <div className="flex flex-wrap items-center gap-3 pt-2.5 border-t border-slate-100 bg-slate-50/70 p-2.5 rounded-xl">
+                            <div className="flex items-center gap-2">
+                              <label className="text-[11px] font-bold text-slate-600 shrink-0">من تاريخ:</label>
+                              <input
+                                type="date"
+                                value={orderStartDate}
+                                onChange={(e) => {
+                                  setOrderStartDate(e.target.value);
+                                  setOrderDatePreset('custom');
+                                }}
+                                className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 font-sans"
+                              />
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <label className="text-[11px] font-bold text-slate-600 shrink-0">إلى تاريخ:</label>
+                              <input
+                                type="date"
+                                value={orderEndDate}
+                                onChange={(e) => {
+                                  setOrderEndDate(e.target.value);
+                                  setOrderDatePreset('custom');
+                                }}
+                                className="px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-blue-500 font-sans"
+                              />
+                            </div>
+
+                            {(orderStartDate || orderEndDate) && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOrderStartDate('');
+                                  setOrderEndDate('');
+                                  setOrderDatePreset('all');
+                                }}
+                                className="text-[11px] text-rose-600 hover:text-rose-700 font-bold flex items-center gap-1 hover:underline cursor-pointer"
+                              >
+                                <X className="w-3 h-3" />
+                                <span>مسح فلتر التاريخ</span>
+                              </button>
+                            )}
+
+                            {(orderStartDate || orderEndDate) && (
+                              <span className="text-[10px] text-slate-500 mr-auto font-medium bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                                الفترة النشطة: {orderStartDate || 'البداية'} ⬅️ {orderEndDate || 'اليوم'}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
                       {/* Action Bar for Orders Management */}
                       <div className="bg-gradient-to-r from-slate-50 via-blue-50/40 to-indigo-50/20 border border-slate-200 rounded-2xl p-3.5 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-xs">
                         <div className="flex items-center gap-3">
@@ -2566,20 +2820,60 @@ export default function StorePage() {
                         </div>
                       ) : filteredOrders.length === 0 ? (
                         <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 space-y-2">
-                          <p className="text-xs text-slate-500 font-bold">لا توجد طلبات تطابق الفلتر أو البحث الحالي.</p>
+                          <p className="text-xs text-slate-500 font-bold">لا توجد طلبات تطابق الفلتر أو البحث أو الفترة المحددة.</p>
                           <button
                             onClick={() => {
                               setAdminOrderFilter('all');
                               setAdminOrderSearch('');
+                              setOrderStartDate('');
+                              setOrderEndDate('');
+                              setOrderDatePreset('all');
                             }}
                             className="text-xs text-blue-600 hover:underline font-bold cursor-pointer"
                           >
-                            إعادة ضبط الفلاتر وعرض جميع الطلبات
+                            إعادة ضبط جميع الفلاتر وعرض كافة الطلبات
                           </button>
                         </div>
                       ) : (
-                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                          {filteredOrders.map((ord) => (
+                        <div className="space-y-4">
+                          {/* Pagination & Display Summary Top Bar */}
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-white px-4 py-2.5 rounded-2xl border border-slate-200/80 shadow-2xs">
+                            <div className="text-xs text-slate-600 font-medium flex items-center gap-1.5 flex-wrap">
+                              <span>عرض الطلبات:</span>
+                              <strong className="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                                {totalOrders === 0 ? 0 : startIndex + 1} - {endIndex}
+                              </strong>
+                              <span>من إجمالي</span>
+                              <strong className="text-slate-900 font-bold">{totalOrders}</strong>
+                              <span>طلب</span>
+                              {totalOrderPages > 1 && (
+                                <span className="text-slate-400 text-[11px] mr-1">
+                                  (صفحة {validOrderPage} من {totalOrderPages})
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Items per page selector */}
+                            <div className="flex items-center gap-2">
+                              <span className="text-[11px] text-slate-500 font-medium">عدد الطلبات بالصفحة:</span>
+                              <select
+                                value={ordersPerPage}
+                                onChange={(e) => {
+                                  setOrdersPerPage(Number(e.target.value));
+                                  setOrdersCurrentPage(1);
+                                }}
+                                className="px-2.5 py-1 rounded-lg border border-slate-200 text-xs bg-slate-50 text-slate-800 font-bold outline-none cursor-pointer focus:ring-1 focus:ring-blue-500"
+                              >
+                                <option value={10}>10 طلبات</option>
+                                <option value={20}>20 طلب</option>
+                                <option value={50}>50 طلب</option>
+                                <option value={100}>100 طلب</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                            {paginatedOrders.map((ord) => (
                             <div key={ord.id} className="p-5 bg-white rounded-2xl border border-slate-100 shadow-xs relative space-y-4 hover:border-slate-200 transition-all">
                               
                               {/* Order Header: ID, Date, and Status Selector */}
@@ -2808,7 +3102,114 @@ export default function StorePage() {
                             </div>
                           ))}
                         </div>
-                      )}
+
+                        {/* Bottom Pagination Bar */}
+                        {totalOrderPages > 1 && (
+                          <div className="flex flex-col sm:flex-row justify-between items-center gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs mt-2">
+                            <div className="text-xs text-slate-500 font-medium">
+                              صفحة <strong className="text-blue-700 font-bold">{validOrderPage}</strong> من{' '}
+                              <strong className="text-slate-800 font-bold">{totalOrderPages}</strong> • إجمالي{' '}
+                              <strong className="text-slate-800 font-bold">{totalOrders}</strong> طلب
+                            </div>
+
+                            <div className="flex items-center gap-1.5" dir="rtl">
+                              {/* First Page */}
+                              <button
+                                type="button"
+                                onClick={() => setOrdersCurrentPage(1)}
+                                disabled={validOrderPage === 1}
+                                className="p-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                                title="الصفحة الأولى"
+                              >
+                                <ChevronsRight className="w-4 h-4" />
+                              </button>
+
+                              {/* Previous Page */}
+                              <button
+                                type="button"
+                                onClick={() => setOrdersCurrentPage(prev => Math.max(1, prev - 1))}
+                                disabled={validOrderPage === 1}
+                                className="p-1.5 px-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors text-xs font-bold flex items-center gap-1"
+                              >
+                                <ChevronRight className="w-4 h-4" />
+                                <span>السابق</span>
+                              </button>
+
+                              {/* Numeric Page Buttons */}
+                              {(() => {
+                                const pages: (number | string)[] = [];
+                                const maxVisible = 5;
+                                if (totalOrderPages <= maxVisible) {
+                                  for (let i = 1; i <= totalOrderPages; i++) pages.push(i);
+                                } else {
+                                  pages.push(1);
+                                  let start = Math.max(2, validOrderPage - 1);
+                                  let end = Math.min(totalOrderPages - 1, validOrderPage + 1);
+
+                                  if (validOrderPage <= 2) {
+                                    end = 4;
+                                  } else if (validOrderPage >= totalOrderPages - 1) {
+                                    start = totalOrderPages - 3;
+                                  }
+
+                                  if (start > 2) pages.push('...');
+                                  for (let i = start; i <= end; i++) pages.push(i);
+                                  if (end < totalOrderPages - 1) pages.push('...');
+                                  pages.push(totalOrderPages);
+                                }
+
+                                return pages.map((page, idx) => {
+                                  if (page === '...') {
+                                    return (
+                                      <span key={`ellipsis-${idx}`} className="px-1 text-slate-400 font-bold text-xs">
+                                        ...
+                                      </span>
+                                    );
+                                  }
+                                  const isCurrent = page === validOrderPage;
+                                  return (
+                                    <button
+                                      key={page}
+                                      type="button"
+                                      onClick={() => setOrdersCurrentPage(Number(page))}
+                                      className={`w-8 h-8 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                                        isCurrent
+                                          ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                                          : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+                                      }`}
+                                    >
+                                      {page}
+                                    </button>
+                                  );
+                                });
+                              })()}
+
+                              {/* Next Page */}
+                              <button
+                                type="button"
+                                onClick={() => setOrdersCurrentPage(prev => Math.min(totalOrderPages, prev + 1))}
+                                disabled={validOrderPage === totalOrderPages}
+                                className="p-1.5 px-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors text-xs font-bold flex items-center gap-1"
+                              >
+                                <span>التالي</span>
+                                <ChevronLeft className="w-4 h-4" />
+                              </button>
+
+                              {/* Last Page */}
+                              <button
+                                type="button"
+                                onClick={() => setOrdersCurrentPage(totalOrderPages)}
+                                disabled={validOrderPage === totalOrderPages}
+                                className="p-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                                title="الصفحة الأخيرة"
+                              >
+                                <ChevronsLeft className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                     </div>
                   )}
 
