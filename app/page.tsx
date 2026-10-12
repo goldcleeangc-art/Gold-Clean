@@ -322,6 +322,8 @@ export default function StorePage() {
   const [syncingOrderId, setSyncingOrderId] = useState<string | null>(null);
   const [isBulkSyncing, setIsBulkSyncing] = useState<boolean>(false);
   const [bulkSyncProgress, setBulkSyncProgress] = useState<{ current: number; total: number } | null>(null);
+  const [isResendingPageOrders, setIsResendingPageOrders] = useState<boolean>(false);
+  const [resendPageProgress, setResendPageProgress] = useState<{ current: number; total: number } | null>(null);
   const [copiedBillCode, setCopiedBillCode] = useState<string | null>(null);
   const [successOrder, setSuccessOrder] = useState<Order | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -2447,6 +2449,153 @@ export default function StorePage() {
     return filteredOrders.slice(startIndex, endIndex);
   }, [filteredOrders, startIndex, endIndex]);
 
+  // Resend / Recreate shipping waybills for all orders currently displayed on the pagination page
+  const handleResendPaginatedOrdersToShipping = async () => {
+    if (paginatedOrders.length === 0) {
+      alert('لا توجد أي طلبات معروضة في الصفحة الحالية لإعادة إرسالها!');
+      return;
+    }
+
+    // Exclude delivered and cancelled orders to protect processed orders
+    const targetOrders = paginatedOrders.filter(
+      ord => ord.status !== 'cancelled' && ord.status !== 'delivered'
+    );
+
+    if (targetOrders.length === 0) {
+      alert('جميع الطلبات المعروضة بالصفحة الحالية إما ملغية أو تم تسليمها بالفعل، ولا يمكن إرسالها لشركة الشحن.');
+      return;
+    }
+
+    const skippedCount = paginatedOrders.length - targetOrders.length;
+    const confirmResend = confirm(
+      `🚚 تأكيد إعادة الإرسال لشركة الشحن:\n\n` +
+      `هل تريد بالتأكيد إعادة إرسال طلبات الصفحة الحالية (${targetOrders.length} طلب) إلى شركة الشحن (بوسطة)؟\n\n` +
+      `سيتم تحديث وإنشاء بوالص الشحن لجميع طلبات الصفحة المعروضة` +
+      (skippedCount > 0 ? ` (مع استثناء ${skippedCount} طلب ملغي/مستلم).` : '.')
+    );
+    if (!confirmResend) return;
+
+    setIsResendingPageOrders(true);
+    setResendPageProgress({ current: 0, total: targetOrders.length });
+
+    let successCount = 0;
+    let failCount = 0;
+    const failedList: Array<{
+      orderId: string;
+      customerName: string;
+      customerPhone: string;
+      customerCity: string;
+      customerAddress: string;
+      totalPrice: number;
+      error: string;
+    }> = [];
+
+    for (let i = 0; i < targetOrders.length; i++) {
+      const ord = targetOrders[i];
+      setResendPageProgress({ current: i + 1, total: targetOrders.length });
+
+      try {
+        const token = await auth.currentUser?.getIdToken(true).catch(() => auth.currentUser?.getIdToken());
+        const existingCode = ord.shippingInfo?.trackingNumber || ord.shippingInfo?.billCode || '';
+
+        const res = await fetch('/api/shipping/create-order', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            orderId: ord.id,
+            trackingNumber: existingCode,
+            forceRecreate: true,
+            customerName: ord.customerName,
+            customerPhone: ord.customerPhone,
+            customerCity: ord.customerCity,
+            customerAddress: ord.customerAddress,
+            customerEmail: ord.customerEmail,
+            notes: ord.notes,
+            items: ord.items,
+            totalPrice: ord.totalPrice,
+            weight: ord.shippingWeight || 1
+          })
+        });
+
+        const data = await res.json();
+        if (data.success && (data.trackingNumber || data.billCode)) {
+          const tracking = data.trackingNumber || data.billCode;
+          const updatedShippingInfo: ShippingInfo = {
+            billCode: tracking,
+            trackingNumber: tracking,
+            deliveryId: data.deliveryId || tracking,
+            courier: 'Bosta',
+            status: data.state || 'created',
+            txlogisticId: ord.id,
+            syncedAt: new Date().toISOString()
+          };
+
+          if (ord.id) {
+            await updateDoc(doc(db, 'orders', ord.id), {
+              shippingInfo: updatedShippingInfo,
+              status: ord.status === 'pending' ? 'preparing' : ord.status
+            });
+          }
+          successCount++;
+        } else {
+          failCount++;
+          const reason = data.error || data.msg || 'فشل غير محدد من شركة الشحن';
+          failedList.push({
+            orderId: ord.id || 'N/A',
+            customerName: ord.customerName || 'عميل',
+            customerPhone: ord.customerPhone || '',
+            customerCity: ord.customerCity || '',
+            customerAddress: ord.customerAddress || '',
+            totalPrice: ord.totalPrice || 0,
+            error: reason
+          });
+          if (ord.id) {
+            await updateDoc(doc(db, 'orders', ord.id), {
+              'shippingInfo.error': reason,
+              'shippingInfo.lastAttemptAt': new Date().toISOString()
+            }).catch(() => null);
+          }
+        }
+      } catch (err: any) {
+        failCount++;
+        const reason = err.message || 'خطأ في الاتصال بالخادم';
+        failedList.push({
+          orderId: ord.id || 'N/A',
+          customerName: ord.customerName || 'عميل',
+          customerPhone: ord.customerPhone || '',
+          customerCity: ord.customerCity || '',
+          customerAddress: ord.customerAddress || '',
+          totalPrice: ord.totalPrice || 0,
+          error: reason
+        });
+        if (ord.id) {
+          await updateDoc(doc(db, 'orders', ord.id), {
+            'shippingInfo.error': reason,
+            'shippingInfo.lastAttemptAt': new Date().toISOString()
+          }).catch(() => null);
+        }
+      }
+    }
+
+    setIsResendingPageOrders(false);
+    setResendPageProgress(null);
+
+    if (failedList.length > 0) {
+      setFailedSyncOrders(failedList);
+      setIsFailedOrdersModalOpen(true);
+      alert(
+        `⚠️ اكتملت عملية إعادة الإرسال لطلبات الصفحة:\n\n` +
+        `✅ نجح إرسال: ${successCount} طلب\n` +
+        `❌ تعثر إرسال: ${failCount} طلب (تم فتح سجل المشكلات لمعاينتها).`
+      );
+    } else {
+      alert(`🏁 اكتملت إعادة إرسال طلبات الصفحة بنجاح تام!\n\n✅ تم إرسال وتحديث بوالص الشحن لجميع طلبات الصفحة (${successCount}) لدى شركة بوسطة.`);
+    }
+  };
+
   // Filter computation
   const filteredProducts = products.filter((prod) => {
     const searchMatch = prod.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -3194,6 +3343,21 @@ export default function StorePage() {
                             </span>
                           </button>
 
+                          <button
+                            type="button"
+                            onClick={handleResendPaginatedOrdersToShipping}
+                            disabled={isResendingPageOrders || isBulkSyncing || paginatedOrders.length === 0}
+                            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                            title="إعادة إرسال طلبات الصفحة المعروضة حالياً بالترقيم إلى شركة بوسطة لتحديث أو توليد بوالص الشحن"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 ${isResendingPageOrders ? 'animate-spin' : ''}`} />
+                            <span>
+                              {isResendingPageOrders
+                                ? `جاري إعادة الإرسال (${resendPageProgress?.current}/${resendPageProgress?.total})...`
+                                : `إعادة إرسال طلبات الصفحة (${paginatedOrders.length}) لشركة الشحن 🚚`}
+                            </span>
+                          </button>
+
                           {orderCounts.bostaUnsynced > 0 && (
                             <button
                               type="button"
@@ -3265,22 +3429,39 @@ export default function StorePage() {
                               )}
                             </div>
 
-                            {/* Items per page selector */}
-                            <div className="flex items-center gap-2">
-                              <span className="text-[11px] text-slate-500 font-medium">عدد الطلبات بالصفحة:</span>
-                              <select
-                                value={ordersPerPage}
-                                onChange={(e) => {
-                                  setOrdersPerPage(Number(e.target.value));
-                                  setOrdersCurrentPage(1);
-                                }}
-                                className="px-2.5 py-1 rounded-lg border border-slate-200 text-xs bg-slate-50 text-slate-800 font-bold outline-none cursor-pointer focus:ring-1 focus:ring-blue-500"
+                            {/* Actions & Items per page selector */}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={handleResendPaginatedOrdersToShipping}
+                                disabled={isResendingPageOrders || isBulkSyncing || paginatedOrders.length === 0}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-extrabold text-[11px] rounded-xl shadow-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                                title="إعادة إرسال طلبات الصفحة المعروضة حالياً بالترقيم إلى شركة بوسطة لتحديث أو توليد بوالص الشحن"
                               >
-                                <option value={10}>10 طلبات</option>
-                                <option value={20}>20 طلب</option>
-                                <option value={50}>50 طلب</option>
-                                <option value={100}>100 طلب</option>
-                              </select>
+                                <RefreshCw className={`w-3.5 h-3.5 ${isResendingPageOrders ? 'animate-spin' : ''}`} />
+                                <span>
+                                  {isResendingPageOrders
+                                    ? `جاري الإرسال (${resendPageProgress?.current}/${resendPageProgress?.total})...`
+                                    : `إعادة إرسال طلبات الصفحة (${paginatedOrders.length}) لشركة الشحن 🚚`}
+                                </span>
+                              </button>
+
+                              <div className="flex items-center gap-1.5 border-r border-slate-200 pr-2 mr-1">
+                                <span className="text-[11px] text-slate-500 font-medium">عدد بالصفحة:</span>
+                                <select
+                                  value={ordersPerPage}
+                                  onChange={(e) => {
+                                    setOrdersPerPage(Number(e.target.value));
+                                    setOrdersCurrentPage(1);
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg border border-slate-200 text-xs bg-slate-50 text-slate-800 font-bold outline-none cursor-pointer focus:ring-1 focus:ring-blue-500"
+                                >
+                                  <option value={10}>10</option>
+                                  <option value={20}>20</option>
+                                  <option value={50}>50</option>
+                                  <option value={100}>100</option>
+                                </select>
+                              </div>
                             </div>
                           </div>
 
@@ -3528,10 +3709,27 @@ export default function StorePage() {
                         {/* Bottom Pagination Bar */}
                         {totalOrderPages > 1 && (
                           <div className="flex flex-col sm:flex-row justify-between items-center gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-2xs mt-2">
-                            <div className="text-xs text-slate-500 font-medium">
-                              صفحة <strong className="text-blue-700 font-bold">{validOrderPage}</strong> من{' '}
-                              <strong className="text-slate-800 font-bold">{totalOrderPages}</strong> • إجمالي{' '}
-                              <strong className="text-slate-800 font-bold">{totalOrders}</strong> طلب
+                            <div className="flex items-center gap-3 flex-wrap">
+                              <div className="text-xs text-slate-500 font-medium">
+                                صفحة <strong className="text-blue-700 font-bold">{validOrderPage}</strong> من{' '}
+                                <strong className="text-slate-800 font-bold">{totalOrderPages}</strong> • إجمالي{' '}
+                                <strong className="text-slate-800 font-bold">{totalOrders}</strong> طلب
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={handleResendPaginatedOrdersToShipping}
+                                disabled={isResendingPageOrders || isBulkSyncing || paginatedOrders.length === 0}
+                                className="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-extrabold text-[11px] rounded-xl shadow-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                                title="إعادة إرسال طلبات الصفحة المعروضة حالياً إلى شركة بوسطة"
+                              >
+                                <RefreshCw className={`w-3.5 h-3.5 ${isResendingPageOrders ? 'animate-spin' : ''}`} />
+                                <span>
+                                  {isResendingPageOrders
+                                    ? `جاري الإرسال (${resendPageProgress?.current}/${resendPageProgress?.total})...`
+                                    : `إعادة إرسال طلبات الصفحة (${paginatedOrders.length}) لشركة الشحن 🚚`}
+                                </span>
+                              </button>
                             </div>
 
                             <div className="flex items-center gap-1.5" dir="rtl">
