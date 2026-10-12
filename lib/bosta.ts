@@ -506,6 +506,93 @@ export interface BostaDeliveryResult {
   raw?: any;
 }
 
+let cachedPickupLocationId: string | null = null;
+let cachedPickupLocationExpiry = 0;
+
+/**
+ * Fetches all registered pickup locations from the user's Bosta account.
+ */
+export async function getBostaPickupLocations(): Promise<any[]> {
+  try {
+    const baseUrl = getBostaBaseUrl();
+    const headers = await getBostaAuthHeaders();
+
+    // Try v2 first
+    let res = await fetch(`${baseUrl}/api/v2/pickup-locations`, {
+      method: 'GET',
+      headers,
+      signal: AbortSignal.timeout(6000)
+    });
+
+    if (!res.ok) {
+      // Fallback to v0
+      res = await fetch(`${baseUrl}/api/v0/pickup-locations`, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(6000)
+      });
+    }
+
+    if (res.ok) {
+      const json = await res.json().catch(() => ({}));
+      const list = Array.isArray(json?.data)
+        ? json.data
+        : (Array.isArray(json?.message) ? json.message : (Array.isArray(json) ? json : []));
+      return list;
+    }
+  } catch (err) {
+    console.warn('Failed to fetch Bosta pickup locations:', err);
+  }
+  return [];
+}
+
+/**
+ * Resolves the valid businessLocationId to ensure delivery creation succeeds:
+ * 1. Checks if a valid cached location ID is available.
+ * 2. Fetches active pickup locations directly from Bosta API.
+ * 3. Matches BOSTA_BUSINESS_LOCATION_ID if valid, or automatically selects the default/primary location.
+ */
+export async function resolveBusinessLocationId(): Promise<string | null> {
+  const envLocationId = (process.env.BOSTA_BUSINESS_LOCATION_ID || '').trim();
+  const now = Date.now();
+
+  if (cachedPickupLocationId && now < cachedPickupLocationExpiry) {
+    return cachedPickupLocationId;
+  }
+
+  const locations = await getBostaPickupLocations();
+  if (locations && locations.length > 0) {
+    // If envLocationId matches a real location ID in the account, use it
+    if (envLocationId) {
+      const matched = locations.find((l: any) => (l._id || l.id) === envLocationId);
+      if (matched) {
+        cachedPickupLocationId = envLocationId;
+        cachedPickupLocationExpiry = now + 12 * 60 * 60 * 1000;
+        return envLocationId;
+      }
+    }
+
+    // Automatically pick the primary / default location (marked isDefault / default / primary)
+    const defaultLoc =
+      locations.find((l: any) => l.isDefault || l.default || l.isPrimary || l.primary) ||
+      locations[0];
+
+    const locId = defaultLoc?._id || defaultLoc?.id;
+    if (locId) {
+      cachedPickupLocationId = String(locId).trim();
+      cachedPickupLocationExpiry = now + 12 * 60 * 60 * 1000;
+      return cachedPickupLocationId;
+    }
+  }
+
+  // Fallback to envLocationId if provided
+  if (envLocationId) {
+    return envLocationId;
+  }
+
+  return null;
+}
+
 /**
  * Creates a standard delivery order in Bosta via API v2.
  */
@@ -579,9 +666,10 @@ export async function createBostaDelivery(
     notes: deliveryNotes
   };
 
-  // Optional pickup location
-  if (process.env.BOSTA_BUSINESS_LOCATION_ID) {
-    payload.businessLocationId = process.env.BOSTA_BUSINESS_LOCATION_ID.trim();
+  // Resolve pickup location automatically from Bosta account
+  const activeLocationId = await resolveBusinessLocationId();
+  if (activeLocationId) {
+    payload.businessLocationId = activeLocationId;
   }
 
   const response = await fetch(`${baseUrl}/api/v2/deliveries?apiVersion=1`, {
