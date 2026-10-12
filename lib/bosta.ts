@@ -527,7 +527,9 @@ export async function getBostaPickupLocations(): Promise<any[]> {
     let json = res.ok ? await res.json().catch(() => ({})) : null;
     let list = Array.isArray(json?.data)
       ? json.data
-      : (Array.isArray(json?.message) ? json.message : (Array.isArray(json) ? json : []));
+      : (Array.isArray(json?.data?.list)
+        ? json.data.list
+        : (Array.isArray(json?.message) ? json.message : (Array.isArray(json) ? json : [])));
 
     // Fallback to v2 if v0 was empty or unsuccessful
     if (!list || list.length === 0) {
@@ -540,7 +542,9 @@ export async function getBostaPickupLocations(): Promise<any[]> {
         const jsonV2 = await resV2.json().catch(() => ({}));
         const listV2 = Array.isArray(jsonV2?.data)
           ? jsonV2.data
-          : (Array.isArray(jsonV2?.message) ? jsonV2.message : (Array.isArray(jsonV2) ? jsonV2 : []));
+          : (Array.isArray(jsonV2?.data?.list)
+            ? jsonV2.data.list
+            : (Array.isArray(jsonV2?.message) ? jsonV2.message : (Array.isArray(jsonV2) ? jsonV2 : [])));
         if (listV2 && listV2.length > 0) {
           list = listV2;
         }
@@ -580,9 +584,9 @@ export async function resolveBusinessLocationId(): Promise<string | null> {
       }
     }
 
-    // Automatically pick the primary / default location (marked isDefault / default / primary)
+    // Automatically pick the primary / default location (marked isDefault / default / primary / isDefaultLocation)
     const defaultLoc =
-      locations.find((l: any) => l.isDefault || l.default || l.isPrimary || l.primary) ||
+      locations.find((l: any) => l.isDefault || l.default || l.isPrimary || l.primary || l.isDefaultLocation) ||
       locations[0];
 
     const locId = defaultLoc?._id || defaultLoc?.id;
