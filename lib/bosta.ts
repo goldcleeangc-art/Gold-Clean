@@ -617,7 +617,7 @@ export async function createBostaDelivery(
   // Split customer name into first and last name
   const nameParts = (params.customerName || 'عميل').trim().split(/\s+/);
   const firstName = nameParts[0] || 'عميل';
-  const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '.';
+  const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : firstName;
 
   const cleanPhone = sanitizeEgyptianPhone(params.customerPhone);
   const bostaCity = getBostaCity(params.customerCity);
