@@ -34,10 +34,11 @@ export async function POST(req: NextRequest) {
 
     if (!isManager) {
       const ip =
+        req.headers.get('x-vercel-forwarded-for')?.split(',')[0]?.trim() ||
         req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
         req.headers.get('x-real-ip') ||
-        'anonymous';
-      const rateCheck = checkRateLimit(`shipping_create_${ip}`, 10, 5 * 60 * 1000);
+        'client';
+      const rateCheck = checkRateLimit(`shipping_create_${ip}`, 60, 5 * 60 * 1000);
       if (!rateCheck.success) {
         return NextResponse.json(
           { success: false, error: 'تم تجاوز الحد المسموح به من الطلبات مؤقتاً، يرجى الانتظار قليلاً.' },

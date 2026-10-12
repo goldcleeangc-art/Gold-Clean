@@ -1646,7 +1646,7 @@ export default function StorePage() {
 
     setSyncingOrderId(order.id);
     try {
-      const token = await auth.currentUser?.getIdToken();
+      const token = await auth.currentUser?.getIdToken(true).catch(() => auth.currentUser?.getIdToken());
       const res = await fetch('/api/shipping/create-order', {
         method: 'POST',
         headers: {
@@ -1726,7 +1726,7 @@ export default function StorePage() {
       setBulkSyncProgress({ current: i + 1, total: unsyncedOrders.length });
 
       try {
-        const token = await auth.currentUser?.getIdToken();
+        const token = await auth.currentUser?.getIdToken(true).catch(() => auth.currentUser?.getIdToken());
         const res = await fetch('/api/shipping/create-order', {
           method: 'POST',
           headers: {
