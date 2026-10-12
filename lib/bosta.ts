@@ -517,29 +517,37 @@ export async function getBostaPickupLocations(): Promise<any[]> {
     const baseUrl = getBostaBaseUrl();
     const headers = await getBostaAuthHeaders();
 
-    // Try v2 first
-    let res = await fetch(`${baseUrl}/api/v2/pickup-locations`, {
+    // Try official Bosta v0 endpoint first (standard across Bosta SDKs & plugins)
+    let res = await fetch(`${baseUrl}/api/v0/pickup-locations`, {
       method: 'GET',
       headers,
       signal: AbortSignal.timeout(6000)
     });
 
-    if (!res.ok) {
-      // Fallback to v0
-      res = await fetch(`${baseUrl}/api/v0/pickup-locations`, {
+    let json = res.ok ? await res.json().catch(() => ({})) : null;
+    let list = Array.isArray(json?.data)
+      ? json.data
+      : (Array.isArray(json?.message) ? json.message : (Array.isArray(json) ? json : []));
+
+    // Fallback to v2 if v0 was empty or unsuccessful
+    if (!list || list.length === 0) {
+      const resV2 = await fetch(`${baseUrl}/api/v2/pickup-locations`, {
         method: 'GET',
         headers,
         signal: AbortSignal.timeout(6000)
       });
+      if (resV2.ok) {
+        const jsonV2 = await resV2.json().catch(() => ({}));
+        const listV2 = Array.isArray(jsonV2?.data)
+          ? jsonV2.data
+          : (Array.isArray(jsonV2?.message) ? jsonV2.message : (Array.isArray(jsonV2) ? jsonV2 : []));
+        if (listV2 && listV2.length > 0) {
+          list = listV2;
+        }
+      }
     }
 
-    if (res.ok) {
-      const json = await res.json().catch(() => ({}));
-      const list = Array.isArray(json?.data)
-        ? json.data
-        : (Array.isArray(json?.message) ? json.message : (Array.isArray(json) ? json : []));
-      return list;
-    }
+    return list || [];
   } catch (err) {
     console.warn('Failed to fetch Bosta pickup locations:', err);
   }
