@@ -52,7 +52,10 @@ import {
   AlertCircle,
   FileSpreadsheet,
   Download,
-  Printer
+  Printer,
+  ClipboardList,
+  PackageCheck,
+  Boxes
 } from 'lucide-react';
 import { db, auth, googleProvider } from '../lib/firebase';
 import {
@@ -61,7 +64,10 @@ import {
   SHIPPING_ZONES,
   getZoneByCity,
   normalizeArabicNumerals,
-  sanitizeEgyptianPhone
+  sanitizeEgyptianPhone,
+  cleanProductNameForWorkers,
+  formatOrderItemsForShipping,
+  generateOrderPackingSlipText
 } from '../lib/shipping';
 import { 
   collection, 
@@ -347,6 +353,10 @@ export default function StorePage() {
   const [deleteStatusFilter, setDeleteStatusFilter] = useState<string>('all');
   const [isDeletingOrders, setIsDeletingOrders] = useState<boolean>(false);
   const [deleteProgress, setDeleteProgress] = useState<{ current: number; total: number } | null>(null);
+
+  // Packing slip / worker packing checklist state
+  const [packingSlipOrder, setPackingSlipOrder] = useState<Order | null>(null);
+  const [copiedPackingOrderId, setCopiedPackingOrderId] = useState<string | null>(null);
 
   // Tracking orders
   const [userOrders, setUserOrders] = useState<Order[]>([]);
@@ -2158,14 +2168,14 @@ export default function StorePage() {
           if (bundle && Array.isArray(bundle) && bundle.length > 0) {
             const bundleDesc = bundle.map(sub => {
               const subQty = (Number(sub.quantity) || 1) * (Number(it.quantity) || 1);
-              return `${subQty}x ${sub.productName}`;
+              return `عدد (${subQty}) ${cleanProductNameForWorkers(sub.productName)}`;
             }).join(' + ');
-            return `[${it.productName}: ${bundleDesc}]`;
+            return `[${cleanProductNameForWorkers(it.productName)}: ${bundleDesc}]`;
           }
 
-          return `${it.quantity}x ${it.productName}`;
+          return `عدد (${it.quantity}) ${cleanProductNameForWorkers(it.productName)}`;
         })
-        .join(' + ');
+        .join(' | ');
     };
 
     const statusNamesAr: Record<string, string> = {
@@ -2279,14 +2289,14 @@ export default function StorePage() {
           if (bundle && Array.isArray(bundle) && bundle.length > 0) {
             const bundleDesc = bundle.map(sub => {
               const subQty = (Number(sub.quantity) || 1) * (Number(it.quantity) || 1);
-              return `${subQty}x ${sub.productName}`;
+              return `عدد (${subQty}) ${cleanProductNameForWorkers(sub.productName)}`;
             }).join(' + ');
-            return `[${it.productName}: ${bundleDesc}]`;
+            return `[${cleanProductNameForWorkers(it.productName)}: ${bundleDesc}]`;
           }
 
-          return `${it.quantity}x ${it.productName}`;
+          return `عدد (${it.quantity}) ${cleanProductNameForWorkers(it.productName)}`;
         })
-        .join(' + ');
+        .join(' | ');
     };
 
     let headers: string[] = [];
@@ -3500,62 +3510,143 @@ export default function StorePage() {
                                 <p className="text-[10px] text-slate-400 mt-0.5">العنوان: {ord.customerAddress}</p>
                               </div>
 
-                              <div className="bg-[#FAFBFD] p-3.5 rounded-xl border border-slate-100 space-y-1">
-                                <p className="font-bold text-slate-700 text-[10px] mb-1.5 flex items-center gap-1.5">
-                                  <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
-                                  <span>تفاصيل مساحيق ومنظفات السلة:</span>
-                                </p>
-                                <ul className="space-y-1.5 text-slate-500 pr-3">
-                                  {ord.items.map((it, idx) => {
+                              {/* Order Items & Worker Packing Section */}
+                              <div className="bg-[#FAFBFD] p-3.5 rounded-xl border border-slate-200/80 space-y-2.5">
+                                {(() => {
+                                  const totalPieces = (ord.items || []).reduce((sum, it) => {
                                     const isOffer = it.isOffer || (typeof it.productId === 'string' && it.productId.startsWith('offer-'));
                                     const matchingOffer = offers.find(o => `offer-${o.id}` === it.productId || o.id === it.productId);
                                     const bundle = it.bundleItems && it.bundleItems.length > 0 
                                       ? it.bundleItems 
                                       : (matchingOffer?.items || null);
-                                    const codeDisplay = it.productCode || products.find(p => p.id === it.productId)?.code || matchingOffer?.code;
+                                    if (bundle && Array.isArray(bundle) && bundle.length > 0) {
+                                      const bundleSum = bundle.reduce((bSum, sub) => bSum + (Number(sub.quantity) || 1), 0);
+                                      return sum + bundleSum * (Number(it.quantity) || 1);
+                                    }
+                                    return sum + (Number(it.quantity) || 1);
+                                  }, 0);
 
-                                    return (
-                                      <li key={idx} className="flex flex-col text-[11px] gap-1 py-1 border-b border-slate-100 last:border-b-0">
-                                        <div className="flex justify-between items-center gap-2">
-                                          <span className="flex items-center gap-1.5 flex-wrap">
-                                            <span className="font-bold text-slate-800">• {it.productName} (الكمية: {it.quantity})</span>
-                                            {codeDisplay && !bundle && (
-                                              <span className="font-mono text-[9px] bg-blue-50 text-blue-700 px-1.5 py-0.2 rounded border border-blue-200 font-bold">
-                                                كود الشحن: {codeDisplay}
-                                              </span>
-                                            )}
+                                  return (
+                                    <>
+                                      <div className="flex items-center justify-between gap-2 flex-wrap pb-2 border-b border-slate-200/60">
+                                        <div className="flex items-center gap-2">
+                                          <PackageCheck className="w-4 h-4 text-blue-600 shrink-0" />
+                                          <span className="font-extrabold text-slate-800 text-xs">محتويات الشحنة للتجهيز:</span>
+                                          <span className="bg-blue-600 text-white font-black text-[10px] px-2 py-0.5 rounded-md shadow-2xs font-mono">
+                                            {totalPieces} قطعة
                                           </span>
-                                          <span className="font-mono text-slate-700 font-bold shrink-0">{it.price.toFixed(2)} جنيه</span>
                                         </div>
-                                        {bundle && Array.isArray(bundle) && bundle.length > 0 && (
-                                          <div className="mr-3 space-y-1 bg-blue-50/60 p-2 rounded-lg border border-blue-100/80 text-[10px]">
-                                            <span className="text-blue-900 font-black block">محتويات الكرتونة (SKU المنتجات الفعلية):</span>
-                                            <div className="flex flex-wrap gap-1.5">
-                                              {bundle.map((sub, sIdx) => {
-                                                const subProd = products.find(p => p.id === sub.productId);
-                                                const subCode = sub.productCode || subProd?.code || '';
-                                                const subQty = (Number(sub.quantity) || 1) * (Number(it.quantity) || 1);
-                                                return (
-                                                  <span key={sIdx} className="inline-flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-blue-200 text-slate-700 shadow-2xs">
-                                                    <span>{subQty}x {sub.productName}</span>
-                                                    {subCode && (
-                                                      <span className="font-mono font-black text-blue-700 bg-blue-100/80 px-1 rounded text-[9px]">
-                                                        {subCode}
-                                                      </span>
-                                                    )}
+                                        <div className="flex items-center gap-1.5">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const slipText = generateOrderPackingSlipText(ord, offers, products);
+                                              navigator.clipboard.writeText(slipText);
+                                              setCopiedPackingOrderId(ord.id || null);
+                                              setTimeout(() => setCopiedPackingOrderId(null), 2500);
+                                            }}
+                                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs transition-colors cursor-pointer"
+                                            title="نسخ ملخص جاهز للمخزن أو الواتساب بعلامات فحص [ ]"
+                                          >
+                                            {copiedPackingOrderId === ord.id ? (
+                                              <>
+                                                <Check className="w-3 h-3 text-emerald-600" />
+                                                <span className="text-emerald-700">تم النسخ!</span>
+                                              </>
+                                            ) : (
+                                              <>
+                                                <ClipboardList className="w-3 h-3 text-blue-600" />
+                                                <span>نسخ للتجهيز</span>
+                                              </>
+                                            )}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setPackingSlipOrder(ord)}
+                                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 shadow-2xs transition-colors cursor-pointer"
+                                            title="عرض وطباعة إذن صرف وتجهيز للمخزن"
+                                          >
+                                            <Printer className="w-3 h-3 text-blue-600" />
+                                            <span>إذن تجهيز</span>
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      <ul className="space-y-2 text-slate-600">
+                                        {ord.items.map((it, idx) => {
+                                          const isOffer = it.isOffer || (typeof it.productId === 'string' && it.productId.startsWith('offer-'));
+                                          const matchingOffer = offers.find(o => `offer-${o.id}` === it.productId || o.id === it.productId);
+                                          const bundle = it.bundleItems && it.bundleItems.length > 0 
+                                            ? it.bundleItems 
+                                            : (matchingOffer?.items || null);
+                                          const codeDisplay = it.productCode || products.find(p => p.id === it.productId)?.code || matchingOffer?.code;
+                                          const cleanName = cleanProductNameForWorkers(it.productName);
+
+                                          return (
+                                            <li key={idx} className="flex flex-col text-xs gap-1.5 p-2 rounded-xl bg-white border border-slate-100 shadow-2xs">
+                                              <div className="flex justify-between items-center gap-2">
+                                                <div className="flex items-center gap-2 flex-wrap min-w-0">
+                                                  <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-md font-mono font-black text-xs bg-blue-600 text-white shadow-2xs shrink-0">
+                                                    عدد ({it.quantity})
                                                   </span>
-                                                );
-                                              })}
-                                            </div>
-                                          </div>
-                                        )}
-                                      </li>
-                                    );
-                                  })}
-                                </ul>
-                               {ord.notes && (
-                                  <div className="text-rose-600 mt-2 text-[10px] bg-rose-50/50 p-2 rounded-lg border border-rose-100/30">
-                                    <strong>ملاحظة العميل:</strong> {ord.notes}
+                                                  <span className="font-extrabold text-slate-800 text-xs">
+                                                    {cleanName}
+                                                  </span>
+                                                  {codeDisplay && !bundle && (
+                                                    <span className="font-mono text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200 font-bold">
+                                                      SKU: {codeDisplay}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                <span className="font-mono text-slate-700 font-bold text-xs shrink-0">{it.price.toFixed(2)} ج.م</span>
+                                              </div>
+
+                                              {bundle && Array.isArray(bundle) && bundle.length > 0 && (
+                                                <div className="mt-1 bg-amber-50/70 p-2.5 rounded-lg border border-amber-200/80 text-[11px] space-y-1.5">
+                                                  <div className="flex items-center justify-between text-amber-900 font-black text-[10px]">
+                                                    <span className="flex items-center gap-1">
+                                                      <span>📦</span>
+                                                      <span>القطع المطلوب وضعها داخل الكرتونة:</span>
+                                                    </span>
+                                                    <span className="font-mono text-[9px] bg-amber-200/80 text-amber-900 px-1.5 py-0.2 rounded">
+                                                      {bundle.reduce((s, b) => s + (Number(b.quantity) || 1) * (Number(it.quantity) || 1), 0)} قطع
+                                                    </span>
+                                                  </div>
+                                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                                    {bundle.map((sub, sIdx) => {
+                                                      const subProd = products.find(p => p.id === sub.productId);
+                                                      const subCode = sub.productCode || subProd?.code || '';
+                                                      const subQty = (Number(sub.quantity) || 1) * (Number(it.quantity) || 1);
+                                                      return (
+                                                        <div key={sIdx} className="flex items-center gap-1.5 bg-white px-2 py-1 rounded-md border border-amber-200 text-slate-800 shadow-2xs">
+                                                          <span className="font-mono font-black text-[11px] bg-amber-500 text-white px-1.5 py-0.5 rounded shrink-0">
+                                                            عدد {subQty}
+                                                          </span>
+                                                          <span className="font-bold text-[11px] truncate">
+                                                            {cleanProductNameForWorkers(sub.productName)}
+                                                          </span>
+                                                          {subCode && (
+                                                            <span className="font-mono font-black text-amber-800 bg-amber-100 px-1 rounded text-[9px] mr-auto shrink-0">
+                                                              {subCode}
+                                                            </span>
+                                                          )}
+                                                        </div>
+                                                      );
+                                                    })}
+                                                  </div>
+                                                </div>
+                                              )}
+                                            </li>
+                                          );
+                                        })}
+                                      </ul>
+                                    </>
+                                  );
+                                })()}
+
+                                {ord.notes && (
+                                  <div className="text-amber-900 text-[10px] bg-amber-50 p-2 rounded-lg border border-amber-200/80 font-medium">
+                                    <strong className="text-amber-950 font-black">ملاحظة العميل:</strong> {ord.notes}
                                   </div>
                                 )}
                               </div>
@@ -5321,10 +5412,10 @@ export default function StorePage() {
                                                   <span className="text-[10px] font-bold text-slate-500 block">محتويات الطلب:</span>
                                                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                                                     {ord.items.map((item, iIdx) => (
-                                                      <div key={iIdx} className="bg-slate-50 p-2 rounded-lg border border-slate-200/80 text-[11px]">
-                                                        <div className="font-bold text-slate-800">{item.productName}</div>
-                                                        <div className="flex justify-between items-center text-slate-500 text-[10px] mt-0.5">
-                                                          <span>الكمية: {item.quantity}</span>
+                                                      <div key={iIdx} className="bg-white p-2.5 rounded-lg border border-slate-200 text-[11px] shadow-2xs space-y-1">
+                                                        <div className="font-bold text-slate-900 leading-snug">{cleanProductNameForWorkers(item.productName)}</div>
+                                                        <div className="flex justify-between items-center text-slate-500 text-[10px] pt-1 border-t border-slate-100">
+                                                          <span className="font-bold bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-mono">عدد ({item.quantity})</span>
                                                           <span className="font-mono font-bold text-emerald-700">{item.price} ج.م</span>
                                                         </div>
                                                       </div>
@@ -7795,6 +7886,248 @@ export default function StorePage() {
                 >
                   إغلاق السجل
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* PACKING SLIP MODAL FOR WORKERS */}
+        {packingSlipOrder && (
+          <div 
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setPackingSlipOrder(null);
+            }}
+          >
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs cursor-pointer print:hidden"
+              onClick={() => setPackingSlipOrder(null)}
+            />
+
+            {/* Modal Dialog */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-200 relative z-10 max-h-[92vh] flex flex-col print:border-none print:shadow-none print:max-w-none print:w-full print:m-0 print:p-0"
+              dir="rtl"
+            >
+              {/* Header (hidden in print) */}
+              <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between print:hidden">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs">
+                    <ClipboardList className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-sm">إذن صرف وتجهيز طلبية للمخزن</h3>
+                    <p className="text-slate-400 text-[10px]">بيان واضح بالأصناف والكميات لعمال التجهيز والتعبئة</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPackingSlipOrder(null)}
+                  className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-colors cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Printable Body */}
+              <div className="p-6 space-y-4 overflow-y-auto print:p-2 print:overflow-visible">
+                {/* Print Title Header */}
+                <div className="border-b-2 border-slate-900 pb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl font-black text-slate-900">جولد كلين (Gold Clean)</h2>
+                    <p className="text-xs text-slate-600 font-bold">إذن تجهيز شحنة ومراجعة البضاعة</p>
+                  </div>
+                  <div className="text-left font-mono">
+                    <div className="text-base font-black text-blue-800">
+                      #{packingSlipOrder.id?.substring(0, 8).toUpperCase()}
+                    </div>
+                    <div className="text-[10px] text-slate-500 font-bold">
+                      {formatOrderDate(packingSlipOrder.createdAt)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Customer & Shipping Summary Grid */}
+                <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50 p-3 rounded-2xl border border-slate-200 print:bg-white print:border-slate-400">
+                  <div>
+                    <span className="text-slate-500 font-bold block text-[10px]">اسم العميل:</span>
+                    <span className="font-black text-slate-900 text-sm">{packingSlipOrder.customerName}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 font-bold block text-[10px]">رقم هاتف العميل:</span>
+                    <span className="font-mono font-black text-slate-900 text-sm dir-ltr inline-block">
+                      {packingSlipOrder.customerPhone}
+                    </span>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-slate-500 font-bold block text-[10px]">العنوان والمحافظة:</span>
+                    <span className="font-bold text-slate-800">
+                      {packingSlipOrder.customerCity} - {packingSlipOrder.customerAddress}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 font-bold block text-[10px]">شركة الشحن:</span>
+                    <span className="font-bold text-blue-800">بوسطة (Bosta)</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 font-bold block text-[10px]">رقم الشحنة (Tracking):</span>
+                    <span className="font-mono font-black text-emerald-800 bg-white px-2 py-0.5 rounded border border-emerald-300 print:border-slate-400">
+                      {packingSlipOrder.shippingInfo?.trackingNumber || packingSlipOrder.shippingInfo?.billCode || 'قيد التسجيل'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Items Packing Checklist */}
+                {(() => {
+                  const physicalList: Array<{ name: string; quantity: number; code?: string }> = [];
+                  for (const it of (packingSlipOrder.items || [])) {
+                    const isOffer = it.isOffer || (typeof it.productId === 'string' && it.productId.startsWith('offer-'));
+                    const matchingOffer = offers.find(o => `offer-${o.id}` === it.productId || o.id === it.productId);
+                    const bundle = it.bundleItems && it.bundleItems.length > 0 
+                      ? it.bundleItems 
+                      : (matchingOffer?.items || null);
+
+                    if (bundle && Array.isArray(bundle) && bundle.length > 0) {
+                      for (const sub of bundle) {
+                        const subProd = products.find(p => p.id === sub.productId);
+                        const subCode = sub.productCode || subProd?.code || '';
+                        const subQty = (Number(sub.quantity) || 1) * (Number(it.quantity) || 1);
+                        physicalList.push({
+                          name: cleanProductNameForWorkers(sub.productName),
+                          quantity: subQty,
+                          code: subCode
+                        });
+                      }
+                    } else {
+                      const codeDisplay = it.productCode || products.find(p => p.id === it.productId)?.code || '';
+                      physicalList.push({
+                        name: cleanProductNameForWorkers(it.productName),
+                        quantity: Number(it.quantity) || 1,
+                        code: codeDisplay
+                      });
+                    }
+                  }
+
+                  const agg = new Map<string, { name: string; quantity: number; code?: string }>();
+                  for (const p of physicalList) {
+                    const exist = agg.get(p.name);
+                    if (exist) {
+                      exist.quantity += p.quantity;
+                    } else {
+                      agg.set(p.name, { ...p });
+                    }
+                  }
+                  const finalItems = Array.from(agg.values());
+                  const totalPieces = finalItems.reduce((s, it) => s + it.quantity, 0);
+
+                  return (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs font-black text-slate-800 pb-1 border-b border-slate-200">
+                        <span>الأصناف المطلوب تعبئتها في الكرتونة:</span>
+                        <span className="bg-slate-900 text-white px-2 py-0.5 rounded-md font-mono text-xs">
+                          إجمالي {totalPieces} قطعة
+                        </span>
+                      </div>
+
+                      <table className="w-full text-right text-xs border border-slate-200 rounded-xl overflow-hidden print:border-slate-800">
+                        <thead>
+                          <tr className="bg-slate-100 text-slate-700 font-extrabold print:bg-slate-200">
+                            <th className="p-2.5 text-center w-12 border-b border-slate-200 print:border-slate-800">فحص</th>
+                            <th className="p-2.5 text-center w-10 border-b border-slate-200 print:border-slate-800">م</th>
+                            <th className="p-2.5 border-b border-slate-200 print:border-slate-800">اسم المنتج</th>
+                            <th className="p-2.5 text-center w-20 border-b border-slate-200 print:border-slate-800">الكود</th>
+                            <th className="p-2.5 text-center w-24 border-b border-slate-200 print:border-slate-800">الكمية</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 print:divide-slate-800">
+                          {finalItems.map((item, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50/80">
+                              <td className="p-2.5 text-center border-l border-slate-100 print:border-slate-800">
+                                <span className="inline-block w-5 h-5 border-2 border-slate-400 rounded-md print:border-slate-800"></span>
+                              </td>
+                              <td className="p-2.5 text-center text-slate-400 font-mono font-bold border-l border-slate-100 print:border-slate-800">
+                                {idx + 1}
+                              </td>
+                              <td className="p-2.5 font-black text-slate-900 border-l border-slate-100 print:border-slate-800">
+                                {item.name}
+                              </td>
+                              <td className="p-2.5 text-center font-mono text-[10px] text-slate-500 font-bold border-l border-slate-100 print:border-slate-800">
+                                {item.code || '-'}
+                              </td>
+                              <td className="p-2.5 text-center">
+                                <span className="inline-block px-2.5 py-1 bg-blue-100 text-blue-900 font-black rounded-lg text-sm font-mono border border-blue-200 print:bg-white print:border-slate-800">
+                                  {item.quantity}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })()}
+
+                {/* Customer Notes */}
+                {packingSlipOrder.notes && (
+                  <div className="bg-amber-50 border border-amber-200 p-2.5 rounded-xl text-xs text-amber-950 font-bold">
+                    <span>ملاحظة العميل: </span>
+                    <span className="font-normal">{packingSlipOrder.notes}</span>
+                  </div>
+                )}
+
+                {/* Collection & Verification Footer */}
+                <div className="pt-2 border-t-2 border-slate-200 grid grid-cols-2 gap-3 text-xs">
+                  <div className="space-y-1">
+                    <span className="text-slate-500 font-bold block text-[10px]">المبلغ المطلوب تحصيله (COD):</span>
+                    <span className="text-base font-black text-emerald-800 font-mono">
+                      {packingSlipOrder.totalPrice?.toFixed(2)} ج.م
+                    </span>
+                  </div>
+                  <div className="text-left space-y-1">
+                    <span className="text-slate-500 font-bold block text-[10px]">توقيع فحص ومطابقة المخزن:</span>
+                    <span className="text-slate-400 block font-mono text-[11px]">....................................</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons (hidden in print) */}
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap print:hidden">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const slipText = generateOrderPackingSlipText(packingSlipOrder, offers, products);
+                    navigator.clipboard.writeText(slipText);
+                    alert('تم نسخ إذن التجهيز بالكامل إلى الحافظة بنجاح!');
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-300 shadow-2xs transition-colors cursor-pointer"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>نسخ للواتساب</span>
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPackingSlipOrder(null)}
+                    className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-xl transition-colors cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="inline-flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>طباعة إذن التجهيز</span>
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>

@@ -297,3 +297,209 @@ export function calculateCodServiceFee(orderTotal: number): number {
   }
   return Math.round(orderTotal * 0.01 * 100) / 100;
 }
+
+/**
+ * Cleans product names for warehouse packing workers and shipping labels:
+ * - Strips emojis (✨🌸🧼 etc.) that distort BiDi layout and clutter thermal labels
+ * - Eliminates repetitive store prefixes (like "GC - " or "GC ")
+ * - Fixes Arabic-English-Number BiDi inversion traps (e.g. "3 - GC لتر" -> "3 لتر")
+ * - Corrects English variant names (e.g. "AQ Violet - معطر للجو" -> "معطر للجو (AQ Violet)")
+ * - Normalizes punctuation and whitespace
+ */
+export function cleanProductNameForWorkers(rawName?: any): string {
+  if (!rawName) return '';
+  let str = String(rawName);
+
+  // 1. Remove all emojis (marketing sparkles, flowers, soaps, etc.)
+  str = str.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}]/gu, '');
+
+  // 2. Remove common store prefixes like 'GC - ' or 'GC ' or 'GC:'
+  str = str.replace(/^GC\s*[-–—:]\s*/i, '');
+  str = str.replace(/^GC\s+/i, '');
+
+  // 3. Fix BiDi inverted patterns with volume/units:
+  // e.g., '3 - GC لتر' or 'GC - 3 لتر' -> '3 لتر'
+  str = str.replace(/(\d+)\s*[-–—]\s*GC\s*(لتر|مل|كجم|جرام|جم|سم)/gi, '$1 $2');
+  str = str.replace(/GC\s*[-–—]\s*(\d+)\s*(لتر|مل|كجم|جرام|جم|سم)/gi, '$1 $2');
+  str = str.replace(/([A-Za-z0-9]+)\s*[-–—]\s*(\d+)\s*(لتر|مل|كجم|جرام|جم|سم)/gi, '$2 $3 ($1)');
+  str = str.replace(/(\d+)\s*[-–—]\s*([A-Za-z0-9]+)\s*(لتر|مل|كجم|جرام|جم|سم)/gi, '$1 $3 ($2)');
+
+  // 4. If string starts with Latin code/variant prefix followed by Arabic text:
+  // e.g. 'AQ Violet - معطر للجو والمفروشات' -> 'معطر للجو والمفروشات (AQ Violet)'
+  const latinPrefixMatch = str.match(/^([A-Za-z0-9\s_-]+)\s*[-–—:]\s*([\u0600-\u06FF].+)$/);
+  if (latinPrefixMatch) {
+    const latinPart = latinPrefixMatch[1].trim();
+    const arabicPart = latinPrefixMatch[2].trim();
+    if (/^GC$/i.test(latinPart)) {
+      str = arabicPart;
+    } else {
+      str = `${arabicPart} (${latinPart})`;
+    }
+  }
+
+  // 5. Clean up redundant dashes or punctuation
+  str = str.replace(/\s*[-–—]\s*$/, '');
+  str = str.replace(/^\s*[-–—]\s*/, '');
+  str = str.replace(/\s+/g, ' ').trim();
+
+  return str;
+}
+
+/**
+ * Formats order items into an ultra-readable, unambiguous summary for Bosta API & warehouse workers:
+ * e.g.:
+ * • عدد (3): المنظف الشامل (متعدد الاستخدام)
+ * • عدد (1): معطر ومنعم ملابس 3 لتر
+ * • عدد (1): معطر للجو والمفروشات (AQ Violet)
+ * • عدد (1): معطر القصور - ريكافري
+ * 
+ * Safely adheres to Bosta max length limit (200 characters) without truncating words.
+ */
+export function formatOrderItemsForShipping(
+  items: Array<{ name?: string; productName?: string; code?: string; quantity: number }>,
+  maxLen: number = 200
+): string {
+  if (!items || items.length === 0) return 'منتجات جولد كلين';
+
+  // Format 1: '• عدد (X): [اسم المنتج]' with newline
+  const primaryLines = items.map(it => {
+    const qty = Number(it.quantity) || 1;
+    const cleanName = cleanProductNameForWorkers(it.name || it.productName || it.code || 'منتج');
+    return `• عدد (${qty}): ${cleanName}`;
+  });
+
+  const fullWithNewlines = primaryLines.join('\n');
+  if (fullWithNewlines.length <= maxLen) {
+    return fullWithNewlines;
+  }
+
+  // Fallback 1: Compact '• (X) [اسم المنتج]' with newline
+  const compactLines = items.map(it => {
+    const qty = Number(it.quantity) || 1;
+    const cleanName = cleanProductNameForWorkers(it.name || it.productName || it.code || 'منتج');
+    return `• (${qty}) ${cleanName}`;
+  });
+  const compactWithNewlines = compactLines.join('\n');
+  if (compactWithNewlines.length <= maxLen) {
+    return compactWithNewlines;
+  }
+
+  // Fallback 2: Single line with bullet separators
+  const compactSingleLine = compactLines.join(' ');
+  if (compactSingleLine.length <= maxLen) {
+    return compactSingleLine;
+  }
+
+  // Fallback 3: Pack maximum full items and append remaining count
+  const packed: string[] = [];
+  let currentLen = 0;
+  for (let i = 0; i < compactLines.length; i++) {
+    const line = compactLines[i];
+    const sepLen = packed.length > 0 ? 1 : 0;
+    const remaining = compactLines.length - (i + 1);
+    const suffix = remaining > 0 ? ` • +${remaining} أصناف` : '';
+    if (currentLen + sepLen + line.length + suffix.length <= maxLen) {
+      packed.push(line);
+      currentLen += sepLen + line.length;
+    } else {
+      if (remaining >= 0) {
+        packed.push(`• +${compactLines.length - i} أصناف`);
+      }
+      break;
+    }
+  }
+
+  return packed.join(' ') || compactSingleLine.slice(0, maxLen);
+}
+
+/**
+ * Generates a clean, copyable / printable warehouse packing slip text with checkboxes:
+ * Ready to paste in WhatsApp to warehouse workers or print on standard receipt/paper.
+ */
+export function generateOrderPackingSlipText(
+  order: {
+    id?: string;
+    customerName?: string;
+    customerPhone?: string;
+    customerCity?: string;
+    customerAddress?: string;
+    notes?: string;
+    totalPrice?: number;
+    shippingInfo?: any;
+    items?: any[];
+  },
+  offers: any[] = [],
+  products: any[] = []
+): string {
+  const orderId = (order.id || '').substring(0, 8).toUpperCase();
+  const phone = order.customerPhone || '';
+  const city = order.customerCity || '';
+  const address = order.customerAddress || '';
+  const tracking = order.shippingInfo?.trackingNumber || order.shippingInfo?.billCode || '';
+
+  const physicalItems: Array<{ name: string; quantity: number; code?: string }> = [];
+
+  for (const it of (order.items || [])) {
+    const isOffer = it.isOffer || (typeof it.productId === 'string' && it.productId.startsWith('offer-'));
+    const matchingOffer = offers.find(o => `offer-${o.id}` === it.productId || o.id === it.productId);
+    const bundle = it.bundleItems && it.bundleItems.length > 0
+      ? it.bundleItems
+      : (matchingOffer?.items || null);
+
+    if (bundle && Array.isArray(bundle) && bundle.length > 0) {
+      for (const sub of bundle) {
+        const subProd = products.find(p => p.id === sub.productId);
+        const subCode = sub.productCode || subProd?.code || '';
+        const subQty = (Number(sub.quantity) || 1) * (Number(it.quantity) || 1);
+        physicalItems.push({
+          name: cleanProductNameForWorkers(sub.productName),
+          quantity: subQty,
+          code: subCode
+        });
+      }
+    } else {
+      const codeDisplay = it.productCode || products.find(p => p.id === it.productId)?.code || '';
+      physicalItems.push({
+        name: cleanProductNameForWorkers(it.productName),
+        quantity: Number(it.quantity) || 1,
+        code: codeDisplay
+      });
+    }
+  }
+
+  const aggMap = new Map<string, { name: string; quantity: number; code?: string }>();
+  for (const item of physicalItems) {
+    const existing = aggMap.get(item.name);
+    if (existing) {
+      existing.quantity += item.quantity;
+    } else {
+      aggMap.set(item.name, { ...item });
+    }
+  }
+  const aggregated = Array.from(aggMap.values());
+  const totalPieces = aggregated.reduce((sum, it) => sum + it.quantity, 0);
+
+  const lines: string[] = [
+    `📦 إذن تجهيز شحنة: #${orderId}`,
+    `👤 العميل: ${order.customerName || 'عميل'} (${phone})`,
+    `📍 العنوان: ${city} - ${address}`,
+    tracking ? `🚚 رقم بوليصة الشحن (بوسطة): ${tracking}` : `🚚 شركة الشحن: بوسطة`,
+    `----------------------------------------`,
+    `📋 الأصناف المطلوب وضعها في الكرتونة (إجمالي ${totalPieces} قطعة):`
+  ];
+
+  aggregated.forEach((it) => {
+    const codeTag = it.code ? ` [كود: ${it.code}]` : '';
+    lines.push(`[  ] عدد (${it.quantity}) : ${it.name}${codeTag}`);
+  });
+
+  lines.push(`----------------------------------------`);
+  if (order.totalPrice !== undefined) {
+    lines.push(`💵 المبلغ المطلوب تحصيله (COD): ${order.totalPrice.toFixed(2)} ج.م`);
+  }
+  if (order.notes && String(order.notes).trim()) {
+    lines.push(`📝 ملاحظة العميل: ${String(order.notes).trim()}`);
+  }
+
+  return lines.join('\n');
+}

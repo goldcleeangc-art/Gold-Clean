@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { createBostaDelivery } from '@/lib/bosta';
-import { sanitizeEgyptianPhone } from '@/lib/shipping';
+import { sanitizeEgyptianPhone, formatOrderItemsForShipping } from '@/lib/shipping';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { verifyManagerAuth } from '@/lib/auth-server';
 
@@ -196,9 +196,8 @@ export async function POST(req: NextRequest) {
       ? finalPhysicalItems.reduce((sum, it) => sum + (Number(it.quantity) || 1), 0)
       : 1;
 
-    // Build Name and Quantity summary: e.g. "2x جل منظف الذهب + 1x ملمع الفضة"
-    const nameParts = finalPhysicalItems.map(it => `${it.quantity}x ${it.name}`);
-    const itemsSummary = nameParts.join(' + ') || 'منتجات جولد كلين';
+    // Build clean, structured Name and Quantity summary for Bosta & Workers: e.g. "• عدد (3): المنظف الشامل\n• عدد (1): معطر ملابس 3 لتر"
+    const itemsSummary = formatOrderItemsForShipping(finalPhysicalItems, 200);
 
     // Submit to Bosta API
     const bostaResult = await createBostaDelivery({
