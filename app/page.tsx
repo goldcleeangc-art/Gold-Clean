@@ -933,11 +933,6 @@ export default function StorePage() {
     });
   }, [cart, offers]);
 
-  // Check if cart contains any offer bundle
-  const hasAnyOffer = useMemo(() => {
-    return cart.some(item => item.isOffer);
-  }, [cart]);
-
   // Dynamic shipping cost calculation based on chosen city and parcel weight
   const cartTotalWeight = calculateCartTotalWeight(cart);
   const shippingCalculation = checkoutForm.city
@@ -946,9 +941,7 @@ export default function StorePage() {
   const rawShippingCost = shippingCalculation ? shippingCalculation.shippingCost : 0;
   const currentShippingCost = hasFreeShippingOffer
     ? 0
-    : hasAnyOffer && shippingCalculation
-      ? Math.max(0, rawShippingCost - 20)
-      : rawShippingCost;
+    : rawShippingCost;
   const checkoutGrandTotal = getSubtotal() + currentShippingCost;
 
   // Real-time listener for the logged-in user's or guest device orders
@@ -1125,9 +1118,7 @@ export default function StorePage() {
       const shipCalc = calculateShipping(checkoutForm.city, currentCartWeight);
       const calculatedShipCost = hasFreeShippingOffer 
         ? 0 
-        : hasAnyOffer && shipCalc 
-          ? Math.max(0, shipCalc.shippingCost - 20) 
-          : (shipCalc ? shipCalc.shippingCost : 0);
+        : (shipCalc ? shipCalc.shippingCost : 0);
       const finalGrandTotal = itemsSubtotal + calculatedShipCost;
 
       const orderPayload: Order = {
@@ -1173,9 +1164,7 @@ export default function StorePage() {
         shippingCost: calculatedShipCost,
         shippingZone: hasFreeShippingOffer 
           ? `${shipCalc?.zone.name || 'شحن مجاني'} (عرض شحن مجاني)` 
-          : hasAnyOffer && shipCalc 
-            ? `${shipCalc.zone.name} (خصم 20 ج باقة عرض)` 
-            : (shipCalc?.zone.name || ''),
+          : (shipCalc?.zone.name || ''),
         shippingWeight: currentCartWeight,
         totalPrice: finalGrandTotal,
         status: 'pending',
@@ -6002,15 +5991,10 @@ export default function StorePage() {
                                   خصم {discountPercent}%
                                 </span>
                               )}
-                              {offer.isFreeShipping ? (
+                              {offer.isFreeShipping && (
                                 <span className="bg-emerald-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg shadow-xs flex items-center gap-1">
                                   <Truck className="w-3 h-3" />
                                   <span>شحن مجاني 🚚</span>
-                                </span>
-                              ) : (
-                                <span className="bg-blue-600 text-white text-[10px] font-black px-2.5 py-1 rounded-lg shadow-xs flex items-center gap-1">
-                                  <Truck className="w-3 h-3" />
-                                  <span>خصم 20 ج شحن 🚚</span>
                                 </span>
                               )}
                             </div>
@@ -6150,15 +6134,10 @@ export default function StorePage() {
                           </div>
 
                           {/* Shipping Banner */}
-                          {offer.isFreeShipping ? (
+                          {offer.isFreeShipping && (
                             <div className="p-2 bg-gradient-to-r from-blue-50 to-emerald-50 rounded-xl border border-blue-200/80 flex items-center justify-center gap-1.5 text-blue-900 text-[11px] font-bold shadow-2xs">
                               <Truck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                               <span>العرض يشمل شحن وتوصيل مجاني بالكامل 🎁</span>
-                            </div>
-                          ) : (
-                            <div className="p-2 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200/80 flex items-center justify-center gap-1.5 text-blue-900 text-[11px] font-bold shadow-2xs">
-                              <Truck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                              <span>خصم 20 جنيه على مصاريف الشحن والتوصيل 🚚</span>
                             </div>
                           )}
 
@@ -6814,11 +6793,6 @@ export default function StorePage() {
                           <Truck className="w-3.5 h-3.5" />
                           <span>شحن مجاني بالكامل 🎁</span>
                         </span>
-                      ) : hasAnyOffer ? (
-                        <span className="text-blue-700 font-bold bg-blue-50 px-2 py-0.5 rounded border border-blue-200 text-[11px] flex items-center gap-1 shadow-2xs">
-                          <Truck className="w-3.5 h-3.5" />
-                          <span>خصم 20 ج على الشحن (باقة عرض) 🔥</span>
-                        </span>
                       ) : (
                         <span className="text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-[10px]">
                           معاينة عند كتابة العنوان
@@ -7015,11 +6989,11 @@ export default function StorePage() {
                       {SHIPPING_ZONES.map((zone) => (
                         <optgroup 
                           key={zone.id} 
-                          label={`${zone.name} (شحن ${zone.baseRate} ج)`}
+                          label={`${zone.name} (شحن ${zone.baseRate.toFixed(2)} ج)`}
                         >
                           {zone.cities.map((city) => (
                             <option key={city} value={city}>
-                              {city} (شحن {zone.baseRate} ج)
+                              {city} (شحن {zone.baseRate.toFixed(2)} ج)
                             </option>
                           ))}
                         </optgroup>
@@ -7037,14 +7011,14 @@ export default function StorePage() {
                     >
                       <div className="flex items-center gap-1.5 font-bold text-blue-900">
                         <Truck className="w-3.5 h-3.5 text-blue-600" />
-                        <span>أسعار الشحن والتوصيل حسب المحافظات:</span>
+                        <span>أسعار الشحن والتوصيل حسب المحافظات (شاملة ضريبة القيمة المضافة 14%):</span>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {SHIPPING_ZONES.map(z => (
                           <div key={z.id} className="bg-white p-2 rounded-lg border border-blue-100 space-y-1">
                             <div className="flex justify-between items-center">
                               <span className="font-extrabold text-blue-950">{z.name}</span>
-                              <span className="font-mono font-black text-emerald-700">{z.baseRate} ج ثابت</span>
+                              <span className="font-mono font-black text-emerald-700">{z.baseRate.toFixed(2)} ج</span>
                             </div>
                             <p className="text-[10px] text-slate-500 line-clamp-2">
                               {z.cities.join('، ')}
@@ -7053,7 +7027,7 @@ export default function StorePage() {
                         ))}
                       </div>
                       <p className="text-[10px] text-blue-700 pt-1">
-                        • سعر الشحن ثابت وموحد للمحافظة بغض النظر عن وزن وحجم الطلب.
+                        • جميع أسعار الشحن معلنة وشاملة ضريبة القيمة المضافة 14% وثابتة وموحدة لكل منطقة بغض النظر عن وزن الطلب.
                       </p>
                     </motion.div>
                   )}
@@ -7101,10 +7075,6 @@ export default function StorePage() {
                           <span className="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-1.5 py-0.5 rounded border border-emerald-200">
                             عرض شحن مجاني 🎁
                           </span>
-                        ) : hasAnyOffer ? (
-                          <span className="text-[10px] bg-blue-100 text-blue-700 font-bold px-1.5 py-0.5 rounded border border-blue-200">
-                            خصم 20 ج (باقة عرض) 🔥
-                          </span>
                         ) : null}
                       </div>
                       {hasFreeShippingOffer ? (
@@ -7120,11 +7090,6 @@ export default function StorePage() {
                         </div>
                       ) : shippingCalculation ? (
                         <div className="flex items-center gap-1.5">
-                          {hasAnyOffer && (
-                            <span className="font-mono text-slate-400 line-through text-[10px]">
-                              +{shippingCalculation.shippingCost.toFixed(2)} ج
-                            </span>
-                          )}
                           <span className="font-mono font-bold text-emerald-700">
                             +{currentShippingCost.toFixed(2)} جنيه
                           </span>
@@ -7355,7 +7320,7 @@ export default function StorePage() {
                                 <div className="text-left">
                                   <span className="block text-[9px] text-slate-400 leading-none">
                                     {typeof order.shippingCost === 'number' 
-                                      ? (order.shippingCost === 0 ? 'شامل الشحن (شحن مجاني 🎁)' : `شامل الشحن (${order.shippingCost} ج)`) 
+                                      ? (order.shippingCost === 0 ? 'شامل الشحن (شحن مجاني 🎁)' : `شامل الشحن (${order.shippingCost.toFixed(2)} ج)`) 
                                       : 'إجمالي الحساب (COD)'}
                                   </span>
                                   <span className="text-sm font-black text-blue-600 font-mono inline-block mt-1">{order.totalPrice.toFixed(2)} جنيه</span>

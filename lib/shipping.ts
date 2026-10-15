@@ -8,54 +8,95 @@ export interface ShippingZone {
 
 export const SHIPPING_ZONES: ShippingZone[] = [
   {
-    id: 'zone_1',
-    name: 'المنطقة الأولى',
-    baseRate: 60,
+    id: 'zone_cairo_giza',
+    name: 'القاهرة والجيزة',
+    baseRate: 59.54,
     extraKgRate: 0,
-    cities: ['القاهرة', 'الجيزة', 'الإسكندرية']
+    cities: ['القاهرة', 'الجيزة']
   },
   {
-    id: 'zone_2',
-    name: 'المنطقة الثانية',
-    baseRate: 80,
+    id: 'zone_alex_and_zone2',
+    name: 'الإسكندرية ومناطق المنطقة 2',
+    baseRate: 65.24,
+    extraKgRate: 0,
+    cities: [
+      'الإسكندرية',
+      'برج العرب',
+      'العبور',
+      'بدر',
+      'العاشر من رمضان',
+      'الشروق',
+      'السلام',
+      'المرج',
+      'عزبة النخل',
+      'الخانكة',
+      'أبو زعبل',
+      'طريق إسكندرية الصحراوي كم 21'
+    ]
+  },
+  {
+    id: 'zone_delta_canal',
+    name: 'الدلتا والقناة',
+    baseRate: 70.94,
     extraKgRate: 0,
     cities: [
       'القليوبية',
       'المنوفية',
+      'الشرقية',
       'الغربية',
       'الدقهلية',
-      'البحيرة',
-      'كفر الشيخ',
       'دمياط',
+      'كفر الشيخ',
       'بورسعيد',
       'الإسماعيلية',
       'السويس',
-      'الشرقية'
+      'البحيرة'
     ]
   },
   {
-    id: 'zone_3',
-    name: 'المنطقة الثالثة',
-    baseRate: 90,
+    id: 'zone_upper_egypt_1',
+    name: 'الفيوم، بني سويف، المنيا، أسيوط، سوهاج',
+    baseRate: 85.76,
     extraKgRate: 0,
     cities: [
-      'بني سويف',
       'الفيوم',
+      'بني سويف',
       'المنيا',
       'أسيوط',
-      'سوهاج',
+      'سوهاج'
+    ]
+  },
+  {
+    id: 'zone_upper_egypt_2',
+    name: 'قنا، الأقصر، أسوان، البحر الأحمر، مطروح',
+    baseRate: 98.30,
+    extraKgRate: 0,
+    cities: [
       'قنا',
       'الأقصر',
       'أسوان',
-      'البحر الأحمر'
+      'البحر الأحمر',
+      'مطروح'
     ]
   },
   {
-    id: 'zone_4',
-    name: 'المنطقة الرابعة',
-    baseRate: 140,
+    id: 'zone_north_coast',
+    name: 'الساحل الشمالي',
+    baseRate: 102.86,
     extraKgRate: 0,
-    cities: ['مطروح', 'الوادي الجديد', 'جنوب سيناء', 'شمال سيناء']
+    cities: ['الساحل الشمالي']
+  },
+  {
+    id: 'zone_sharm_and_valley',
+    name: 'شرم الشيخ والوادي الجديد',
+    baseRate: 122.24,
+    extraKgRate: 0,
+    cities: [
+      'شرم الشيخ',
+      'الوادي الجديد',
+      'جنوب سيناء',
+      'شمال سيناء'
+    ]
   }
 ];
 
@@ -147,11 +188,20 @@ export function getZoneByCity(cityName: string): ShippingZone | null {
   if (!cityName) return null;
   const normalizedTarget = normalizeArabicText(cityName);
 
+  // 1. Exact match first
+  for (const zone of SHIPPING_ZONES) {
+    for (const city of zone.cities) {
+      if (normalizedTarget === normalizeArabicText(city)) {
+        return zone;
+      }
+    }
+  }
+
+  // 2. Substring matching: target contains city or city contains target
   for (const zone of SHIPPING_ZONES) {
     for (const city of zone.cities) {
       const normalizedCity = normalizeArabicText(city);
       if (
-        normalizedTarget === normalizedCity ||
         normalizedTarget.includes(normalizedCity) ||
         normalizedCity.includes(normalizedTarget)
       ) {

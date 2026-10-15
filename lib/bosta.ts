@@ -66,14 +66,44 @@ export function getBostaCity(rawCityName: string): BostaCity | null {
   if (target.includes('بور سعيد') || target.includes('بورسعيد')) {
     return BOSTA_CITIES.find(c => c.code === 'EG-13') || null;
   }
-  if (target.includes('اسكندريه') || target.includes('اسكندرية') || target.includes('alex')) {
+  if (
+    target.includes('اسكندريه') ||
+    target.includes('اسكندرية') ||
+    target.includes('alex') ||
+    target.includes('برج العرب') ||
+    target.includes('الصحراوي')
+  ) {
     return BOSTA_CITIES.find(c => c.code === 'EG-02') || null;
   }
-  if (target.includes('مصر') || target.includes('cairo')) {
+  if (
+    target.includes('مصر') ||
+    target.includes('cairo') ||
+    target.includes('الشروق') ||
+    target.includes('بدر') ||
+    target.includes('السلام') ||
+    target.includes('المرج') ||
+    target.includes('عزبه النخل') ||
+    target.includes('عزبة النخل')
+  ) {
     return BOSTA_CITIES.find(c => c.code === 'EG-01') || null;
   }
   if (target.includes('جيزه') || target.includes('giza')) {
     return BOSTA_CITIES.find(c => c.code === 'EG-25') || null;
+  }
+  if (
+    target.includes('العبور') ||
+    target.includes('الخانكه') ||
+    target.includes('الخانكة') ||
+    target.includes('ابو زعبل') ||
+    target.includes('أبو زعبل')
+  ) {
+    return BOSTA_CITIES.find(c => c.code === 'EG-06') || null;
+  }
+  if (target.includes('العاشر') || target.includes('رمضان')) {
+    return BOSTA_CITIES.find(c => c.code === 'EG-10') || null;
+  }
+  if (target.includes('شرم') || target.includes('شرم الشيخ')) {
+    return BOSTA_CITIES.find(c => c.code === 'EG-26') || null;
   }
 
   return null;
