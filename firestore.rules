@@ -3,12 +3,19 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    // =========================================================================
+    // 🛡️ صمام الأمان العام: منع الوصول افتراضياً لجميع المستندات غير المحددة
     // Global Safety Net: Deny all by default
+    // =========================================================================
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Reuseable global authentication & role helpers
+    // =========================================================================
+    // 🔑 الدوال المساعدة العامة للتحقق من الهوية والصلاحيات
+    // Global Authentication & Role Helper Functions
+    // =========================================================================
+    
     function isSignedIn() {
       return request.auth != null;
     }
@@ -17,41 +24,83 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    function isManager() {
-      return isSignedIn() && 
-        (('email' in request.auth.token && (
-          request.auth.token.email == 'jalalmahmoud8000@gmail.com' ||
-          request.auth.token.email == 'jalalmahmoud8000%40gmail.com'
-        )) ||
-         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'manager' ||
-           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')));
+    function isSuperAdminEmail() {
+      return isSignedIn() && 'email' in request.auth.token && (
+        request.auth.token.email == 'jalalmahmoud8000@gmail.com' ||
+        request.auth.token.email == 'jalalmahmoud8000%40gmail.com' ||
+        request.auth.token.email == 'admin@fawateer.com'
+      );
     }
 
-    function isAdmin() {
-      return isSignedIn() && 
-        (('email' in request.auth.token && (
-          request.auth.token.email == 'jalalmahmoud8000@gmail.com' ||
-          request.auth.token.email == 'jalalmahmoud8000%40gmail.com'
-        )) ||
-         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    function isAuthorizedAdminDoc() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/system/authorized_admins) &&
+        'emails' in get(/databases/$(database)/documents/system/authorized_admins).data &&
+        'email' in request.auth.token &&
+        request.auth.token.email in get(/databases/$(database)/documents/system/authorized_admins).data.emails;
     }
+
+    function isAdminsCollectionMember() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isUserRoleManager() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        'role' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'manager' ||
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+    }
+
+    function isUserRoleAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        (('role' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+         ('isAdmin' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true));
+    }
+
+    // التحقق من صلاحية المدير (Manager / Admin)
+    function isManager() {
+      return isSignedIn() && (
+        isSuperAdminEmail() ||
+        isAuthorizedAdminDoc() ||
+        isAdminsCollectionMember() ||
+        isUserRoleManager() ||
+        isUserRoleAdmin()
+      );
+    }
+
+    // التحقق من صلاحية المدير العام الأعلى (Admin)
+    function isAdmin() {
+      return isSignedIn() && (
+        isSuperAdminEmail() ||
+        isAuthorizedAdminDoc() ||
+        isAdminsCollectionMember() ||
+        isUserRoleAdmin()
+      );
+    }
+
+    // =========================================================================
+    // 📦 دوال التحقق من صحة البيانات (Data Validations)
+    // =========================================================================
 
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    // Validation structures
     function isValidProduct(p) {
       return p.name is string && p.name.size() <= 200 &&
-             p.description is string && p.description.size() <= 2000 &&
-             p.price is number && p.price >= 0 &&
+             (!('description' in p) || (p.description is string && p.description.size() <= 2000)) &&
+             (!('price' in p) || (p.price is number && p.price >= 0)) &&
+             (!('defaultPrice' in p) || (p.defaultPrice is number && p.defaultPrice >= 0)) &&
              p.category is string && p.category.size() <= 50 &&
-             p.volume is string && p.volume.size() <= 50;
+             (!('volume' in p) || (p.volume is string && p.volume.size() <= 50)) &&
+             (!('unit' in p) || (p.unit is string && p.unit.size() <= 50));
     }
 
-    // Helper to allow regular customers to update only rating fields without altering product data/price
+    // التحقق من تحديث التقييم فقط للمنتجات بواسطة الزبائن دون المساس بالبيانات أو السعر
     function isOnlyRatingUpdate() {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ratingsMap', 'rating', 'reviewsCount']) &&
              request.resource.data.rating is number &&
@@ -59,6 +108,18 @@ service cloud.firestore {
              request.resource.data.rating <= 5 &&
              request.resource.data.reviewsCount is number &&
              request.resource.data.reviewsCount >= 0;
+    }
+
+    function isValidCategory(c) {
+      return c.name is string && c.name.size() <= 100 &&
+             c.key is string && c.key.size() <= 50;
+    }
+
+    function isValidUser(u) {
+      return u.email is string && u.email.size() <= 100 &&
+             (!('name' in u) || (u.name is string && u.name.size() <= 150)) &&
+             (!('displayName' in u) || (u.displayName is string && u.displayName.size() <= 150)) &&
+             (!('role' in u) || (u.role in ['user', 'manager', 'admin']));
     }
 
     function isValidOrder(o) {
@@ -74,51 +135,59 @@ service cloud.firestore {
              (!('customerCountry' in o) || o.customerCountry is string);
     }
 
-    function isValidUser(u) {
-      return u.email is string && u.email.size() <= 100 &&
-             u.name is string && u.name.size() <= 150 &&
-             u.role is string && (u.role == 'user' || u.role == 'manager' || u.role == 'admin');
+    // التحقق من صحة بيانات الشكاوى والمقترحات
+    function isValidComplaint(c) {
+      return c.customerName is string && c.customerName.size() >= 2 && c.customerName.size() <= 100 &&
+             c.customerPhone is string && c.customerPhone.size() >= 10 && c.customerPhone.size() <= 30 &&
+             c.complaintNumber is string && c.complaintNumber.size() >= 5 && c.complaintNumber.size() <= 60 &&
+             c.subject is string && c.subject.size() >= 2 && c.subject.size() <= 200 &&
+             c.details is string && c.details.size() >= 5 && c.details.size() <= 3000 &&
+             c.category is string &&
+             c.status is string && (c.status == 'pending' || c.status == 'in_progress' || c.status == 'resolved' || c.status == 'rejected') &&
+             (!('priority' in c) || (c.priority == 'normal' || c.priority == 'urgent')) &&
+             (!('orderId' in c) || c.orderId is string) &&
+             (!('userId' in c) || c.userId is string) &&
+             (!('customerEmail' in c) || c.customerEmail is string);
     }
 
-    function isValidCategory(c) {
-      return c.name is string && c.name.size() <= 100 &&
-             c.key is string && c.key.size() <= 50;
-    }
+    // =========================================================================
+    // 🛒 1. قواعد المتجر الإلكتروني (Store, Products & Complaints Rules)
+    // =========================================================================
 
-    // Products Rules: Public read, Manager write, Customer rating-only update
+    // المنتجات: قراءة عامة للجميع، إنشاء وحذف للمدير، وتحديث للمدير أو تقييمات الزبائن
     match /products/{productId} {
       allow read: if true;
       allow create, delete: if isManager();
       allow update: if isManager() || isOnlyRatingUpdate();
     }
 
-    // Categories Rules: Public read, Manager write
+    // تصنيفات وأقسام المنتجات: قراءة عامة، تعديل للمدير مع التحقق من الحقول
     match /categories/{categoryId} {
       allow read: if true;
       allow create, update: if isManager() && isValidCategory(request.resource.data);
       allow delete: if isManager();
     }
 
-    // Offers Rules: Public read, Manager write
+    // العروض والخصومات الترويجية: قراءة عامة، تحكم كامل للمدير
     match /offers/{offerId} {
       allow read: if true;
       allow create, update, delete: if isManager();
     }
 
-    // Users Rules
+    // حسابات المستخدمين: قراءة عامة، إنشاء لصاحب الحساب أو المدير، وتعديل الرتب للمدير العام فقط
     match /users/{userId} {
       allow read: if true;
-      allow create: if isOwner(userId) && isValidUser(request.resource.data);
-      allow update: if (isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == resource.data.role) || (isAdmin() && request.resource.data.role in ['user', 'manager', 'admin']);
+      allow create: if (isOwner(userId) || isAdmin()) && isValidUser(request.resource.data);
+      allow update: if (isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == resource.data.role) || (isAdmin() && (!('role' in request.resource.data) || request.resource.data.role in ['user', 'manager', 'admin']));
       allow delete: if isAdmin();
     }
 
-    // Orders Rules: 
-    // - Creation: validated order structure
-    // - List/Query: Managers or Authenticated User viewing own orders (BLOCKS guest bulk-scraping)
-    // - Get (single order): Managers, Authenticated User owner, or Guest by specific orderId
-    // - Update: Manager or User cancellation only
-    // - Delete: Manager only
+    // طلبات الزبائن بالمتجر:
+    // - إنشاء: متاح للجميع ببيانات صحيحة معتمدة
+    // - قراءة القائمة: للمدير أو العميل صاحب الطلب فقط لمنع كشط وسرقة البيانات
+    // - قراءة الطلب المنفرد: للمدير أو العميل صاحب الطلب أو الضيف برقم الطلب
+    // - تعديل: للمدير، أو إلغاء الطلب من قبل العميل قبل التوصيل
+    // - حذف: للمدير فقط
     match /orders/{orderId} {
       allow create: if isValidOrder(request.resource.data);
       allow list: if isManager() || (isSignedIn() && resource.data.userId == request.auth.uid);
@@ -132,5 +201,73 @@ service cloud.firestore {
       );
       allow delete: if isManager();
     }
+
+    // شكاوى ومقترحات العملاء:
+    // - إنشاء: متاح للجميع (ضيوف ومسجلين) مع التحقق من صحة البيانات
+    // - قراءة القائمة: للمدير أو العميل صاحب الشكوى فقط
+    // - قراءة الشكوى المنفردة: للمدير أو العميل صاحب الشكوى أو الضيف برقم الشكوى
+    // - تعديل وحذف: للمدير فقط (للرد وتحديث الحالة)
+    match /complaints/{complaintId} {
+      allow create: if isValidComplaint(request.resource.data);
+      allow list: if isManager() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      allow get: if isManager() || (isSignedIn() && resource.data.userId == request.auth.uid) || (resource.data.userId == 'guest');
+      allow update: if isManager();
+      allow delete: if isManager();
+    }
+
+    // =========================================================================
+    // 💼 2. قواعد منظومة الفواتير والحسابات (Billing & Invoicing System Rules)
+    // =========================================================================
+
+    // الفواتير، حسابات التجار، المسحوبات والمبيعات الآجلة والنقدية
+    match /invoices/{invoiceId} {
+      allow read, write: if isManager();
+    }
+
+    // تحصيلات وتسويات شركات الشحن (بوسطة، أوتو، شيب بلو، ارامكس...) والبيع القطاعي
+    match /courier_settlements/{settlementId} {
+      allow read, write: if isManager();
+    }
+
+    // المصروفات العامة (إيجار، تشغيل، نقل، بوفيه، مسحوبات الشركاء...)
+    match /expenses/{expenseId} {
+      allow read, write: if isManager();
+    }
+
+    // سجل الموظفين والعمال والبيانات الوظيفية والرواتب الأساسية والعمولات
+    match /employees/{employeeId} {
+      allow read, write: if isManager();
+    }
+
+    // مسير وسجلات صرف الرواتب الشهرية والعمولات والحوافز المعتمدة
+    match /salary_payments/{paymentId} {
+      allow read, write: if isManager();
+    }
+
+    // حركات الموظفين اليومية (السلف النقدية، الجزاءات والخصومات، والمكافآت)
+    match /employee_transactions/{transactionId} {
+      allow read, write: if isManager();
+    }
+
+    // إعدادات المنظومة (قوائم أسعار المصنع والشركة، وخزنة تحليل هوامش الأرباح)
+    match /settings/{settingId} {
+      allow read, write: if isManager();
+      match /{subcollection=**} {
+        allow read, write: if isManager();
+      }
+    }
+
+    // سجل المسؤولين والصلاحيات الإدارية
+    match /admins/{adminId} {
+      allow read: if isManager();
+      allow write: if isAdmin();
+    }
+
+    // فحص الاتصال وقائمة المديرين المصرح لهم واختبارات سلامة النظام
+    match /system/{docId} {
+      allow read: if docId == 'ping' || isManager() || (isSignedIn() && docId == 'authorized_admins');
+      allow write: if isAdmin() || (isManager() && docId != 'authorized_admins') || (isSignedIn() && docId.matches('^test-.*'));
+    }
+
   }
 }

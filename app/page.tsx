@@ -55,8 +55,11 @@ import {
   Printer,
   ClipboardList,
   PackageCheck,
-  Boxes
+  Boxes,
+  MessageSquareWarning
 } from 'lucide-react';
+import ComplaintsSection from '../components/ComplaintsSection';
+import AdminComplaintsTab from '../components/AdminComplaintsTab';
 import { db, auth, googleProvider } from '../lib/firebase';
 import {
   calculateShipping,
@@ -306,7 +309,9 @@ export default function StorePage() {
   const [priceRange, setPriceRange] = useState<number>(0);
 
   // App Navigation View
-  const [currentTab, setCurrentTab] = useState<'home' | 'products' | 'offers' | 'about'>('home');
+  const [currentTab, setCurrentTab] = useState<'home' | 'products' | 'offers' | 'about' | 'complaints'>('home');
+  const [complaintPrefilledOrderId, setComplaintPrefilledOrderId] = useState<string | null>(null);
+  const [pendingComplaintsCount, setPendingComplaintsCount] = useState<number>(0);
 
   // Modals
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
@@ -414,7 +419,7 @@ export default function StorePage() {
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [allUsers, setAllUsers] = useState<any[]>([]);
   const [userSearchQuery, setUserSearchQuery] = useState<string>('');
-  const [adminTab, setAdminTab] = useState<'orders' | 'products' | 'offers' | 'categories' | 'stats' | 'users'>('orders');
+  const [adminTab, setAdminTab] = useState<'orders' | 'products' | 'offers' | 'categories' | 'stats' | 'complaints' | 'users'>('orders');
   const [adminOrderFilter, setAdminOrderFilter] = useState<'all' | 'pending' | 'preparing' | 'shipping' | 'delivered' | 'cancelled' | 'bosta_unsynced' | 'bosta_synced'>('all');
   const [adminOrderSearch, setAdminOrderSearch] = useState<string>('');
 
@@ -538,8 +543,8 @@ export default function StorePage() {
       
       if (productId) {
         setCurrentTab('products');
-      } else if (tab === 'products' || tab === 'offers' || tab === 'about') {
-        setCurrentTab(tab);
+      } else if (tab === 'products' || tab === 'offers' || tab === 'about' || tab === 'complaints') {
+        setCurrentTab(tab as any);
       }
       
       if (category) {
@@ -547,6 +552,19 @@ export default function StorePage() {
       }
     }
   }, []);
+
+  // Listen to pending complaints count for admin badge
+  useEffect(() => {
+    if (userRole === 'admin' || userRole === 'manager') {
+      const q = query(collection(db, 'complaints'), where('status', '==', 'pending'));
+      const unsub = onSnapshot(q, (snapshot) => {
+        setPendingComplaintsCount(snapshot.size);
+      }, (err) => {
+        console.warn('Error fetching pending complaints count:', err);
+      });
+      return () => unsub();
+    }
+  }, [userRole]);
 
   // 3. Sync URL -> State (Initial Load for Product after products are loaded)
   useEffect(() => {
@@ -2854,11 +2872,23 @@ export default function StorePage() {
             >
               عن الشركة
             </button>
+            <button 
+              id="nav-complaints-btn"
+              onClick={() => { setCurrentTab('complaints'); setIsMerchantOpen(false); }} 
+              className={`${currentTab === 'complaints' && !isMerchantOpen ? 'text-amber-600 border-b-2 border-amber-600' : 'hover:text-amber-600 border-b-2 border-transparent'} pb-2.5 pt-1.5 transition-colors flex items-center gap-1`}
+            >
+              <span>الشكاوى والمقترحات</span>
+            </button>
             <button id="nav-tracker-btn" onClick={() => { setIsTrackerOpen(true); }} className="hover:text-slate-950 pt-1.5 pb-2.5 transition-colors">طلباتي ({userOrders.length})</button>
             {(userRole === 'manager' || userRole === 'admin') && (
-              <button id="nav-admin-btn" onClick={() => { setIsMerchantOpen(true); }} className={`flex items-center gap-1.5 pt-1.5 pb-2.5 transition-colors ${isMerchantOpen ? 'text-amber-600 border-b-2 border-amber-600' : 'text-slate-400 hover:text-amber-600 border-b-2 border-transparent'}`}>
+              <button id="nav-admin-btn" onClick={() => { setIsMerchantOpen(true); }} className={`flex items-center gap-1.5 pt-1.5 pb-2.5 transition-colors relative ${isMerchantOpen ? 'text-amber-600 border-b-2 border-amber-600' : 'text-slate-400 hover:text-amber-600 border-b-2 border-transparent'}`}>
                 <Settings className="w-4 h-4" />
                 <span>إدارة المتجر ⚙️</span>
+                {pendingComplaintsCount > 0 && (
+                  <span className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full animate-pulse shadow-xs" title={`${pendingComplaintsCount} شكاوى جديدة بانتظار المراجعة`}>
+                    {pendingComplaintsCount}
+                  </span>
+                )}
               </button>
             )}
           </nav>
@@ -3032,19 +3062,27 @@ export default function StorePage() {
                     { id: 'offers', label: 'إدارة العروض والباقات 🔥', icon: Sparkles },
                     { id: 'categories', label: 'إدارة الفئات والمقاطع', icon: LayoutGrid },
                     { id: 'stats', label: 'مؤشرات المبيعات', icon: TrendingUp },
+                    { id: 'complaints', label: 'الشكاوى والمقترحات', icon: MessageSquareWarning, badge: pendingComplaintsCount },
                     ...(userRole === 'admin' ? [{ id: 'users', label: 'صلاحيات المستخدمين', icon: Users }] : [])
                   ].map((tab) => (
                     <button
                       key={tab.id}
                       onClick={() => setAdminTab(tab.id as any)}
-                      className={`w-full flex items-center gap-2.5 px-4 py-3 rounded-xl text-right transition-all font-bold ${
+                      className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-right transition-all font-bold ${
                         adminTab === tab.id 
                           ? 'bg-amber-50 text-amber-900 border-r-4 border-amber-500 shadow-xs' 
                           : 'hover:bg-slate-50 text-slate-600'
                       }`}
                     >
-                      <tab.icon className={`w-4 h-4 ${adminTab === tab.id ? 'text-amber-600' : 'text-slate-400'}`} />
-                      <span>{tab.label}</span>
+                      <div className="flex items-center gap-2.5">
+                        <tab.icon className={`w-4 h-4 ${adminTab === tab.id ? 'text-amber-600' : 'text-slate-400'}`} />
+                        <span>{tab.label}</span>
+                      </div>
+                      {Boolean(tab.badge && tab.badge > 0) && (
+                        <span className="bg-rose-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full animate-pulse shadow-xs">
+                          {tab.badge}
+                        </span>
+                      )}
                     </button>
                   ))}
 
@@ -5524,6 +5562,13 @@ export default function StorePage() {
                     </div>
                   )}
 
+                  {adminTab === 'complaints' && (
+                    <AdminComplaintsTab 
+                      userRole={userRole} 
+                      allOrders={allOrders} 
+                    />
+                  )}
+
                 </div>
 
               </div>
@@ -6162,6 +6207,14 @@ export default function StorePage() {
               )}
             </div>
           </div>
+        ) : currentTab === 'complaints' ? (
+          <ComplaintsSection
+            user={user}
+            userOrders={userOrders}
+            prefilledOrderId={complaintPrefilledOrderId}
+            onClearPrefilledOrder={() => setComplaintPrefilledOrderId(null)}
+            onGoToProducts={() => { setCurrentTab('products'); }}
+          />
         ) : (
           <>
             {/* SIDEBAR FILTERS (CLEAN MINIMAL DESIGN SPECS) */}
@@ -6457,6 +6510,16 @@ export default function StorePage() {
             )}
             <Notebook className="w-4 h-4" />
             <span>طلباتي</span>
+          </button>
+
+          <button
+            onClick={() => { setCurrentTab('complaints'); setIsMerchantOpen(false); }}
+            className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl transition-colors ${
+              currentTab === 'complaints' ? 'text-amber-600' : 'text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <MessageSquareWarning className="w-4 h-4" />
+            <span>الشكاوى</span>
           </button>
 
           <button
@@ -7327,38 +7390,52 @@ export default function StorePage() {
                                 </div>
                               </div>
 
-                              {/* Cancellation Button Section */}
-                              {order.status !== 'cancelled' && order.status !== 'delivered' && (
-                                <div className="pt-2.5 border-t border-dashed border-slate-100 flex justify-end">
-                                  {orderToCancel === order.id ? (
-                                    <div className="flex items-center gap-2 bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-xl duration-200">
-                                      <span className="text-rose-700 font-extrabold text-[10px]">تأكيد إلغاء هذا الطلب وإرجاع البضاعة؟</span>
+                              {/* Actions: File complaint & Cancellation */}
+                              <div className="pt-2.5 border-t border-dashed border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                                <button
+                                  onClick={() => {
+                                    setComplaintPrefilledOrderId(order.id || null);
+                                    setIsTrackerOpen(false);
+                                    setCurrentTab('complaints');
+                                  }}
+                                  className="inline-flex items-center gap-1.5 text-amber-700 bg-amber-50 hover:bg-amber-100 text-[10px] font-bold px-3 py-1.5 rounded-xl border border-amber-200 transition-colors cursor-pointer"
+                                >
+                                  <MessageSquareWarning className="w-3.5 h-3.5 text-amber-600" />
+                                  <span>تقديم شكوى أو استفسار على هذا الطلب</span>
+                                </button>
+
+                                {order.status !== 'cancelled' && order.status !== 'delivered' && (
+                                  <div>
+                                    {orderToCancel === order.id ? (
+                                      <div className="flex items-center gap-2 bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-xl duration-200">
+                                        <span className="text-rose-700 font-extrabold text-[10px]">تأكيد إلغاء هذا الطلب وإرجاع البضاعة؟</span>
+                                        <button 
+                                          onClick={async () => {
+                                            await handleUserCancelOrder(order);
+                                            setOrderToCancel(null);
+                                          }}
+                                          className="bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg cursor-pointer transition-colors"
+                                        >
+                                          نعم، إلغاء الآن
+                                        </button>
+                                        <button 
+                                          onClick={() => setOrderToCancel(null)}
+                                          className="bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] font-bold px-2.5 py-1 rounded-lg cursor-pointer transition-colors"
+                                        >
+                                          تراجع
+                                        </button>
+                                      </div>
+                                    ) : (
                                       <button 
-                                        onClick={async () => {
-                                          await handleUserCancelOrder(order);
-                                          setOrderToCancel(null);
-                                        }}
-                                        className="bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg cursor-pointer transition-colors"
+                                        onClick={() => setOrderToCancel(order.id || null)}
+                                        className="inline-flex items-center gap-1 bg-rose-50 hover:bg-rose-100 text-rose-600 text-[11px] font-extrabold px-3 py-1.5 rounded-xl border border-rose-100 transition-colors cursor-pointer"
                                       >
-                                        نعم، إلغاء الآن
+                                        <span>إلغاء الطلب</span>
                                       </button>
-                                      <button 
-                                        onClick={() => setOrderToCancel(null)}
-                                        className="bg-slate-200 hover:bg-slate-300 text-slate-700 text-[10px] font-bold px-2.5 py-1 rounded-lg cursor-pointer transition-colors"
-                                      >
-                                        تراجع
-                                      </button>
-                                    </div>
-                                  ) : (
-                                    <button 
-                                      onClick={() => setOrderToCancel(order.id || null)}
-                                      className="inline-flex items-center gap-1 bg-rose-50 hover:bg-rose-100 text-rose-600 text-[11px] font-extrabold px-3 py-1.5 rounded-xl border border-rose-100 transition-colors cursor-pointer"
-                                    >
-                                      <span>إلغاء الطلب</span>
-                                    </button>
-                                  )}
-                                </div>
-                              )}
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           );
                         });
