@@ -1,6 +1,14 @@
 import type {Metadata} from 'next';
 import Script from 'next/script';
+import { Cairo } from 'next/font/google';
 import './globals.css';
+
+const cairo = Cairo({
+  subsets: ['arabic', 'latin'],
+  weight: ['300', '400', '500', '600', '700', '800', '900'],
+  variable: '--font-cairo',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'متجر Gold Clean | للمنظفات الفاخرة',
@@ -9,7 +17,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
-    <html lang="ar" dir="rtl" className="font-sans">
+    <html lang="ar" dir="rtl" className={`${cairo.variable} font-sans`}>
       <head>
         {/* Google Tag Manager */}
         <Script
@@ -27,7 +35,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         {/* Meta Pixel Code */}
         <Script
           id="facebook-pixel"
-          strategy="afterInteractive"
+          strategy="lazyOnload"
           dangerouslySetInnerHTML={{
             __html: `
               !function(f,b,e,v,n,t,s)
@@ -55,7 +63,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         {/* TikTok Pixel Code */}
         <Script
           id="tiktok-pixel"
-          strategy="afterInteractive"
+          strategy="lazyOnload"
           dangerouslySetInnerHTML={{
             __html: `
               !function (w, d, t) {
@@ -71,7 +79,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         />
         {/* End TikTok Pixel Code */}
       </head>
-      <body className="bg-slate-50/50 text-slate-800 antialiased" suppressHydrationWarning>
+      <body className={`${cairo.className} bg-slate-50/50 text-slate-800 antialiased`} suppressHydrationWarning>
         {/* Google Tag Manager (noscript) */}
         <noscript>
           <iframe
