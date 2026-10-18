@@ -224,12 +224,15 @@ export default function ComplaintsSection({
       const randomSuffix = Math.floor(100000 + Math.random() * 900000);
       const complaintNumber = `GC-CMP-${randomSuffix}`;
 
+      const cleanEmail = customerEmail.trim();
+      const cleanOrderId = selectedOrderId.trim();
+
       const payload: Omit<Complaint, 'id'> = {
         complaintNumber,
         customerName: cleanName,
         customerPhone: cleanedPhone,
-        customerEmail: customerEmail.trim() || undefined,
-        orderId: selectedOrderId.trim() || undefined,
+        ...(cleanEmail ? { customerEmail: cleanEmail } : {}),
+        ...(cleanOrderId ? { orderId: cleanOrderId } : {}),
         category: selectedCategory,
         priority: selectedPriority,
         subject: cleanSubject,
@@ -269,6 +272,7 @@ export default function ComplaintsSection({
       // Reset form fields
       setSubject('');
       setDetails('');
+      setSelectedOrderId('');
       if (onClearPrefilledOrder) onClearPrefilledOrder();
     } catch (err: any) {
       console.error('Error submitting complaint:', err);
