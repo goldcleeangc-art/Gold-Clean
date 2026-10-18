@@ -5705,7 +5705,7 @@ export default function StorePage() {
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {offers.slice(0, 3).map((off) => {
+                    {offers.map((off) => {
                       const savingsVal = off.savings || Math.max(0, off.originalPrice - off.offerPrice);
                       const discountPercent = off.originalPrice > 0 ? Math.round((savingsVal / off.originalPrice) * 100) : 0;
                       const totalPieces = off.items ? off.items.reduce((sum, item) => sum + item.quantity, 0) : 0;
@@ -5741,6 +5741,17 @@ export default function StorePage() {
                                 {discountPercent > 0 && (
                                   <span className="bg-amber-500 text-white text-[10px] font-black px-2 py-0.5 rounded-lg shadow-xs">
                                     خصم {discountPercent}%
+                                  </span>
+                                )}
+                                {off.isFreeShipping && (
+                                  <span className="bg-emerald-600 text-white text-[10px] font-black px-2.5 py-0.5 rounded-lg shadow-xs flex items-center gap-1">
+                                    <Truck className="w-3 h-3" />
+                                    <span>شحن مجاني 🚚</span>
+                                  </span>
+                                )}
+                                {!off.isAvailable && (
+                                  <span className="bg-rose-50 text-rose-600 text-[10px] font-black px-2 py-0.5 rounded-lg border border-rose-100 shadow-xs">
+                                    غير متوفر حالياً
                                   </span>
                                 )}
                               </div>
@@ -5812,14 +5823,19 @@ export default function StorePage() {
 
                             <button
                               id={`home-offer-add-btn-${off.id}`}
+                              disabled={!off.isAvailable}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleAddOfferToCart(off, e);
                               }}
-                              className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                              className={`w-full py-2.5 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors shadow-xs ${
+                                !off.isAvailable
+                                  ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                  : 'bg-rose-600 hover:bg-rose-700 text-white cursor-pointer'
+                              }`}
                             >
                               <ShoppingCart className="w-3.5 h-3.5" />
-                              <span>أضف الباقة للسلة</span>
+                              <span>{!off.isAvailable ? 'الباقة غير متوفرة' : 'أضف الباقة للسلة'}</span>
                             </button>
                           </div>
                         </div>
