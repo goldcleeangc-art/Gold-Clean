@@ -741,115 +741,38 @@ export default function StorePage() {
     setOrderInProgress(true);
 
     try {
-      const cleanPhone = sanitizeEgyptianPhone(checkoutForm.phone, checkoutForm.phone);
-      const guestEmail = user?.email || (cleanPhone ? `${cleanPhone}@guest.store` : 'guest@goldclean.store');
-      const itemsSubtotal = getSubtotal();
-      const currentCartWeight = calculateCartTotalWeight(cart);
-      const shipCalc = calculateShipping(checkoutForm.city, currentCartWeight);
-      const calculatedShipCost = hasFreeShippingOffer 
-        ? 0 
-        : (shipCalc ? shipCalc.shippingCost : 0);
-      const finalGrandTotal = itemsSubtotal + calculatedShipCost;
+      const token = await auth.currentUser?.getIdToken().catch(() => undefined);
 
-      const orderPayload: Order = {
-        customerName: checkoutForm.name,
-        customerPhone: cleanPhone,
-        customerCountry: checkoutForm.country || 'مصر',
-        customerCity: checkoutForm.city,
-        customerAddress: checkoutForm.address,
-        notes: checkoutForm.notes,
-        items: cart.map(item => {
-          let code = item.product.code || '';
-          if (!code) {
-            const matchingProduct = products.find(p => p.id === item.product.id);
-            if (matchingProduct?.code) code = matchingProduct.code;
-            const matchingOffer = offers.find(o => `offer-${o.id}` === item.product.id || o.id === item.product.id);
-            if (matchingOffer?.code) code = matchingOffer.code;
-          }
-
-          let bundleItems: Array<{ productId: string; productName: string; productCode?: string; quantity: number }> | undefined = undefined;
-          if (item.isOffer && item.offerDetails?.items && item.offerDetails.items.length > 0) {
-            bundleItems = item.offerDetails.items.map(sub => {
-              const matchedProd = products.find(p => p.id === sub.productId);
-              return {
-                productId: sub.productId,
-                productName: sub.productName,
-                productCode: sub.productCode || matchedProd?.code || '',
-                quantity: sub.quantity
-              };
-            });
-          }
-
-          return {
+      const res = await fetch('/api/orders/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          customerName: checkoutForm.name,
+          customerPhone: checkoutForm.phone,
+          customerCity: checkoutForm.city,
+          customerAddress: checkoutForm.address,
+          customerCountry: checkoutForm.country || 'مصر',
+          notes: checkoutForm.notes,
+          userId: user?.uid || 'guest',
+          customerEmail: user?.email,
+          items: cart.map(item => ({
             productId: item.product.id,
-            productName: item.product.name,
-            productCode: code,
             quantity: item.quantity,
-            price: item.product.price,
-            isOffer: Boolean(item.isOffer),
-            ...(bundleItems && bundleItems.length > 0 ? { bundleItems } : {})
-          };
-        }),
-        subtotal: itemsSubtotal,
-        shippingCost: calculatedShipCost,
-        shippingZone: hasFreeShippingOffer 
-          ? `${shipCalc?.zone.name || 'شحن مجاني'} (عرض شحن مجاني)` 
-          : (shipCalc?.zone.name || ''),
-        shippingWeight: currentCartWeight,
-        totalPrice: finalGrandTotal,
-        status: 'pending',
-        createdAt: serverTimestamp(),
-        userId: user ? user.uid : 'guest',
-        customerEmail: guestEmail
-      };
+            isOffer: Boolean(item.isOffer)
+          }))
+        })
+      });
 
-      // 1. Generate unique order reference and ID in memory and record order in Firestore
-      const orderDocRef = doc(collection(db, 'orders'));
-      const generatedOrderId = orderDocRef.id;
-
-      // 2. Transmit to Bosta Shipping Logistics API (if configured)
-      try {
-        const shippingRes = await fetch('/api/shipping/create-order', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            orderId: generatedOrderId,
-            customerName: checkoutForm.name,
-            customerPhone: cleanPhone,
-            customerCity: checkoutForm.city,
-            customerAddress: checkoutForm.address,
-            customerEmail: guestEmail,
-            notes: checkoutForm.notes,
-            items: orderPayload.items,
-            totalPrice: orderPayload.totalPrice,
-            weight: currentCartWeight
-          })
-        });
-        const shippingData = await shippingRes.json();
-        if (shippingData && (shippingData.trackingNumber || shippingData.billCode || shippingData.success)) {
-          const tracking = shippingData.trackingNumber || shippingData.billCode || '';
-          const shippingInfoData: ShippingInfo = {
-            billCode: tracking,
-            trackingNumber: tracking,
-            deliveryId: shippingData.deliveryId || tracking,
-            courier: 'Bosta',
-            status: shippingData.state || 'created',
-            txlogisticId: generatedOrderId,
-            syncedAt: new Date().toISOString()
-          };
-          orderPayload.shippingInfo = shippingInfoData;
-        } else if (shippingData && shippingData.error) {
-          orderPayload.shippingInfo = {
-            courier: 'Bosta',
-            error: shippingData.error,
-            lastAttemptAt: new Date().toISOString()
-          };
-        }
-      } catch (shippingErr) {
-        console.warn('Silent fallback for shipping creation:', shippingErr);
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'حدث خطأ أثناء معالجة وتأكيد الطلب');
       }
 
-      await setDoc(orderDocRef, orderPayload);
+      const generatedOrderId = data.orderId;
+      const verifiedOrder: Order = data.order;
 
       // Persist order ID locally for guest visitor tracking
       if (!user) {
@@ -864,37 +787,37 @@ export default function StorePage() {
         }
       }
 
-      // Track Meta Pixel Purchase event
+      // Track Meta Pixel Purchase event with authoritative server price
       if (typeof window !== 'undefined' && (window as any).fbq) {
         (window as any).fbq('track', 'Purchase', {
           content_type: 'product',
-          contents: orderPayload.items.map(it => ({
+          contents: (verifiedOrder.items || []).map(it => ({
             id: it.productId,
             quantity: it.quantity,
             item_price: it.price
           })),
-          value: orderPayload.totalPrice,
+          value: verifiedOrder.totalPrice,
           currency: 'EGP',
-          num_items: orderPayload.items.reduce((sum, it) => sum + it.quantity, 0)
+          num_items: (verifiedOrder.items || []).reduce((sum, it) => sum + it.quantity, 0)
         });
       }
 
-      // Track TikTok Pixel CompletePayment event
+      // Track TikTok Pixel CompletePayment event with authoritative server price
       if (typeof window !== 'undefined' && (window as any).ttq) {
         (window as any).ttq.track('CompletePayment', {
           content_type: 'product',
-          contents: orderPayload.items.map(it => ({
+          contents: (verifiedOrder.items || []).map(it => ({
             content_id: it.productId,
             content_name: it.productName,
             quantity: it.quantity,
             price: it.price
           })),
-          value: orderPayload.totalPrice,
+          value: verifiedOrder.totalPrice,
           currency: 'EGP'
         });
       }
 
-      setSuccessOrder({ ...orderPayload, id: generatedOrderId });
+      setSuccessOrder(verifiedOrder);
       saveCart([]);
       setCheckoutForm({
         name: user?.displayName || '',
@@ -904,9 +827,9 @@ export default function StorePage() {
         address: '',
         notes: ''
       });
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert('حدث خطأ أثناء رفع الطلب لقاعدة البيانات.');
+      alert(e.message || 'حدث خطأ أثناء رفع الطلب لقاعدة البيانات.');
     } finally {
       setOrderInProgress(false);
     }

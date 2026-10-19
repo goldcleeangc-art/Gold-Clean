@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, CheckCircle, Info, Truck } from 'lucide-react';
+import { X, CheckCircle, Info, Truck, MessageCircle } from 'lucide-react';
 import { Order, CartItem } from '../../lib/types/store';
 import { SHIPPING_ZONES, normalizeArabicNumerals, sanitizeEgyptianPhone } from '../../lib/shipping';
 
@@ -103,11 +103,26 @@ export default function CheckoutModal({
               </div>
               <div>
                 <h4 className="font-bold text-slate-800 text-base">تم إرسال طلبك بنجاح!</h4>
-                <p className="text-xs text-slate-400 mt-1">نشكرك لشرائك من متجرنا. تم إرسال المعلومات ومزامنتها بنجاح مع وكلاء التوصيل.</p>
+                <p className="text-xs text-slate-400 mt-1">نشكرك لشرائك من متجرنا. تم التحقق من الأسعار ومزامنة الطلب مع نظام الشحن بنجاح.</p>
               </div>
 
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-right space-y-2.5 text-xs">
-                <p><strong>رقم المرجع للطلب:</strong> <span className="font-mono text-blue-600 text-sm">{successOrder.id}</span></p>
+                <div className="flex justify-between items-center">
+                  <p><strong>رقم المرجع للطلب:</strong> <span className="font-mono text-blue-600 text-sm font-bold">{successOrder.id}</span></p>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">معتمد ومؤكد</span>
+                </div>
+
+                {successOrder.shippingInfo?.trackingNumber && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5 flex items-center justify-between text-blue-950">
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <Truck className="w-4 h-4 text-blue-600" />
+                      <span>رقم تتبع الشحنة ({successOrder.shippingInfo.courier || 'بوسطة'}):</span>
+                    </div>
+                    <span className="font-mono font-bold text-xs bg-white px-2 py-1 rounded border border-blue-200 text-blue-700">
+                      {successOrder.shippingInfo.trackingNumber}
+                    </span>
+                  </div>
+                )}
 
                 <p><strong>اسم العميل:</strong> {successOrder.customerName}</p>
                 <p><strong>المحافظة والمدينة:</strong> {successOrder.customerCity} {successOrder.shippingZone ? `(${successOrder.shippingZone})` : ''}</p>
@@ -135,12 +150,36 @@ export default function CheckoutModal({
                 </div>
               </div>
 
-              <button 
-                onClick={() => { onClose(); setSuccessOrder(null); }}
-                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl cursor-pointer"
-              >
-                العودة للتسوق بمزيد من المنظفات
-              </button>
+              {/* Action Buttons */}
+              <div className="space-y-2 pt-1">
+                {(() => {
+                  const whatsappPhone = process.env.NEXT_PUBLIC_WHATSAPP_PHONE || '201000000000';
+                  const trackingSnippet = successOrder.shippingInfo?.trackingNumber 
+                    ? `\n- رقم تتبع الشحنة: ${successOrder.shippingInfo.trackingNumber}` 
+                    : '';
+                  const msg = `مرحباً، أود تأكيد طلبي من متجر جولد كلين:\n- رقم الطلب: ${successOrder.id}\n- الاسم: ${successOrder.customerName}\n- الإجمالي: ${successOrder.totalPrice.toFixed(2)} جنيه (الدفع عند الاستلام)${trackingSnippet}`;
+                  const whatsappUrl = `https://wa.me/${whatsappPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(msg)}`;
+
+                  return (
+                    <a
+                      href={whatsappUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>تأكيد ومتابعة الطلب عبر الواتساب</span>
+                    </a>
+                  );
+                })()}
+
+                <button 
+                  onClick={() => { onClose(); setSuccessOrder(null); }}
+                  className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors"
+                >
+                  العودة للتسوق بمزيد من المنظفات
+                </button>
+              </div>
             </div>
           ) : (
             <form onSubmit={onSubmit} className="space-y-4 text-xs">
