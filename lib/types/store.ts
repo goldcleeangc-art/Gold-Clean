@@ -75,6 +75,7 @@ export interface ShippingInfo {
   txlogisticId?: string;
   syncedAt?: any;
   error?: string;
+  lastAttemptAt?: any;
   skuUpdated?: boolean;
   skuUpdatedSummary?: string;
 }

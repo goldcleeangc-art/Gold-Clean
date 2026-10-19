@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { motion } from 'motion/react';
 import { 
   Search, 
@@ -13,8 +14,8 @@ import {
 interface NavbarProps {
   currentTab: 'home' | 'products' | 'offers' | 'about' | 'complaints';
   setCurrentTab: (tab: 'home' | 'products' | 'offers' | 'about' | 'complaints') => void;
-  isMerchantOpen: boolean;
-  setIsMerchantOpen: (open: boolean) => void;
+  isMerchantOpen?: boolean;
+  setIsMerchantOpen?: (open: boolean) => void;
   pendingComplaintsCount: number;
   userOrdersCount: number;
   userRole: 'user' | 'manager' | 'admin';
@@ -58,7 +59,7 @@ export default function Navbar({
           {/* Logo brand */}
           <div 
             className="flex items-center gap-2 cursor-pointer shrink-0 select-none group" 
-            onClick={() => { setCurrentTab('home'); setIsMerchantOpen(false); }}
+            onClick={() => { setCurrentTab('home'); setIsMerchantOpen?.(false); }}
           >
             <span className="w-8 h-8 rounded-lg bg-amber-500 group-hover:bg-amber-600 flex items-center justify-center text-white font-extrabold text-sm shadow-xs transition-colors">G</span>
             <h1 className="text-lg font-bold tracking-tight text-amber-500 font-sans">
@@ -70,21 +71,21 @@ export default function Navbar({
           <nav className="hidden md:flex items-center gap-1.5 lg:gap-3 xl:gap-5 text-xs lg:text-sm font-semibold text-slate-500 shrink-0">
             <button 
               id="nav-home-btn"
-              onClick={() => { setCurrentTab('home'); setIsMerchantOpen(false); }} 
+              onClick={() => { setCurrentTab('home'); setIsMerchantOpen?.(false); }} 
               className={`${currentTab === 'home' && !isMerchantOpen ? 'text-blue-600 border-b-2 border-blue-600 font-bold' : 'hover:text-blue-600 border-b-2 border-transparent'} pb-2.5 pt-1.5 px-1 transition-colors cursor-pointer outline-none focus:outline-none`}
             >
               الرئيسية
             </button>
             <button 
               id="nav-products-btn"
-              onClick={() => { setCurrentTab('products'); setIsMerchantOpen(false); onResetCategory(); setSearchTerm(''); }} 
+              onClick={() => { setCurrentTab('products'); setIsMerchantOpen?.(false); onResetCategory(); setSearchTerm(''); }} 
               className={`${currentTab === 'products' && !isMerchantOpen ? 'text-blue-600 border-b-2 border-blue-600 font-bold' : 'hover:text-blue-600 border-b-2 border-transparent'} pb-2.5 pt-1.5 px-1 transition-colors cursor-pointer outline-none focus:outline-none`}
             >
               منتجاتنا
             </button>
             <button 
               id="nav-offers-btn"
-              onClick={() => { setCurrentTab('offers'); setIsMerchantOpen(false); }} 
+              onClick={() => { setCurrentTab('offers'); setIsMerchantOpen?.(false); }} 
               className={`relative flex items-center gap-1.5 ${currentTab === 'offers' && !isMerchantOpen ? 'text-rose-600 border-b-2 border-rose-600 font-bold' : 'hover:text-rose-600 border-b-2 border-transparent'} pb-2.5 pt-1.5 px-1 transition-colors cursor-pointer outline-none focus:outline-none`}
             >
               <span>عروض التوفير</span>
@@ -96,7 +97,7 @@ export default function Navbar({
               id="nav-about-btn"
               onClick={() => { 
                 setCurrentTab('about'); 
-                setIsMerchantOpen(false); 
+                setIsMerchantOpen?.(false); 
                 window.open('https://portfolio.g-c.store', '_blank', 'noopener,noreferrer'); 
               }} 
               className={`${currentTab === 'about' && !isMerchantOpen ? 'text-blue-600 border-b-2 border-blue-600 font-bold' : 'hover:text-blue-600 border-b-2 border-transparent'} pb-2.5 pt-1.5 px-1 transition-colors cursor-pointer outline-none focus:outline-none`}
@@ -105,7 +106,7 @@ export default function Navbar({
             </button>
             <button 
               id="nav-complaints-btn"
-              onClick={() => { setCurrentTab('complaints'); setIsMerchantOpen(false); }} 
+              onClick={() => { setCurrentTab('complaints'); setIsMerchantOpen?.(false); }} 
               className={`${currentTab === 'complaints' && !isMerchantOpen ? 'text-amber-600 border-b-2 border-amber-600 font-bold' : 'hover:text-amber-600 border-b-2 border-transparent'} pb-2.5 pt-1.5 px-1 transition-colors flex items-center gap-1 cursor-pointer outline-none focus:outline-none`}
             >
               <span>الشكاوى والمقترحات</span>
@@ -118,9 +119,9 @@ export default function Navbar({
               طلباتي ({userOrdersCount})
             </button>
             {(userRole === 'manager' || userRole === 'admin') && (
-              <button 
+              <Link 
                 id="nav-admin-btn" 
-                onClick={() => { setIsMerchantOpen(true); }} 
+                href="/admin" 
                 className={`flex items-center gap-1.5 pb-2.5 pt-1.5 px-1 transition-colors relative cursor-pointer outline-none focus:outline-none ${isMerchantOpen ? 'text-amber-600 border-b-2 border-amber-600 font-bold' : 'text-slate-400 hover:text-amber-600 border-b-2 border-transparent'}`}
               >
                 <Settings className="w-3.5 h-3.5" />
@@ -130,7 +131,7 @@ export default function Navbar({
                     {pendingComplaintsCount}
                   </span>
                 )}
-              </button>
+              </Link>
             )}
           </nav>
         </div>
@@ -221,7 +222,7 @@ export default function Navbar({
             <span className="truncate">لوحة التحكم الإدارية لمتجر Gold Clean - إدارة المنتجات والمبيعات والطلبيات المباشرة</span>
           </div>
           <button 
-            onClick={() => setIsMerchantOpen(false)}
+            onClick={() => setIsMerchantOpen?.(false)}
             className="bg-white/10 hover:bg-white/20 px-3.5 py-1 rounded-lg text-white font-bold transition-all text-[11px] cursor-pointer shrink-0 outline-none focus:outline-none"
             dir="rtl"
           >

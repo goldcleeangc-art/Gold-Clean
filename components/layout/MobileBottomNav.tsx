@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { 
   Sparkles, 
   Package, 
@@ -12,10 +13,10 @@ import {
 } from 'lucide-react';
 
 interface MobileBottomNavProps {
-  isMerchantOpen: boolean;
+  isMerchantOpen?: boolean;
   currentTab: 'home' | 'products' | 'offers' | 'about' | 'complaints';
   setCurrentTab: (tab: 'home' | 'products' | 'offers' | 'about' | 'complaints') => void;
-  setIsMerchantOpen: (open: boolean) => void;
+  setIsMerchantOpen?: (open: boolean) => void;
   userOrdersCount: number;
   cartCount: number;
   userRole: 'user' | 'manager' | 'admin';
@@ -39,7 +40,7 @@ export default function MobileBottomNav({
   return (
     <nav className="md:hidden bg-white/95 backdrop-blur border-t border-slate-200 fixed bottom-0 inset-x-0 z-40 px-2 py-1.5 flex items-center justify-around text-[10px] font-bold shadow-lg" dir="rtl" id="mobile-bottom-nav">
       <button
-        onClick={() => { setCurrentTab('home'); setIsMerchantOpen(false); }}
+        onClick={() => { setCurrentTab('home'); setIsMerchantOpen?.(false); }}
         className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-colors cursor-pointer ${
           currentTab === 'home' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-900'
         }`}
@@ -49,7 +50,7 @@ export default function MobileBottomNav({
       </button>
 
       <button
-        onClick={() => { setCurrentTab('products'); setIsMerchantOpen(false); }}
+        onClick={() => { setCurrentTab('products'); setIsMerchantOpen?.(false); }}
         className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-colors cursor-pointer ${
           currentTab === 'products' ? 'text-blue-600' : 'text-slate-500 hover:text-slate-900'
         }`}
@@ -59,7 +60,7 @@ export default function MobileBottomNav({
       </button>
 
       <button
-        onClick={() => { setCurrentTab('offers'); setIsMerchantOpen(false); }}
+        onClick={() => { setCurrentTab('offers'); setIsMerchantOpen?.(false); }}
         className={`flex flex-col items-center gap-0.5 py-1 px-2.5 rounded-xl transition-colors relative cursor-pointer ${
           currentTab === 'offers' ? 'text-rose-600' : 'text-slate-500 hover:text-slate-900'
         }`}
@@ -85,7 +86,7 @@ export default function MobileBottomNav({
       </button>
 
       <button
-        onClick={() => { setCurrentTab('complaints'); setIsMerchantOpen(false); }}
+        onClick={() => { setCurrentTab('complaints'); setIsMerchantOpen?.(false); }}
         className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl transition-colors cursor-pointer ${
           currentTab === 'complaints' ? 'text-amber-600' : 'text-slate-500 hover:text-slate-900'
         }`}
@@ -108,13 +109,13 @@ export default function MobileBottomNav({
       </button>
 
       {(userRole === 'manager' || userRole === 'admin') && (
-        <button
-          onClick={() => setIsMerchantOpen(true)}
+        <Link
+          href="/admin"
           className="flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl text-amber-700 bg-amber-50 border border-amber-200 cursor-pointer"
         >
           <Settings className="w-4 h-4 text-amber-600" />
           <span>الإدارة</span>
-        </button>
+        </Link>
       )}
     </nav>
   );
