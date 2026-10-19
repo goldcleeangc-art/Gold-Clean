@@ -3,8 +3,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Sparkles, 
-  ShieldCheck, 
   Check 
 } from 'lucide-react';
 
@@ -2702,28 +2700,6 @@ export default function StorePage() {
         setSearchTerm={setSearchTerm}
         onResetCategory={() => setActiveCategory('all')}
       />
-
-      {/* Hero promo ribbon bar */}
-      {isMerchantOpen ? (
-        <div className="bg-gradient-to-r from-amber-600 to-amber-500 text-white py-2.5 px-6 text-center text-xs font-semibold flex items-center justify-between gap-4" id="admin-ribbon">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-amber-100" />
-            <span>لوحة التحكم الإدارية لمتجر Gold Clean - إدارة المنتجات والمبيعات والطلبيات المباشرة</span>
-          </div>
-          <button 
-            onClick={() => setIsMerchantOpen(false)}
-            className="bg-white/10 hover:bg-white/20 px-3.5 py-1 rounded-lg text-white font-bold transition-all text-[11px] cursor-pointer"
-            dir="rtl"
-          >
-            العودة لواجهة المتجر واستعراض المنتجات ←
-          </button>
-        </div>
-      ) : (
-        <div className="bg-gradient-to-r from-blue-600 to-sky-500 text-white py-2.5 px-4 text-center text-xs font-semibold flex items-center justify-center gap-2" id="promo-ribbon">
-          <Sparkles className="w-3.5 h-3.5" />
-          <span>توصيل سريع ومتميز لكافة الدول العربية ومصر!</span>
-        </div>
-      )}
 
       {/* MAIN LAYOUT */}
       <main className="flex-1 flex overflow-hidden relative" id="layout-body">
