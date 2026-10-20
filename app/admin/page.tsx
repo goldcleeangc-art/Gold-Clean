@@ -44,6 +44,7 @@ import {
 
 // Admin Components & Modals
 import MerchantPortal from '@/components/admin/MerchantPortal';
+import { StatsMetrics } from '@/components/admin/AdminStatsTab';
 import DeleteOrdersModal from '@/components/admin/DeleteOrdersModal';
 import FailedSyncModal from '@/components/admin/FailedSyncModal';
 import PackingSlipModal from '@/components/admin/PackingSlipModal';
@@ -1362,40 +1363,53 @@ export default function AdminPage() {
     });
   }, [allOrders, statsStartDate, statsEndDate]);
 
-  const statsMetrics = useMemo(() => {
+  const statsMetrics: StatsMetrics = useMemo(() => {
     const totalCount = statsDateScopedOrders.length;
-    const deliveredOrders = statsDateScopedOrders.filter(o => o.status === 'delivered');
-    const validOrders = statsDateScopedOrders.filter(o => o.status !== 'cancelled');
-    const cancelledOrders = statsDateScopedOrders.filter(o => o.status === 'cancelled');
     const pendingOrders = statsDateScopedOrders.filter(o => o.status === 'pending');
     const preparingOrders = statsDateScopedOrders.filter(o => o.status === 'preparing');
     const shippingOrders = statsDateScopedOrders.filter(o => o.status === 'shipping');
+    const deliveredOrders = statsDateScopedOrders.filter(o => o.status === 'delivered');
+    const cancelledOrders = statsDateScopedOrders.filter(o => o.status === 'cancelled');
+    const validOrders = statsDateScopedOrders.filter(o => o.status !== 'cancelled');
 
-    const totalRevenue = statsStatusMode === 'valid'
-      ? validOrders.reduce((s, o) => s + (Number(o.totalPrice) || 0), 0)
-      : statsStatusMode === 'delivered'
-      ? deliveredOrders.reduce((s, o) => s + (Number(o.totalPrice) || 0), 0)
-      : statsDateScopedOrders.reduce((s, o) => s + (Number(o.totalPrice) || 0), 0);
+    const totalSalesValid = validOrders.reduce((sum, o) => sum + (Number(o.totalPrice) || 0), 0);
+    const totalSalesAll = statsDateScopedOrders.reduce((sum, o) => sum + (Number(o.totalPrice) || 0), 0);
+    const totalDeliveredRevenue = deliveredOrders.reduce((sum, o) => sum + (Number(o.totalPrice) || 0), 0);
+    const totalCancelledRevenue = cancelledOrders.reduce((sum, o) => sum + (Number(o.totalPrice) || 0), 0);
 
-    const relevantCount = statsStatusMode === 'valid'
-      ? validOrders.length
-      : statsStatusMode === 'delivered'
-      ? deliveredOrders.length
-      : totalCount;
+    let displayCount = validOrders.length;
+    let displayRevenue = totalSalesValid;
+    let displayModeLabel = 'المبيعات المؤكدة (بدون الملغية)';
+
+    if (statsStatusMode === 'all') {
+      displayCount = totalCount;
+      displayRevenue = totalSalesAll;
+      displayModeLabel = 'كافة الطلبات (شاملة الملغية)';
+    } else if (statsStatusMode === 'delivered') {
+      displayCount = deliveredOrders.length;
+      displayRevenue = totalDeliveredRevenue;
+      displayModeLabel = 'الطلبات المستلمة والناجحة فقط';
+    }
+
+    const avgOrderValue = displayCount > 0 ? displayRevenue / displayCount : 0;
 
     return {
       totalCount,
-      validCount: validOrders.length,
-      deliveredCount: deliveredOrders.length,
-      cancelledCount: cancelledOrders.length,
-      pendingCount: pendingOrders.length,
-      preparingCount: preparingOrders.length,
-      shippingCount: shippingOrders.length,
-      totalRevenue,
-      averageOrderValue: relevantCount > 0 ? Math.round(totalRevenue / relevantCount) : 0,
-      deliveryRate: validOrders.length > 0 ? Math.round((deliveredOrders.length / validOrders.length) * 100) : 0,
-      cancelledRate: totalCount > 0 ? Math.round((cancelledOrders.length / totalCount) * 100) : 0,
-      deliveredRevenue: deliveredOrders.reduce((s, o) => s + (Number(o.totalPrice) || 0), 0),
+      validOrdersCount: validOrders.length,
+      cancelledOrdersCount: cancelledOrders.length,
+      deliveredOrdersCount: deliveredOrders.length,
+      shippingOrdersCount: shippingOrders.length,
+      preparingOrdersCount: preparingOrders.length,
+      pendingOrdersCount: pendingOrders.length,
+
+      displayCount,
+      displayRevenue,
+      displayModeLabel,
+      avgOrderValue,
+
+      totalDeliveredRevenue,
+      totalCancelledRevenue,
+
       pendingRevenue: pendingOrders.reduce((s, o) => s + (Number(o.totalPrice) || 0), 0),
       preparingRevenue: preparingOrders.reduce((s, o) => s + (Number(o.totalPrice) || 0), 0),
       shippingRevenue: shippingOrders.reduce((s, o) => s + (Number(o.totalPrice) || 0), 0),

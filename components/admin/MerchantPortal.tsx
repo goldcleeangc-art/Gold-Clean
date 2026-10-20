@@ -17,7 +17,7 @@ import AdminOrdersTab, { OrderCounts } from './AdminOrdersTab';
 import AdminProductsTab, { ProductFormData } from './AdminProductsTab';
 import AdminOffersTab, { OfferFormData } from './AdminOffersTab';
 import AdminCategoriesTab from './AdminCategoriesTab';
-import AdminStatsTab from './AdminStatsTab';
+import AdminStatsTab, { StatsMetrics } from './AdminStatsTab';
 import AdminUsersTab from './AdminUsersTab';
 import AdminComplaintsTab from '../AdminComplaintsTab';
 import { Order, Product, Offer, Category } from '../../lib/types/store';
@@ -143,7 +143,7 @@ interface MerchantPortalProps {
   setStatsSingleDate: (d: string) => void;
   statsStatusMode: 'valid' | 'all' | 'delivered';
   setStatsStatusMode: (m: 'valid' | 'all' | 'delivered') => void;
-  statsMetrics: any;
+  statsMetrics: StatsMetrics;
   statsDisplayOrders: Order[];
   statsSearchQuery: string;
   setStatsSearchQuery: (q: string) => void;

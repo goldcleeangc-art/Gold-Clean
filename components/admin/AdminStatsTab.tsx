@@ -19,7 +19,7 @@ import {
 import { Order, formatOrderDate } from '../../lib/types/store';
 import { cleanProductNameForWorkers } from '../../lib/shipping';
 
-interface StatsMetrics {
+export interface StatsMetrics {
   displayCount: number;
   validOrdersCount: number;
   cancelledOrdersCount: number;
@@ -306,12 +306,12 @@ export default function AdminStatsTab({
           </div>
           <div>
             <span className="text-3xl font-black text-blue-700 font-mono block">
-              {statsMetrics.displayCount} <span className="text-sm font-bold text-blue-600">طلب</span>
+              {statsMetrics?.displayCount ?? 0} <span className="text-sm font-bold text-blue-600">طلب</span>
             </span>
           </div>
           <div className="pt-2 border-t border-blue-100/80 flex items-center justify-between text-[10px] text-blue-800 font-semibold">
-            <span>المؤكدة: {statsMetrics.validOrdersCount}</span>
-            <span>الملغية: {statsMetrics.cancelledOrdersCount}</span>
+            <span>المؤكدة: {statsMetrics?.validOrdersCount ?? 0}</span>
+            <span>الملغية: {statsMetrics?.cancelledOrdersCount ?? 0}</span>
           </div>
         </div>
 
@@ -325,11 +325,11 @@ export default function AdminStatsTab({
           </div>
           <div>
             <span className="text-3xl font-black text-emerald-600 font-mono block">
-              {statsMetrics.displayRevenue.toFixed(2)} <span className="text-sm font-bold text-emerald-700">جنيه</span>
+              {(statsMetrics?.displayRevenue ?? 0).toFixed(2)} <span className="text-sm font-bold text-emerald-700">جنيه</span>
             </span>
           </div>
           <div className="pt-2 border-t border-emerald-100/80 flex items-center justify-between text-[10px] text-emerald-800 font-semibold truncate">
-            <span>• {statsMetrics.displayModeLabel}</span>
+            <span>• {statsMetrics?.displayModeLabel || ''}</span>
           </div>
         </div>
 
@@ -343,7 +343,7 @@ export default function AdminStatsTab({
           </div>
           <div>
             <span className="text-2xl font-black text-purple-700 font-mono block">
-              {statsMetrics.avgOrderValue.toFixed(2)} <span className="text-xs font-bold text-purple-600">جنيه / طلب</span>
+              {(statsMetrics?.avgOrderValue ?? 0).toFixed(2)} <span className="text-xs font-bold text-purple-600">جنيه / طلب</span>
             </span>
           </div>
           <div className="pt-2 border-t border-purple-100/80 text-[10px] text-purple-800 font-semibold">
@@ -361,11 +361,11 @@ export default function AdminStatsTab({
           </div>
           <div>
             <span className="text-2xl font-black text-amber-600 font-mono block">
-              {statsMetrics.totalDeliveredRevenue.toFixed(2)} <span className="text-xs font-bold text-amber-700">جنيه</span>
+              {(statsMetrics?.totalDeliveredRevenue ?? 0).toFixed(2)} <span className="text-xs font-bold text-amber-700">جنيه</span>
             </span>
           </div>
           <div className="pt-2 border-t border-amber-100/80 text-[10px] text-amber-800 font-semibold">
-            <span>{statsMetrics.deliveredOrdersCount} طلب تم تسليمه بنجاح</span>
+            <span>{statsMetrics?.deliveredOrdersCount ?? 0} طلب تم تسليمه بنجاح</span>
           </div>
         </div>
       </div>
@@ -384,10 +384,10 @@ export default function AdminStatsTab({
               <span>⏳ قيد الانتظار</span>
             </div>
             <div className="text-base font-black text-amber-900 font-mono">
-              {statsMetrics.pendingOrdersCount} <span className="text-[10px] font-medium text-amber-700">طلب</span>
+              {statsMetrics?.pendingOrdersCount ?? 0} <span className="text-[10px] font-medium text-amber-700">طلب</span>
             </div>
             <div className="text-[10px] font-bold text-amber-700 font-mono">
-              {statsMetrics.pendingRevenue.toFixed(2)} ج.م
+              {(statsMetrics?.pendingRevenue ?? 0).toFixed(2)} ج.م
             </div>
           </div>
 
@@ -398,10 +398,10 @@ export default function AdminStatsTab({
               <span>⚙️ جاري التجهيز</span>
             </div>
             <div className="text-base font-black text-blue-900 font-mono">
-              {statsMetrics.preparingOrdersCount} <span className="text-[10px] font-medium text-blue-700">طلب</span>
+              {statsMetrics?.preparingOrdersCount ?? 0} <span className="text-[10px] font-medium text-blue-700">طلب</span>
             </div>
             <div className="text-[10px] font-bold text-blue-700 font-mono">
-              {statsMetrics.preparingRevenue.toFixed(2)} ج.م
+              {(statsMetrics?.preparingRevenue ?? 0).toFixed(2)} ج.م
             </div>
           </div>
 
@@ -412,10 +412,10 @@ export default function AdminStatsTab({
               <span>🛵 بالشحن</span>
             </div>
             <div className="text-base font-black text-purple-900 font-mono">
-              {statsMetrics.shippingOrdersCount} <span className="text-[10px] font-medium text-purple-700">طلب</span>
+              {statsMetrics?.shippingOrdersCount ?? 0} <span className="text-[10px] font-medium text-purple-700">طلب</span>
             </div>
             <div className="text-[10px] font-bold text-purple-700 font-mono">
-              {statsMetrics.shippingRevenue.toFixed(2)} ج.م
+              {(statsMetrics?.shippingRevenue ?? 0).toFixed(2)} ج.م
             </div>
           </div>
 
@@ -426,10 +426,10 @@ export default function AdminStatsTab({
               <span>✅ تم الاستلام</span>
             </div>
             <div className="text-base font-black text-emerald-900 font-mono">
-              {statsMetrics.deliveredOrdersCount} <span className="text-[10px] font-medium text-emerald-700">طلب</span>
+              {statsMetrics?.deliveredOrdersCount ?? 0} <span className="text-[10px] font-medium text-emerald-700">طلب</span>
             </div>
             <div className="text-[10px] font-bold text-emerald-700 font-mono">
-              {statsMetrics.totalDeliveredRevenue.toFixed(2)} ج.م
+              {(statsMetrics?.totalDeliveredRevenue ?? 0).toFixed(2)} ج.م
             </div>
           </div>
 
@@ -440,10 +440,10 @@ export default function AdminStatsTab({
               <span>❌ ملغي</span>
             </div>
             <div className="text-base font-black text-rose-900 font-mono">
-              {statsMetrics.cancelledOrdersCount} <span className="text-[10px] font-medium text-rose-700">طلب</span>
+              {statsMetrics?.cancelledOrdersCount ?? 0} <span className="text-[10px] font-medium text-rose-700">طلب</span>
             </div>
             <div className="text-[10px] font-bold text-rose-700 font-mono">
-              {statsMetrics.totalCancelledRevenue.toFixed(2)} ج.م
+              {(statsMetrics?.totalCancelledRevenue ?? 0).toFixed(2)} ج.م
             </div>
           </div>
         </div>
@@ -545,7 +545,7 @@ export default function AdminStatsTab({
                             {ord.items?.length || 0} صنف ({ord.items?.reduce((s, i) => s + (i.quantity || 1), 0) || 0} قطعة)
                           </td>
                           <td className="py-2.5 px-3 font-mono font-black text-emerald-700">
-                            {ord.totalPrice?.toFixed(2)} ج.م
+                            {(Number(ord.totalPrice) || 0).toFixed(2)} ج.م
                           </td>
                           <td className="py-2.5 px-3">
                             <span className={`inline-block px-2 py-0.5 rounded-lg text-[10px] font-bold border ${currentStatus.bg} ${currentStatus.text} ${currentStatus.border}`}>

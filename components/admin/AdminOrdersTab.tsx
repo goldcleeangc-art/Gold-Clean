@@ -827,10 +827,10 @@ export default function AdminOrdersTab({
 
               <div className="flex justify-between items-center text-[11px] pt-1 border-t border-slate-50">
                 <div>
-                  <span className="font-extrabold text-blue-600 bg-blue-50/30 px-3 py-1 rounded-lg">الحساب الإجمالي: {ord.totalPrice.toFixed(2)} جنيه</span>
-                  {typeof ord.shippingCost === 'number' && (
+                  <span className="font-extrabold text-blue-600 bg-blue-50/30 px-3 py-1 rounded-lg">الحساب الإجمالي: {(Number(ord.totalPrice) || 0).toFixed(2)} جنيه</span>
+                  {ord.shippingCost !== undefined && ord.shippingCost !== null && (
                     <span className="text-[10px] text-slate-400 block mt-1 pr-1">
-                      (المنتجات: {(ord.subtotal ?? (ord.totalPrice - ord.shippingCost)).toFixed(2)} ج + الشحن: {ord.shippingCost === 0 ? 'مجاني 🎁' : `${ord.shippingCost.toFixed(2)} ج`} {ord.shippingZone ? `• ${ord.shippingZone}` : ''})
+                      (المنتجات: {(Number(ord.subtotal ?? ((Number(ord.totalPrice) || 0) - (Number(ord.shippingCost) || 0))) || 0).toFixed(2)} ج + الشحن: {Number(ord.shippingCost) === 0 ? 'مجاني 🎁' : `${(Number(ord.shippingCost) || 0).toFixed(2)} ج`} {ord.shippingZone ? `• ${ord.shippingZone}` : ''})
                     </span>
                   )}
                 </div>
