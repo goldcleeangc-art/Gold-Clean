@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Star, ShoppingCart, Link2, Check } from 'lucide-react';
+import { X, Star, ShoppingCart, Link2, Check, ExternalLink } from 'lucide-react';
 import { Product, Category } from '../../lib/types/store';
 
 interface ProductDetailsModalProps {
@@ -144,6 +144,15 @@ export default function ProductDetailsModal({
             >
               {copiedLinkId === product.id ? <Check className="w-5 h-5 text-emerald-500" /> : <Link2 className="w-5 h-5" />}
             </button>
+            <a
+              href={`/products/${product.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-3 bg-white text-slate-500 font-bold text-sm rounded-xl hover:bg-slate-100 transition-colors border border-slate-200 flex items-center justify-center cursor-pointer"
+              title="فتح صفحة المنتج المستقلة"
+            >
+              <ExternalLink className="w-5 h-5" />
+            </a>
           </div>
           <button
             disabled={!product.isAvailable}

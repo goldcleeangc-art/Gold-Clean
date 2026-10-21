@@ -537,7 +537,7 @@ export default function StorePage() {
   };
 
   const handleCopyLink = (productId: string) => {
-    const url = `${window.location.origin}?tab=products&product=${productId}`;
+    const url = `${window.location.origin}/products/${productId}`;
     navigator.clipboard.writeText(url);
     setCopiedLinkId(productId);
     setTimeout(() => setCopiedLinkId(null), 2000);
