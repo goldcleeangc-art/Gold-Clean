@@ -44,7 +44,7 @@ import HomeView from '../components/store/HomeView';
 import ProductsView from '../components/store/ProductsView';
 import OffersView from '../components/store/OffersView';
 import AboutView from '../components/store/AboutView';
-import ComplaintsSection from '../components/ComplaintsSection';
+import ComplaintsSection from '../components/store/ComplaintsSection';
 import CartDrawer from '../components/cart/CartDrawer';
 import CheckoutModal from '../components/cart/CheckoutModal';
 import FlyToCartParticles from '../components/cart/FlyToCartParticles';

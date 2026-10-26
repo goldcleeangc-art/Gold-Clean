@@ -19,7 +19,7 @@ import AdminOffersTab, { OfferFormData } from './AdminOffersTab';
 import AdminCategoriesTab from './AdminCategoriesTab';
 import AdminStatsTab, { StatsMetrics } from './AdminStatsTab';
 import AdminUsersTab from './AdminUsersTab';
-import AdminComplaintsTab from '../AdminComplaintsTab';
+import AdminComplaintsTab from './AdminComplaintsTab';
 import { Order, Product, Offer, Category } from '../../lib/types/store';
 
 interface MerchantPortalProps {

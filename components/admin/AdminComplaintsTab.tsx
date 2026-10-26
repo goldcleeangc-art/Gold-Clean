@@ -41,7 +41,7 @@ import {
   orderBy,
   query
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db } from '../../lib/firebase';
 import {
   Complaint,
   ComplaintCategory,
@@ -49,7 +49,7 @@ import {
   ComplaintStatus,
   COMPLAINT_CATEGORIES,
   COMPLAINT_STATUSES
-} from '../lib/types/complaint';
+} from '../../lib/types/complaint';
 
 interface AdminComplaintsTabProps {
   userRole?: 'admin' | 'manager' | 'user';

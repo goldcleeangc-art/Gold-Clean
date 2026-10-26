@@ -38,15 +38,15 @@ import {
   where, 
   onSnapshot 
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { sanitizeEgyptianPhone } from '../lib/shipping';
+import { db } from '../../lib/firebase';
+import { sanitizeEgyptianPhone } from '../../lib/shipping';
 import { 
   Complaint, 
   ComplaintCategory, 
   ComplaintPriority, 
   COMPLAINT_CATEGORIES, 
   COMPLAINT_STATUSES 
-} from '../lib/types/complaint';
+} from '../../lib/types/complaint';
 
 interface ComplaintsSectionProps {
   user: any;

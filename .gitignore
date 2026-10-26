@@ -1,14 +1,31 @@
+# Dependencies
 node_modules/
+
+# Next.js build output
 .next/
-coverage/
-.DS_Store
-*.log
+*.tsbuildinfo
+out/
+
+# Environment files
 .env*
 !.env.example
-GoldClean.zip
-*.tsbuildinfo
-scratch/
+
+# Testing & Coverage
+coverage/
+
+# Logs & OS files
+*.log
+.DS_Store
+Thumbs.db
+
+# Archives & Bundles
+*.zip
+*.tar.gz
+
+# Generated reports output
+scripts/reports/*.png
+scripts/reports/*.html
+
+# Binary docs & Archives
 *.docx
-How to _ bosta*
-Old Ruls
-*.png
+docs/archive/
