@@ -165,6 +165,12 @@ export default function StorePage() {
               offers={storeData.offers}
               products={storeData.products}
               onAddOfferToCart={cartState.handleAddOfferToCart}
+              onAddToCart={cartState.handleAddToCart}
+              onSelectProduct={(p) => {
+                setSelectedProductDetails(p);
+                setIsProductDetailsOpen(true);
+              }}
+              loading={storeData.loading}
             />
           ) : currentTab === 'about' ? (
             <AboutView />
@@ -174,6 +180,7 @@ export default function StorePage() {
               products={storeData.products}
               setCurrentTab={setCurrentTab}
               onAddOfferToCart={cartState.handleAddOfferToCart}
+              loading={storeData.loading}
             />
           ) : currentTab === 'complaints' ? (
             <ComplaintsSection
@@ -194,6 +201,8 @@ export default function StorePage() {
               setPriceRange={setPriceRange}
               loading={storeData.loading}
               filteredProducts={filteredProducts}
+              allProducts={storeData.products}
+              setCurrentTab={setCurrentTab}
               onSelectProduct={(p) => {
                 setSelectedProductDetails(p);
                 setIsProductDetailsOpen(true);
