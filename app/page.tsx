@@ -18,6 +18,7 @@ import MobileBottomNav from '../components/layout/MobileBottomNav';
 import HomeView from '../components/store/HomeView';
 import ProductsView from '../components/store/ProductsView';
 import OffersView from '../components/store/OffersView';
+import WhiteFridayView from '../components/store/WhiteFridayView';
 import AboutView from '../components/store/AboutView';
 import ComplaintsSection from '../components/store/ComplaintsSection';
 import CartDrawer from '../components/cart/CartDrawer';
@@ -29,7 +30,7 @@ import OrderTrackerModal from '../components/modals/OrderTrackerModal';
 
 export default function StorePage() {
   // 1. Navigation & Filter UI States
-  const [currentTab, setCurrentTab] = useState<'home' | 'products' | 'offers' | 'about' | 'complaints'>('home');
+  const [currentTab, setCurrentTab] = useState<'home' | 'products' | 'white_friday' | 'offers' | 'about' | 'complaints'>('home');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [priceRange, setPriceRange] = useState<number>(0);
@@ -164,12 +165,28 @@ export default function StorePage() {
               setCurrentTab={setCurrentTab}
               offers={storeData.offers}
               products={storeData.products}
+              whiteFridaySettings={storeData.whiteFridaySettings}
               onAddOfferToCart={cartState.handleAddOfferToCart}
               onAddToCart={cartState.handleAddToCart}
               onSelectProduct={(p) => {
                 setSelectedProductDetails(p);
                 setIsProductDetailsOpen(true);
               }}
+              loading={storeData.loading}
+            />
+          ) : currentTab === 'white_friday' ? (
+            <WhiteFridayView
+              products={storeData.products}
+              categories={storeData.categories}
+              whiteFridaySettings={storeData.whiteFridaySettings}
+              setCurrentTab={setCurrentTab}
+              onAddToCart={cartState.handleAddToCart}
+              onSelectProduct={(p) => {
+                setSelectedProductDetails(p);
+                setIsProductDetailsOpen(true);
+              }}
+              copiedLinkId={copiedLinkId}
+              onCopyLink={handleCopyLink}
               loading={storeData.loading}
             />
           ) : currentTab === 'about' ? (

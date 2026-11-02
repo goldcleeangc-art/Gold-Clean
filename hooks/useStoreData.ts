@@ -1,7 +1,15 @@
 import { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
 import { collection, doc, query, where, onSnapshot, updateDoc } from 'firebase/firestore';
-import { Category, Product, Offer } from '../lib/types/store';
+import { Category, Product, Offer, WhiteFridaySettings } from '../lib/types/store';
+
+const DEFAULT_WHITE_FRIDAY_SETTINGS: WhiteFridaySettings = {
+  isActive: true,
+  title: 'مهرجان كبرى تخفيضات الجمعة البيضاء 🔥',
+  subtitle: 'وفّري حتى 60% على أقوى منظفات ومطهرات جولد كلين مع هدايا حصرية وشحن لكافة المحافظات!',
+  badgeText: 'الجمعة البيضاء',
+  endDate: '2026-11-30T23:59:59'
+};
 
 export function useStoreData(user: any, userRole: string) {
   const [products, setProducts] = useState<Product[]>([]);
@@ -9,6 +17,7 @@ export function useStoreData(user: any, userRole: string) {
   const [offers, setOffers] = useState<Offer[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [pendingComplaintsCount, setPendingComplaintsCount] = useState<number>(0);
+  const [whiteFridaySettings, setWhiteFridaySettings] = useState<WhiteFridaySettings>(DEFAULT_WHITE_FRIDAY_SETTINGS);
 
   // جلب الأقسام
   useEffect(() => {
@@ -56,6 +65,24 @@ export function useStoreData(user: any, userRole: string) {
     }, (error) => console.error("Error listening to offers:", error));
 
     return () => unsubscribe();
+  }, []);
+
+  // جلب إعدادات الجمعة البيضاء
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'settings', 'white_friday'), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setWhiteFridaySettings({
+          isActive: data.isActive !== undefined ? data.isActive : true,
+          title: data.title || DEFAULT_WHITE_FRIDAY_SETTINGS.title,
+          subtitle: data.subtitle || DEFAULT_WHITE_FRIDAY_SETTINGS.subtitle,
+          badgeText: data.badgeText || DEFAULT_WHITE_FRIDAY_SETTINGS.badgeText,
+          endDate: data.endDate || DEFAULT_WHITE_FRIDAY_SETTINGS.endDate
+        });
+      }
+    }, (err) => console.warn('Could not listen to white friday settings:', err));
+
+    return () => unsub();
   }, []);
 
   // جلب عدد الشكاوى للإدارة
@@ -111,6 +138,8 @@ export function useStoreData(user: any, userRole: string) {
     products,
     categories,
     offers,
+    whiteFridaySettings,
+    whiteFridayProducts: products.filter(p => p.isWhiteFriday),
     loading,
     pendingComplaintsCount,
     handleRateProduct

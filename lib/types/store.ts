@@ -22,6 +22,19 @@ export interface Product {
   seoTitle?: string;
   seoDescription?: string;
   seoKeywords?: string;
+  // White Friday attributes
+  isWhiteFriday?: boolean;
+  whiteFridayPrice?: number;
+  whiteFridayBadge?: string;
+  originalPrice?: number;
+}
+
+export interface WhiteFridaySettings {
+  isActive: boolean;
+  title: string;
+  subtitle: string;
+  badgeText: string;
+  endDate?: string;
 }
 
 export interface OfferItem {

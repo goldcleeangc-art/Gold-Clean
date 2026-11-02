@@ -249,9 +249,10 @@ service cloud.firestore {
       allow read, write: if isManager();
     }
 
-    // إعدادات المنظومة (قوائم أسعار المصنع والشركة، وخزنة تحليل هوامش الأرباح)
+    // إعدادات المنظومة (قوائم أسعار المصنع والشركة، وخزنة تحليل هوامش الأرباح، وإعلانات المتجر)
     match /settings/{settingId} {
-      allow read, write: if isManager();
+      allow read: if settingId == 'white_friday' || isManager();
+      allow write: if isManager();
       match /{subcollection=**} {
         allow read, write: if isManager();
       }

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Product } from '../lib/types/store';
 
-type TabType = 'home' | 'products' | 'offers' | 'about' | 'complaints';
+type TabType = 'home' | 'products' | 'white_friday' | 'offers' | 'about' | 'complaints';
 
 interface UrlSyncProps {
   currentTab: TabType;
@@ -38,7 +38,7 @@ export function useUrlSync({
 
     if (productId) {
       setCurrentTab('products');
-    } else if (tab === 'products' || tab === 'offers' || tab === 'about' || tab === 'complaints') {
+    } else if (tab === 'products' || tab === 'white_friday' || tab === 'offers' || tab === 'about' || tab === 'complaints') {
       setCurrentTab(tab);
     }
 

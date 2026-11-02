@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { 
   Sparkles, 
@@ -28,14 +28,15 @@ import {
   Code,
   Mail
 } from 'lucide-react';
-import { Category, Offer, Product } from '../../lib/types/store';
+import { Category, Offer, Product, WhiteFridaySettings } from '../../lib/types/store';
 
 interface HomeViewProps {
   categories: Category[];
   setActiveCategory: (cat: string) => void;
-  setCurrentTab: (tab: 'home' | 'products' | 'offers' | 'about' | 'complaints') => void;
+  setCurrentTab: (tab: 'home' | 'products' | 'white_friday' | 'offers' | 'about' | 'complaints') => void;
   offers: Offer[];
   products: Product[];
+  whiteFridaySettings?: WhiteFridaySettings;
   onAddOfferToCart: (offer: Offer, e: React.MouseEvent) => void;
   onAddToCart?: (product: Product, e: React.MouseEvent) => void;
   onSelectProduct?: (product: Product) => void;
@@ -72,12 +73,41 @@ export default function HomeView({
   setCurrentTab,
   offers,
   products,
+  whiteFridaySettings,
   onAddOfferToCart,
   onAddToCart,
   onSelectProduct,
   loading = false
 }: HomeViewProps) {
   const [heroImgSrc, setHeroImgSrc] = useState(HERO_IMAGE_URL);
+
+  // White Friday products
+  const whiteFridayProducts = products.filter(p => p.isWhiteFriday === true && p.isAvailable !== false);
+
+  // Countdown timer for announcement banner
+  const [wfTimeLeft, setWfTimeLeft] = useState<{ hours: number; minutes: number; seconds: number }>({
+    hours: 0,
+    minutes: 0,
+    seconds: 0
+  });
+
+  useEffect(() => {
+    const targetDateStr = whiteFridaySettings?.endDate || '2026-11-30T23:59:59';
+    const target = new Date(targetDateStr).getTime();
+
+    const updateTimer = () => {
+      const now = new Date().getTime();
+      const diff = Math.max(0, target - now);
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      setWfTimeLeft({ hours, minutes, seconds });
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [whiteFridaySettings?.endDate]);
 
   // Featured products subset
   const featuredProducts = products.slice(0, 8);
@@ -264,6 +294,74 @@ export default function HomeView({
         </div>
       </section>
 
+      {/* 1.5 WHITE FRIDAY ANNOUNCEMENT BANNER */}
+      {whiteFridaySettings?.isActive !== false && (
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 sm:-mt-8 mb-4 relative z-20">
+          <div className="bg-gradient-to-r from-slate-950 via-[#1B1126] to-slate-950 border-2 border-amber-500/50 rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden group">
+            {/* Ambient glowing blobs */}
+            <div className="absolute top-0 right-1/4 w-72 h-72 bg-amber-500/15 rounded-full blur-3xl pointer-events-none group-hover:bg-amber-500/25 transition-colors" />
+            <div className="absolute bottom-0 left-10 w-60 h-60 bg-rose-600/15 rounded-full blur-2xl pointer-events-none" />
+
+            <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-5 text-center lg:text-right">
+              
+              {/* Text & Badge */}
+              <div className="flex-1">
+                <div className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500/20 via-amber-400/30 to-amber-500/20 border border-amber-400/50 text-amber-300 px-3.5 py-1 rounded-full text-xs font-black shadow-xs mb-3">
+                  <Flame className="w-4 h-4 text-amber-400 animate-bounce" />
+                  <span>{whiteFridaySettings?.badgeText || 'إعلان عروض الجمعة البيضاء 🔥'}</span>
+                </div>
+
+                <h3 className="text-xl sm:text-2xl md:text-3xl font-black text-white tracking-tight leading-snug">
+                  {whiteFridaySettings?.title || 'مهرجان عروض وتخفيضات الجمعة البيضاء الكبرى!'}
+                </h3>
+                
+                <p className="text-xs sm:text-sm text-slate-300 font-medium mt-1.5 max-w-2xl">
+                  {whiteFridaySettings?.subtitle || 'خصومات حصرية تصل حتى 60% على تشكيلة فاخرة من المنظفات والمعقمات — لفترة محدودة وحتى نفاد الكمية!'}
+                </p>
+              </div>
+
+              {/* Countdown & CTA */}
+              <div className="flex flex-col sm:flex-row items-center gap-3.5 shrink-0">
+                {/* Mini countdown */}
+                <div className="flex items-center gap-1.5 font-mono text-center bg-slate-900/90 border border-amber-500/30 px-3 py-2 rounded-2xl">
+                  <div className="flex flex-col items-center">
+                    <span className="text-sm sm:text-base font-black text-amber-400 font-mono">
+                      {String(wfTimeLeft.hours).padStart(2, '0')}
+                    </span>
+                    <span className="text-[9px] text-slate-400 font-sans">ساعة</span>
+                  </div>
+                  <span className="text-amber-500 font-bold">:</span>
+                  <div className="flex flex-col items-center">
+                    <span className="text-sm sm:text-base font-black text-amber-400 font-mono">
+                      {String(wfTimeLeft.minutes).padStart(2, '0')}
+                    </span>
+                    <span className="text-[9px] text-slate-400 font-sans">دقيقة</span>
+                  </div>
+                  <span className="text-amber-500 font-bold">:</span>
+                  <div className="flex flex-col items-center">
+                    <span className="text-sm sm:text-base font-black text-rose-400 font-mono animate-pulse">
+                      {String(wfTimeLeft.seconds).padStart(2, '0')}
+                    </span>
+                    <span className="text-[9px] text-slate-400 font-sans">ثانية</span>
+                  </div>
+                </div>
+
+                {/* Primary Button to White Friday */}
+                <button
+                  onClick={() => setCurrentTab('white_friday')}
+                  className="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black px-6 py-3.5 rounded-2xl text-xs sm:text-sm shadow-xl shadow-amber-500/20 hover:scale-105 transition-all duration-300 cursor-pointer flex items-center gap-2 group/btn"
+                >
+                  <Sparkles className="w-4 h-4 text-slate-950 group-hover/btn:rotate-12 transition-transform" />
+                  <span>تسوق عروض الجمعة البيضاء الآن</span>
+                  <ArrowLeft className="w-4 h-4 group-hover/btn:-translate-x-1 transition-transform" />
+                </button>
+              </div>
+
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* 2. MAIN CATEGORIES SECTION */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-16 shrink-0">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 mb-8">
@@ -326,6 +424,125 @@ export default function HomeView({
           )}
         </div>
       </section>
+
+      {/* 2.5 WHITE FRIDAY SHOWCASE SECTION */}
+      {whiteFridayProducts.length > 0 && (
+        <section className="bg-gradient-to-b from-slate-950 via-[#101625] to-slate-950 border-y border-amber-500/30 py-12 md:py-16 shrink-0 relative overflow-hidden" id="home-white-friday-section">
+          {/* Ambient Glows */}
+          <div className="absolute top-0 right-10 w-96 h-96 bg-amber-500/10 rounded-full blur-[120px] pointer-events-none" />
+          <div className="absolute bottom-0 left-10 w-80 h-80 bg-rose-600/10 rounded-full blur-[100px] pointer-events-none" />
+
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 mb-8">
+              <div>
+                <div className="inline-flex items-center gap-2 bg-amber-500/20 text-amber-300 border border-amber-400/30 px-3.5 py-1 rounded-full text-xs font-black mb-2 shadow-xs">
+                  <Flame className="w-4 h-4 text-amber-400 animate-pulse" />
+                  <span>تخفيضات موسم الجمعة البيضاء الحصرية 🏷️</span>
+                </div>
+                <h2 className="text-xl sm:text-3xl font-black text-white">
+                  عروض ومنتجات الجمعة البيضاء المختارة
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-300 mt-1 font-medium">
+                  أسعار استثنائية وتخفيضات تصل إلى 60% مباشرة من المصنع، سارية حتى نفاد الكمية
+                </p>
+              </div>
+
+              <button
+                onClick={() => setCurrentTab('white_friday')}
+                className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs px-5 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer hover:scale-105"
+              >
+                <span>مشاهدة كافة عروض الجمعة البيضاء ({whiteFridayProducts.length})</span>
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-6">
+              {whiteFridayProducts.slice(0, 8).map((prod) => {
+                const regularPrice = prod.price || 0;
+                const wfPrice = prod.whiteFridayPrice || regularPrice;
+                const discountPct = regularPrice > 0 ? Math.max(0, Math.round(((regularPrice - wfPrice) / regularPrice) * 100)) : 0;
+                const savings = Math.max(0, regularPrice - wfPrice);
+
+                return (
+                  <div
+                    key={prod.id}
+                    className="bg-slate-900/90 rounded-3xl border border-amber-500/30 hover:border-amber-400 p-3 sm:p-4 shadow-xl hover:shadow-2xl transition-all duration-300 flex flex-col justify-between group relative overflow-hidden"
+                  >
+                    <div className="flex items-start justify-between gap-1.5 mb-2 relative z-10">
+                      <span className="bg-rose-600 text-white text-[10px] sm:text-xs font-black px-2 py-0.5 rounded-xl shadow-xs flex items-center gap-1">
+                        <Flame className="w-3 h-3 text-amber-300 animate-bounce" />
+                        <span>{discountPct > 0 ? `-${discountPct}%` : 'تخفيض'}</span>
+                      </span>
+                      {prod.whiteFridayBadge && (
+                        <span className="bg-amber-500/20 text-amber-300 border border-amber-400/30 text-[9px] font-bold px-2 py-0.5 rounded-md truncate max-w-[120px]">
+                          {prod.whiteFridayBadge}
+                        </span>
+                      )}
+                    </div>
+
+                    <div
+                      onClick={() => onSelectProduct?.(prod)}
+                      className="w-full aspect-square rounded-2xl overflow-hidden bg-slate-950 relative mb-3 cursor-pointer border border-slate-800"
+                    >
+                      <img
+                        src={prod.image}
+                        alt={prod.name}
+                        className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-500"
+                      />
+                    </div>
+
+                    <div className="flex-1 flex flex-col justify-between">
+                      <div>
+                        {prod.volume && (
+                          <span className="text-[10px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded-md font-medium inline-block mb-1">
+                            {prod.volume}
+                          </span>
+                        )}
+                        <h4
+                          onClick={() => onSelectProduct?.(prod)}
+                          className="font-extrabold text-xs sm:text-sm text-white hover:text-amber-300 transition-colors line-clamp-1 cursor-pointer"
+                        >
+                          {prod.name}
+                        </h4>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-800 mt-2">
+                        <div className="flex items-baseline justify-between mb-2">
+                          <div>
+                            <span className="text-base sm:text-lg font-black text-amber-400 font-mono">
+                              {wfPrice} <span className="text-xs text-amber-300">ج.م</span>
+                            </span>
+                            {regularPrice > wfPrice && (
+                              <span className="text-xs text-slate-400 line-through font-mono block">
+                                {regularPrice} ج.م
+                              </span>
+                            )}
+                          </div>
+                          {savings > 0 && (
+                            <span className="text-[9px] font-black text-emerald-400 bg-emerald-950/70 border border-emerald-500/30 px-1.5 py-0.5 rounded">
+                              وفري {savings} ج.م
+                            </span>
+                          )}
+                        </div>
+
+                        <button
+                          onClick={(e) => onAddToCart?.(prod, e)}
+                          className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs py-2 px-3 rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5 active:scale-95"
+                        >
+                          <ShoppingCart className="w-3.5 h-3.5" />
+                          <span>أضف للسلة</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* 3. PROMOTIONAL OFFERS & BUNDLES SECTION */}
       {offers.length > 0 && (

@@ -62,21 +62,28 @@ export function useCart(products: Product[], offers: Offer[]) {
   const handleAddToCart = (product: Product, e?: React.MouseEvent) => {
     triggerFlyAnimation(e);
     const wasCartEmpty = cart.length === 0;
+
+    // Apply White Friday discount price if active on this product
+    const effectiveProduct: Product = (product.isWhiteFriday && typeof product.whiteFridayPrice === 'number' && product.whiteFridayPrice > 0)
+      ? { ...product, originalPrice: product.price, price: product.whiteFridayPrice }
+      : product;
+
     const existingIdx = cart.findIndex(item => item.product.id === product.id);
     const newCart = [...cart];
 
     if (existingIdx > -1) {
       newCart[existingIdx].quantity += 1;
+      newCart[existingIdx].product = effectiveProduct;
     } else {
-      newCart.push({ product, quantity: 1 });
+      newCart.push({ product: effectiveProduct, quantity: 1 });
     }
     saveCart(newCart);
 
-    setAddedItemName(product.name);
+    setAddedItemName(effectiveProduct.name);
     setTimeout(() => setAddedItemName(null), 2500);
     if (wasCartEmpty) setIsCartOpen(true);
 
-    trackAddToCartPixel(product.id, product.name, product.price);
+    trackAddToCartPixel(effectiveProduct.id, effectiveProduct.name, effectiveProduct.price);
   };
 
   const handleAddOfferToCart = (offer: Offer, e?: React.MouseEvent) => {

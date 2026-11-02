@@ -15,7 +15,8 @@ import {
   ADMIN_EMAILS, 
   isUserMasterAdmin, 
   formatOrderDate, 
-  getOrderDateObj 
+  getOrderDateObj,
+  WhiteFridaySettings 
 } from '@/lib/types/store';
 
 // Firebase & Auth
@@ -60,8 +61,15 @@ export default function AdminPage() {
   const [authError, setAuthError] = useState<string | null>(null);
 
   // Admin Navigation Tab
-  const [adminTab, setAdminTab] = useState<'orders' | 'products' | 'offers' | 'categories' | 'stats' | 'complaints' | 'users'>('orders');
+  const [adminTab, setAdminTab] = useState<'orders' | 'products' | 'white_friday' | 'offers' | 'categories' | 'stats' | 'complaints' | 'users'>('orders');
   const [pendingComplaintsCount, setPendingComplaintsCount] = useState<number>(0);
+  const [whiteFridaySettings, setWhiteFridaySettings] = useState<WhiteFridaySettings>({
+    isActive: true,
+    title: 'مهرجان كبرى تخفيضات الجمعة البيضاء 🔥',
+    subtitle: 'وفّري حتى 60% على أقوى منظفات ومطهرات جولد كلين مع هدايا حصرية وشحن لكافة المحافظات!',
+    badgeText: 'الجمعة البيضاء',
+    endDate: '2026-11-30T23:59:59'
+  });
 
   // Data Collections
   const [allOrders, setAllOrders] = useState<Order[]>([]);
@@ -311,10 +319,24 @@ export default function AdminPage() {
       setOffersLoading(false);
     });
 
+    const unsubWf = onSnapshot(doc(db, 'settings', 'white_friday'), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setWhiteFridaySettings({
+          isActive: data.isActive !== undefined ? data.isActive : true,
+          title: data.title || 'مهرجان كبرى تخفيضات الجمعة البيضاء 🔥',
+          subtitle: data.subtitle || 'وفّري حتى 60% على أقوى منظفات ومطهرات جولد كلين مع هدايا حصرية وشحن لكافة المحافظات!',
+          badgeText: data.badgeText || 'الجمعة البيضاء',
+          endDate: data.endDate || '2026-11-30T23:59:59'
+        });
+      }
+    });
+
     return () => {
       unsubProd();
       unsubCat();
       unsubOffers();
+      unsubWf();
     };
   }, []);
 
@@ -1749,6 +1771,7 @@ export default function AdminPage() {
           pendingComplaintsCount={pendingComplaintsCount}
           adminTab={adminTab}
           setAdminTab={setAdminTab}
+          whiteFridaySettings={whiteFridaySettings}
 
           // Orders
           allOrders={allOrders}

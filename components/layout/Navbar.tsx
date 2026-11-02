@@ -22,8 +22,8 @@ import {
 } from 'lucide-react';
 
 interface NavbarProps {
-  currentTab: 'home' | 'products' | 'offers' | 'about' | 'complaints';
-  setCurrentTab: (tab: 'home' | 'products' | 'offers' | 'about' | 'complaints') => void;
+  currentTab: 'home' | 'products' | 'white_friday' | 'offers' | 'about' | 'complaints';
+  setCurrentTab: (tab: 'home' | 'products' | 'white_friday' | 'offers' | 'about' | 'complaints') => void;
   isMerchantOpen?: boolean;
   setIsMerchantOpen?: (open: boolean) => void;
   pendingComplaintsCount: number;
@@ -64,7 +64,7 @@ export default function Navbar({
 }: NavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const handleNavClick = (tab: 'home' | 'products' | 'offers' | 'about' | 'complaints') => {
+  const handleNavClick = (tab: 'home' | 'products' | 'white_friday' | 'offers' | 'about' | 'complaints') => {
     setCurrentTab(tab);
     setIsMerchantOpen?.(false);
     if (tab === 'products') {
@@ -206,6 +206,28 @@ export default function Navbar({
             >
               منتجاتنا
               {currentTab === 'products' && !isMerchantOpen && (
+                <motion.div 
+                  layoutId="activeNavTab" 
+                  className="absolute bottom-0 inset-x-3 h-0.5 bg-amber-500 rounded-full" 
+                />
+              )}
+            </button>
+
+            <button 
+              id="nav-white-friday-btn"
+              onClick={() => handleNavClick('white_friday')} 
+              className={`px-3 py-2 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative flex items-center gap-1.5 ${
+                currentTab === 'white_friday' && !isMerchantOpen 
+                  ? 'text-amber-400 font-black bg-slate-950 shadow-sm border border-amber-500/40' 
+                  : 'text-slate-700 hover:text-amber-600 hover:bg-amber-50/70'
+              }`}
+            >
+              <Flame className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+              <span>الجمعة البيضاء</span>
+              <span className="bg-amber-500 text-slate-950 text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-2xs">
+                خصم 60%
+              </span>
+              {currentTab === 'white_friday' && !isMerchantOpen && (
                 <motion.div 
                   layoutId="activeNavTab" 
                   className="absolute bottom-0 inset-x-3 h-0.5 bg-amber-500 rounded-full" 
@@ -461,6 +483,19 @@ export default function Navbar({
                     <span>جميع المنتجات</span>
                   </span>
                   <span>&larr;</span>
+                </button>
+
+                <button 
+                  onClick={() => handleNavClick('white_friday')}
+                  className={`w-full text-right py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-between ${
+                    currentTab === 'white_friday' ? 'bg-slate-950 text-amber-400 font-black' : 'text-slate-900 bg-amber-50/70 hover:bg-amber-100'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <Flame className="w-4 h-4 text-amber-500 animate-pulse" />
+                    <span>عروض الجمعة البيضاء</span>
+                  </span>
+                  <span className="bg-amber-500 text-slate-950 text-[9px] font-black px-1.5 py-0.5 rounded-full">خصم خاص 🔥</span>
                 </button>
 
                 <button 

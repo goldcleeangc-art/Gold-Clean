@@ -10,7 +10,8 @@ import {
   LayoutGrid, 
   TrendingUp, 
   MessageSquareWarning, 
-  Users 
+  Users,
+  Flame
 } from 'lucide-react';
 
 import AdminOrdersTab, { OrderCounts } from './AdminOrdersTab';
@@ -20,7 +21,8 @@ import AdminCategoriesTab from './AdminCategoriesTab';
 import AdminStatsTab, { StatsMetrics } from './AdminStatsTab';
 import AdminUsersTab from './AdminUsersTab';
 import AdminComplaintsTab from './AdminComplaintsTab';
-import { Order, Product, Offer, Category } from '../../lib/types/store';
+import AdminWhiteFridayTab from './AdminWhiteFridayTab';
+import { Order, Product, Offer, Category, WhiteFridaySettings } from '../../lib/types/store';
 
 interface MerchantPortalProps {
   isMerchantAuthenticated: boolean;
@@ -29,8 +31,9 @@ interface MerchantPortalProps {
   userRole: 'admin' | 'manager' | 'user';
   setIsMerchantOpen: (open: boolean) => void;
   pendingComplaintsCount: number;
-  adminTab: 'orders' | 'products' | 'offers' | 'categories' | 'stats' | 'complaints' | 'users';
-  setAdminTab: (tab: 'orders' | 'products' | 'offers' | 'categories' | 'stats' | 'complaints' | 'users') => void;
+  adminTab: 'orders' | 'products' | 'white_friday' | 'offers' | 'categories' | 'stats' | 'complaints' | 'users';
+  setAdminTab: (tab: 'orders' | 'products' | 'white_friday' | 'offers' | 'categories' | 'stats' | 'complaints' | 'users') => void;
+  whiteFridaySettings: WhiteFridaySettings;
 
   // Orders Tab
   allOrders: Order[];
@@ -172,6 +175,7 @@ export default function MerchantPortal({
   pendingComplaintsCount,
   adminTab,
   setAdminTab,
+  whiteFridaySettings,
 
   // Orders
   allOrders,
@@ -366,6 +370,7 @@ export default function MerchantPortal({
             {[
               { id: 'orders', label: 'إدارة طلبات المشترين', icon: Notebook },
               { id: 'products', label: 'المنظفات والقطع', icon: Package },
+              { id: 'white_friday', label: 'عروض الجمعة البيضاء 🏷️', icon: Flame },
               { id: 'offers', label: 'إدارة العروض والباقات 🔥', icon: Sparkles },
               { id: 'categories', label: 'إدارة الفئات والمقاطع', icon: LayoutGrid },
               { id: 'stats', label: 'مؤشرات المبيعات', icon: TrendingUp },
@@ -477,6 +482,14 @@ export default function MerchantPortal({
                 handleDeleteProduct={handleDeleteProduct}
                 productToDelete={productToDelete}
                 setProductToDelete={setProductToDelete}
+              />
+            )}
+
+            {adminTab === 'white_friday' && (
+              <AdminWhiteFridayTab
+                products={products}
+                categories={categories}
+                whiteFridaySettings={whiteFridaySettings}
               />
             )}
 

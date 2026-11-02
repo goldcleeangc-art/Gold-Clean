@@ -14,8 +14,8 @@ import {
 
 interface MobileBottomNavProps {
   isMerchantOpen?: boolean;
-  currentTab: 'home' | 'products' | 'offers' | 'about' | 'complaints';
-  setCurrentTab: (tab: 'home' | 'products' | 'offers' | 'about' | 'complaints') => void;
+  currentTab: 'home' | 'products' | 'white_friday' | 'offers' | 'about' | 'complaints';
+  setCurrentTab: (tab: 'home' | 'products' | 'white_friday' | 'offers' | 'about' | 'complaints') => void;
   setIsMerchantOpen?: (open: boolean) => void;
   userOrdersCount: number;
   cartCount: number;
@@ -61,6 +61,19 @@ export default function MobileBottomNav({
       >
         <Package className={`w-4 h-4 ${currentTab === 'products' ? 'text-amber-500' : ''}`} />
         <span>المنتجات</span>
+      </button>
+
+      <button
+        onClick={() => { setCurrentTab('white_friday'); setIsMerchantOpen?.(false); }}
+        className={`flex flex-col items-center gap-0.5 py-1 px-2 rounded-xl transition-all relative cursor-pointer ${
+          currentTab === 'white_friday' ? 'text-amber-500 font-black' : 'text-slate-500 hover:text-slate-900'
+        }`}
+      >
+        <span className="absolute -top-1 -left-1 bg-amber-500 text-slate-950 text-[7px] px-1 rounded-full font-black animate-bounce">
+          خصم
+        </span>
+        <Flame className={`w-4 h-4 ${currentTab === 'white_friday' ? 'text-amber-500 fill-amber-500/20' : 'text-amber-600'}`} />
+        <span>الجمعة البيضاء</span>
       </button>
 
       <button

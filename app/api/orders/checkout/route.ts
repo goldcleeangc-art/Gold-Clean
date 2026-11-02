@@ -210,8 +210,10 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        // Authoritative verified product price
-        const verifiedProdPrice = Math.max(0, Number(prodData.price) || 0);
+        // Authoritative verified product price (supporting White Friday discount pricing)
+        const verifiedProdPrice = (prodData.isWhiteFriday && typeof prodData.whiteFridayPrice === 'number' && prodData.whiteFridayPrice > 0)
+          ? Math.max(0, Number(prodData.whiteFridayPrice))
+          : Math.max(0, Number(prodData.price) || 0);
         const verifiedWeight = parseProductWeight(prodData);
 
         verifiedOrderItems.push({

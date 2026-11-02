@@ -101,7 +101,11 @@ export default async function ProductPage({ params }: PageProps) {
         ratingsMap: data.ratingsMap || {},
         seoTitle: data.seoTitle,
         seoDescription: data.seoDescription,
-        seoKeywords: data.seoKeywords
+        seoKeywords: data.seoKeywords,
+        isWhiteFriday: Boolean(data.isWhiteFriday),
+        whiteFridayPrice: typeof data.whiteFridayPrice === 'number' ? data.whiteFridayPrice : undefined,
+        whiteFridayBadge: data.whiteFridayBadge || '',
+        originalPrice: Number(data.originalPrice) || Number(data.price) || 0
       };
 
       // B. Fetch Category Name
@@ -138,6 +142,9 @@ export default async function ProductPage({ params }: PageProps) {
             isAvailable: d.data().isAvailable ?? true,
             rating: Number(d.data().rating) || 5,
             reviewsCount: Number(d.data().reviewsCount) || 0,
+            isWhiteFriday: Boolean(d.data().isWhiteFriday),
+            whiteFridayPrice: typeof d.data().whiteFridayPrice === 'number' ? d.data().whiteFridayPrice : undefined,
+            whiteFridayBadge: d.data().whiteFridayBadge || ''
           }));
       } catch (relErr) {
         console.warn('Could not fetch related products:', relErr);

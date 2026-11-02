@@ -75,6 +75,11 @@ export default function ProductDetailsModal({
             <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-md border border-slate-200">
               {product.volume}
             </span>
+            {product.isWhiteFriday && (
+              <span className="text-xs font-black text-rose-700 bg-rose-50 px-2 py-1 rounded-md border border-rose-200">
+                {product.whiteFridayBadge || 'عرض الجمعة البيضاء 🔥'}
+              </span>
+            )}
           </div>
           
           <h2 className="text-2xl font-black text-slate-900 mb-2 leading-tight">
@@ -93,8 +98,21 @@ export default function ProductDetailsModal({
                 لا توجد تقييمات بعد
               </span>
             )}
-            <div className="text-xl font-black text-blue-600">
-              {product.price.toFixed(2)} <span className="text-sm font-normal text-slate-500">جنيه</span>
+            <div>
+              {product.isWhiteFriday && product.whiteFridayPrice ? (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-amber-600 font-mono">
+                    {product.whiteFridayPrice.toFixed(2)} <span className="text-sm font-normal text-slate-500">جنيه</span>
+                  </span>
+                  <span className="text-sm text-slate-400 line-through font-mono">
+                    {product.price.toFixed(2)} جنيه
+                  </span>
+                </div>
+              ) : (
+                <div className="text-xl font-black text-blue-600">
+                  {product.price.toFixed(2)} <span className="text-sm font-normal text-slate-500">جنيه</span>
+                </div>
+              )}
             </div>
           </div>
 

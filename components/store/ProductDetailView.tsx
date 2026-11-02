@@ -81,6 +81,11 @@ export default function ProductDetailView({
     }, 2800);
   };
 
+  // Effective price (supporting White Friday discounts)
+  const effectivePrice = (currentProduct.isWhiteFriday && typeof currentProduct.whiteFridayPrice === 'number' && currentProduct.whiteFridayPrice > 0)
+    ? currentProduct.whiteFridayPrice
+    : currentProduct.price;
+
   // Add to cart handler
   const handleAddToCart = () => {
     if (!currentProduct.isAvailable) return;
@@ -89,12 +94,17 @@ export default function ProductDetailView({
       const raw = localStorage.getItem('clean_minimal_cart');
       const items: CartItem[] = raw ? JSON.parse(raw) : [];
 
+      const itemProduct: Product = (currentProduct.isWhiteFriday && currentProduct.whiteFridayPrice)
+        ? { ...currentProduct, originalPrice: currentProduct.price, price: currentProduct.whiteFridayPrice }
+        : currentProduct;
+
       const existingIndex = items.findIndex(item => item.product.id === currentProduct.id);
       if (existingIndex > -1) {
         items[existingIndex].quantity += quantity;
+        items[existingIndex].product = itemProduct;
       } else {
         items.push({
-          product: currentProduct,
+          product: itemProduct,
           quantity: quantity
         });
       }
@@ -109,7 +119,7 @@ export default function ProductDetailView({
           content_name: currentProduct.name,
           content_ids: [currentProduct.id],
           content_type: 'product',
-          value: currentProduct.price * quantity,
+          value: effectivePrice * quantity,
           currency: 'EGP'
         });
       }
@@ -124,7 +134,7 @@ export default function ProductDetailView({
   // Direct WhatsApp Quick Order
   const handleWhatsAppOrder = () => {
     const whatsappPhone = process.env.NEXT_PUBLIC_WHATSAPP_PHONE || '201000000000';
-    const totalOrderPrice = (currentProduct.price * quantity).toFixed(2);
+    const totalOrderPrice = (effectivePrice * quantity).toFixed(2);
     const codeSnippet = currentProduct.code ? ` (كود: ${currentProduct.code})` : '';
     const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
 
@@ -368,14 +378,35 @@ export default function ProductDetailView({
                 </h1>
 
                 {/* Price Display */}
-                <div className="flex items-baseline gap-2 mb-6 pb-6 border-b border-slate-100">
-                  <span className="text-3xl sm:text-4xl font-black text-blue-600">
-                    {currentProduct.price.toFixed(2)}
-                  </span>
-                  <span className="text-base font-bold text-slate-500">
-                    جنيه مصري
-                  </span>
-                  <span className="text-xs text-slate-400 mr-2">
+                <div className="flex flex-wrap items-baseline gap-3 mb-6 pb-6 border-b border-slate-100">
+                  {currentProduct.isWhiteFriday && currentProduct.whiteFridayPrice ? (
+                    <>
+                      <span className="text-3xl sm:text-4xl font-black text-amber-600 font-mono">
+                        {currentProduct.whiteFridayPrice.toFixed(2)}
+                      </span>
+                      <span className="text-xl text-slate-400 line-through font-mono">
+                        {currentProduct.price.toFixed(2)}
+                      </span>
+                      <span className="text-base font-bold text-slate-500">
+                        جنيه مصري
+                      </span>
+                      {currentProduct.whiteFridayBadge && (
+                        <span className="bg-rose-500 text-white text-xs font-black px-2.5 py-1 rounded-full shadow-2xs mr-auto">
+                          {currentProduct.whiteFridayBadge}
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-3xl sm:text-4xl font-black text-blue-600">
+                        {currentProduct.price.toFixed(2)}
+                      </span>
+                      <span className="text-base font-bold text-slate-500">
+                        جنيه مصري
+                      </span>
+                    </>
+                  )}
+                  <span className="text-xs text-slate-400">
                     (شامل ضريبة القيمة المضافة)
                   </span>
                 </div>
@@ -413,7 +444,7 @@ export default function ProductDetailView({
                     </button>
                   </div>
                   <span className="text-xs font-medium text-slate-400">
-                    الإجمالي: <strong className="text-blue-600 font-bold">{(currentProduct.price * quantity).toFixed(2)}</strong> جنيه
+                    الإجمالي: <strong className="text-amber-600 font-bold font-mono">{(effectivePrice * quantity).toFixed(2)}</strong> جنيه
                   </span>
                 </div>
 

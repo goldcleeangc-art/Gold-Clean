@@ -143,6 +143,12 @@ export default function CartDrawer({
                           كود: {item.product.code}
                         </span>
                       )}
+                      {item.product.isWhiteFriday && (
+                        <span className="text-[9px] font-bold text-amber-800 bg-amber-100/90 border border-amber-300 px-1.5 py-0.5 rounded flex items-center gap-1">
+                          <Sparkles className="w-2.5 h-2.5 text-amber-600 animate-pulse" />
+                          <span>{item.product.whiteFridayBadge || 'عروض الجمعة البيضاء'}</span>
+                        </span>
+                      )}
                       {item.isOffer && (item.offerDetails?.isFreeShipping || offers.find(o => o.id === (item.offerDetails?.offerId || item.product.id.replace('offer-', '')))?.isFreeShipping) && (
                         <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
                           <Truck className="w-2.5 h-2.5" />
