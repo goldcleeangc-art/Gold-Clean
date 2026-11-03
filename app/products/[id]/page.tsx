@@ -105,6 +105,7 @@ export default async function ProductPage({ params }: PageProps) {
         isWhiteFriday: Boolean(data.isWhiteFriday),
         whiteFridayPrice: typeof data.whiteFridayPrice === 'number' ? data.whiteFridayPrice : undefined,
         whiteFridayBadge: data.whiteFridayBadge || '',
+        whiteFridayImage: data.whiteFridayImage || '',
         originalPrice: Number(data.originalPrice) || Number(data.price) || 0
       };
 
@@ -144,7 +145,8 @@ export default async function ProductPage({ params }: PageProps) {
             reviewsCount: Number(d.data().reviewsCount) || 0,
             isWhiteFriday: Boolean(d.data().isWhiteFriday),
             whiteFridayPrice: typeof d.data().whiteFridayPrice === 'number' ? d.data().whiteFridayPrice : undefined,
-            whiteFridayBadge: d.data().whiteFridayBadge || ''
+            whiteFridayBadge: d.data().whiteFridayBadge || '',
+            whiteFridayImage: d.data().whiteFridayImage || ''
           }));
       } catch (relErr) {
         console.warn('Could not fetch related products:', relErr);

@@ -48,7 +48,7 @@ export default function ProductDetailsModal({
       >
         <div className="relative h-64 md:h-80 bg-slate-50 shrink-0">
           <img 
-            src={product.image || 'https://images.unsplash.com/photo-1563453392212-326f518500b1?auto=format&fit=crop&q=80&w=1000'}
+            src={(product.isWhiteFriday && product.whiteFridayImage) ? product.whiteFridayImage : (product.image || 'https://images.unsplash.com/photo-1563453392212-326f518500b1?auto=format&fit=crop&q=80&w=1000')}
             alt={product.name}
             className="w-full h-full object-contain p-4"
           />

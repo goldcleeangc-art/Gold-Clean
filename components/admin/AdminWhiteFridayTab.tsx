@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Flame, 
   Sparkles, 
@@ -20,11 +20,13 @@ import {
   X,
   Package,
   ArrowRight,
-  Percent
+  Percent,
+  ImageIcon
 } from 'lucide-react';
 import { Product, Category, WhiteFridaySettings } from '../../lib/types/store';
 import { db } from '../../lib/firebase';
 import { doc, updateDoc, setDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import ImageUploadField from './ImageUploadField';
 
 interface AdminWhiteFridayTabProps {
   products: Product[];
@@ -42,11 +44,18 @@ export default function AdminWhiteFridayTab({
   const [isSavingBanner, setIsSavingBanner] = useState<boolean>(false);
   const [bannerSavedSuccess, setBannerSavedSuccess] = useState<boolean>(false);
 
+  useEffect(() => {
+    if (whiteFridaySettings) {
+      setBannerForm(whiteFridaySettings);
+    }
+  }, [whiteFridaySettings]);
+
   // 2. Add existing product state
   const [isAddExistingOpen, setIsAddExistingOpen] = useState<boolean>(false);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [existingWhiteFridayPrice, setExistingWhiteFridayPrice] = useState<number>(0);
   const [existingBadge, setExistingBadge] = useState<string>('عرض الجمعة البيضاء 🔥');
+  const [existingImage, setExistingImage] = useState<string>('');
   const [isAddingExisting, setIsAddingExisting] = useState<boolean>(false);
 
   // 3. Create brand-new product state
@@ -68,6 +77,7 @@ export default function AdminWhiteFridayTab({
   const [editingItem, setEditingItem] = useState<Product | null>(null);
   const [editPrice, setEditPrice] = useState<number>(0);
   const [editBadge, setEditBadge] = useState<string>('');
+  const [editImage, setEditImage] = useState<string>('');
   const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
 
   // 5. Product to remove from White Friday
@@ -116,6 +126,7 @@ export default function AdminWhiteFridayTab({
         subtitle: bannerForm.subtitle.trim(),
         badgeText: bannerForm.badgeText.trim(),
         endDate: bannerForm.endDate || '2026-11-30T23:59:59',
+        bannerImage: bannerForm.bannerImage?.trim() || '',
         updatedAt: serverTimestamp()
       }, { merge: true });
 
@@ -149,18 +160,28 @@ export default function AdminWhiteFridayTab({
     setIsAddingExisting(true);
     try {
       const prodRef = doc(db, 'products', selectedProductId);
-      await updateDoc(prodRef, {
+      const chosenImage = existingImage.trim() || currentSelectedProduct.image;
+      const updateData: any = {
         isWhiteFriday: true,
         whiteFridayPrice: Number(existingWhiteFridayPrice),
         whiteFridayBadge: existingBadge.trim() || 'عرض الجمعة البيضاء 🔥',
         originalPrice: currentSelectedProduct.price,
+        whiteFridayImage: chosenImage,
         updatedAt: serverTimestamp()
-      });
+      };
+
+      if (existingImage.trim() && existingImage.trim() !== currentSelectedProduct.image) {
+        updateData.originalImage = currentSelectedProduct.image;
+        updateData.image = chosenImage;
+      }
+
+      await updateDoc(prodRef, updateData);
 
       setIsAddExistingOpen(false);
       setSelectedProductId('');
       setExistingWhiteFridayPrice(0);
       setExistingBadge('عرض الجمعة البيضاء 🔥');
+      setExistingImage('');
     } catch (err) {
       console.error('Error enrolling product into White Friday:', err);
       alert('حدث خطأ أثناء إضافة المنتج إلى الجمعة البيضاء.');
@@ -184,6 +205,7 @@ export default function AdminWhiteFridayTab({
     setIsCreatingNew(true);
     try {
       const prodCollection = collection(db, 'products');
+      const finalImage = newProductForm.image.trim() || 'https://images.unsplash.com/photo-1585421514738-01798e348b17?auto=format&fit=crop&q=80&w=600';
       await addDoc(prodCollection, {
         name: newProductForm.name.trim(),
         code: newProductForm.code.trim() || `WF${Math.floor(Math.random() * 900) + 100}`,
@@ -193,7 +215,8 @@ export default function AdminWhiteFridayTab({
         isWhiteFriday: true,
         whiteFridayBadge: newProductForm.badge.trim() || 'عرض الجمعة البيضاء 🔥',
         volume: newProductForm.volume.trim() || '1 لتر',
-        image: newProductForm.image.trim() || 'https://images.unsplash.com/photo-1585421514738-01798e348b17?auto=format&fit=crop&q=80&w=600',
+        image: finalImage,
+        whiteFridayImage: finalImage,
         description: newProductForm.description.trim() || 'منتج عالي التركيز والجودة من مصنع جولد كلين بعرض حصري للجمعة البيضاء.',
         isAvailable: true,
         rating: 5,
@@ -229,9 +252,12 @@ export default function AdminWhiteFridayTab({
     setIsSavingEdit(true);
     try {
       const prodRef = doc(db, 'products', editingItem.id);
+      const finalImage = editImage.trim() || editingItem.whiteFridayImage || editingItem.image;
       await updateDoc(prodRef, {
         whiteFridayPrice: Number(editPrice),
         whiteFridayBadge: editBadge.trim(),
+        whiteFridayImage: finalImage,
+        image: finalImage,
         updatedAt: serverTimestamp()
       });
       setEditingItem(null);
@@ -249,10 +275,14 @@ export default function AdminWhiteFridayTab({
     setIsRemoving(true);
     try {
       const prodRef = doc(db, 'products', productToRemove.id);
-      await updateDoc(prodRef, {
+      const updateData: any = {
         isWhiteFriday: false,
         updatedAt: serverTimestamp()
-      });
+      };
+      if (productToRemove.originalImage) {
+        updateData.image = productToRemove.originalImage;
+      }
+      await updateDoc(prodRef, updateData);
       setProductToRemove(null);
     } catch (err) {
       console.error('Error removing product from White Friday:', err);
@@ -289,8 +319,10 @@ export default function AdminWhiteFridayTab({
                 onClick={() => {
                   setIsAddExistingOpen(true);
                   if (nonWhiteFridayProducts.length > 0) {
-                    setSelectedProductId(nonWhiteFridayProducts[0].id);
-                    setExistingWhiteFridayPrice(Math.round(nonWhiteFridayProducts[0].price * 0.7));
+                    const firstProd = nonWhiteFridayProducts[0];
+                    setSelectedProductId(firstProd.id);
+                    setExistingWhiteFridayPrice(Math.round(firstProd.price * 0.7));
+                    setExistingImage(firstProd.whiteFridayImage || firstProd.image || '');
                   }
                 }}
                 className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20 transition-all cursor-pointer hover:scale-[1.02]"
@@ -440,9 +472,23 @@ export default function AdminWhiteFridayTab({
             </div>
           </div>
 
+          {/* Banner Promotional Image (Optional) */}
+          <div className="pt-1">
+            <ImageUploadField
+              label="صورة أو بانر إعلان الجمعة البيضاء (اختياري)"
+              value={bannerForm.bannerImage || ''}
+              onChange={(val) => setBannerForm(prev => ({ ...prev, bannerImage: val }))}
+              placeholder="https://..."
+              helpText="صورة بانر ترويجية عالية الجودة تظهر في واجهة المتجر وتخزن كنص في قاعدة البيانات."
+              maxWidth={1200}
+              maxHeight={600}
+              quality={0.75}
+            />
+          </div>
+
           {/* Banner Live Preview */}
-          <div className="mt-4 p-4 rounded-2xl bg-gradient-to-r from-slate-950 via-[#1C1326] to-slate-950 text-white border border-amber-500/30">
-            <div className="flex items-center justify-between mb-2">
+          <div className="mt-4 p-4 rounded-2xl bg-gradient-to-r from-slate-950 via-[#1C1326] to-slate-950 text-white border border-amber-500/30 overflow-hidden relative">
+            <div className="flex items-center justify-between mb-2 relative z-10">
               <span className="text-[10px] uppercase font-bold text-amber-400 flex items-center gap-1.5">
                 <Eye className="w-3.5 h-3.5" />
                 معاينة شكل الإعلان في الصفحة الرئيسية
@@ -451,12 +497,22 @@ export default function AdminWhiteFridayTab({
                 {bannerForm.badgeText || 'الجمعة البيضاء'}
               </span>
             </div>
-            <h4 className="font-black text-sm text-white">
-              {bannerForm.title || 'عنوان إعلان الجمعة البيضاء'}
-            </h4>
-            <p className="text-xs text-slate-300 mt-1 line-clamp-1">
-              {bannerForm.subtitle || 'الوصف الترويجي للعرض والخصومات'}
-            </p>
+            
+            <div className="flex flex-col sm:flex-row items-center gap-4 relative z-10">
+              {bannerForm.bannerImage && (
+                <div className="w-24 h-24 rounded-xl overflow-hidden border border-amber-500/40 bg-slate-900 shrink-0">
+                  <img src={bannerForm.bannerImage} alt="Banner" className="w-full h-full object-cover" />
+                </div>
+              )}
+              <div className="flex-1 text-center sm:text-right">
+                <h4 className="font-black text-sm text-white">
+                  {bannerForm.title || 'عنوان إعلان الجمعة البيضاء'}
+                </h4>
+                <p className="text-xs text-slate-300 mt-1 line-clamp-2">
+                  {bannerForm.subtitle || 'الوصف الترويجي للعرض والخصومات'}
+                </p>
+              </div>
+            </div>
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-3">
@@ -498,8 +554,10 @@ export default function AdminWhiteFridayTab({
               onClick={() => {
                 setIsAddExistingOpen(true);
                 if (nonWhiteFridayProducts.length > 0) {
-                  setSelectedProductId(nonWhiteFridayProducts[0].id);
-                  setExistingWhiteFridayPrice(Math.round(nonWhiteFridayProducts[0].price * 0.7));
+                  const firstProd = nonWhiteFridayProducts[0];
+                  setSelectedProductId(firstProd.id);
+                  setExistingWhiteFridayPrice(Math.round(firstProd.price * 0.7));
+                  setExistingImage(firstProd.whiteFridayImage || firstProd.image || '');
                 }
               }}
               className="bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100 font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer"
@@ -526,8 +584,10 @@ export default function AdminWhiteFridayTab({
                 onClick={() => {
                   setIsAddExistingOpen(true);
                   if (nonWhiteFridayProducts.length > 0) {
-                    setSelectedProductId(nonWhiteFridayProducts[0].id);
-                    setExistingWhiteFridayPrice(Math.round(nonWhiteFridayProducts[0].price * 0.7));
+                    const firstProd = nonWhiteFridayProducts[0];
+                    setSelectedProductId(firstProd.id);
+                    setExistingWhiteFridayPrice(Math.round(firstProd.price * 0.7));
+                    setExistingImage(firstProd.whiteFridayImage || firstProd.image || '');
                   }
                 }}
                 className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
@@ -566,7 +626,7 @@ export default function AdminWhiteFridayTab({
                   <div className="flex gap-3 mb-3">
                     <div className="w-16 h-16 rounded-xl bg-slate-100 overflow-hidden border border-slate-150 shrink-0">
                       <img 
-                        src={prod.image || 'https://images.unsplash.com/photo-1585421514738-01798e348b17?auto=format&fit=crop&q=80&w=600'} 
+                        src={prod.whiteFridayImage || prod.image || 'https://images.unsplash.com/photo-1585421514738-01798e348b17?auto=format&fit=crop&q=80&w=600'} 
                         alt={prod.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
@@ -605,11 +665,12 @@ export default function AdminWhiteFridayTab({
                         setEditingItem(prod);
                         setEditPrice(prod.whiteFridayPrice || prod.price);
                         setEditBadge(prod.whiteFridayBadge || 'عرض الجمعة البيضاء 🔥');
+                        setEditImage(prod.whiteFridayImage || prod.image || '');
                       }}
                       className="text-xs font-bold text-slate-600 hover:text-amber-700 bg-slate-50 hover:bg-amber-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
-                      <span>تعديل السعر</span>
+                      <span>تعديل العرض والصورة</span>
                     </button>
 
                     <button
@@ -669,6 +730,7 @@ export default function AdminWhiteFridayTab({
                       const p = products.find(prod => prod.id === id);
                       if (p) {
                         setExistingWhiteFridayPrice(Math.round(p.price * 0.7));
+                        setExistingImage(p.whiteFridayImage || p.image || '');
                       }
                     }}
                     className="w-full text-xs font-medium px-4 py-2.5 rounded-xl border border-slate-200 focus:border-amber-500 outline-none"
@@ -742,6 +804,18 @@ export default function AdminWhiteFridayTab({
                       </button>
                     ))}
                   </div>
+                </div>
+
+                {/* Custom White Friday Offer Image */}
+                <div className="pt-2 border-t border-slate-150">
+                  <ImageUploadField
+                    label="صورة مخصصة لعرض الجمعة البيضاء (اختياري)"
+                    value={existingImage}
+                    onChange={setExistingImage}
+                    originalValue={currentSelectedProduct?.image}
+                    onResetToOriginal={() => currentSelectedProduct && setExistingImage(currentSelectedProduct.image)}
+                    helpText="يمكنك ترك الصورة الحالية للمنتج أو رفع صورة ترويجية مخصصة لهذا العرض (تخزن كنص في قاعدة البيانات)."
+                  />
                 </div>
 
                 {/* Calculation preview */}
@@ -875,15 +949,15 @@ export default function AdminWhiteFridayTab({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  رابط صورة المنتج
-                </label>
-                <input 
-                  type="url"
+                <ImageUploadField
+                  label="صورة المنتج / العرض"
                   value={newProductForm.image}
-                  onChange={(e) => setNewProductForm(prev => ({ ...prev, image: e.target.value }))}
+                  onChange={(val) => setNewProductForm(prev => ({ ...prev, image: val }))}
                   placeholder="https://..."
-                  className="w-full text-xs font-medium px-4 py-2 rounded-xl border border-slate-200 focus:border-amber-500 outline-none text-left font-mono"
+                  helpText="ارفع صورة عالية الجودة من جهازك (JPG/PNG/WebP) أو ضع رابط صورة مباشر لتخزينها في قاعدة البيانات."
+                  maxWidth={800}
+                  maxHeight={800}
+                  quality={0.7}
                 />
               </div>
 
@@ -934,13 +1008,13 @@ export default function AdminWhiteFridayTab({
         </div>
       )}
 
-      {/* MODAL 3: EDIT WHITE FRIDAY PRICE / BADGE */}
+      {/* MODAL 3: EDIT WHITE FRIDAY PRICE / BADGE / IMAGE */}
       {editingItem && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4" dir="rtl">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-150 mb-4">
               <h3 className="font-extrabold text-sm sm:text-base text-slate-900">
-                تعديل سعر وشارة الجمعة البيضاء
+                تعديل عرض وصورة الجمعة البيضاء
               </h3>
               <button 
                 onClick={() => setEditingItem(null)}
@@ -979,6 +1053,18 @@ export default function AdminWhiteFridayTab({
                   value={editBadge}
                   onChange={(e) => setEditBadge(e.target.value)}
                   className="w-full text-xs font-medium px-4 py-2.5 rounded-xl border border-slate-200 focus:border-amber-500 outline-none"
+                />
+              </div>
+
+              {/* Offer Image Upload */}
+              <div className="pt-1">
+                <ImageUploadField
+                  label="صورة العرض في الجمعة البيضاء"
+                  value={editImage}
+                  onChange={setEditImage}
+                  originalValue={editingItem.originalImage || editingItem.image}
+                  onResetToOriginal={() => setEditImage(editingItem.originalImage || editingItem.image)}
+                  helpText="ارفع صورة جديدة من جهازك أو ضع رابط ويب لتخزينها في قاعدة البيانات."
                 />
               </div>
 

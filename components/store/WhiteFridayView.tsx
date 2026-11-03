@@ -136,6 +136,22 @@ export default function WhiteFridayView({
             {whiteFridaySettings.subtitle || 'تركيبات حصرية فائقة التركيز من مصنع جولد كلين لمنزلكِ وملابسكِ بأعلى جودة مضمونة وأفضل أسعار العام. الكميات محدودة والعروض سارية حتى نفاد المخزون!'}
           </motion.p>
 
+          {/* Optional Hero Banner Image */}
+          {whiteFridaySettings.bannerImage && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.5, delay: 0.25 }}
+              className="max-w-3xl mx-auto mb-8 rounded-3xl overflow-hidden border border-amber-500/30 shadow-2xl shadow-amber-500/10"
+            >
+              <img
+                src={whiteFridaySettings.bannerImage}
+                alt="White Friday Banner"
+                className="w-full h-auto max-h-[320px] object-cover"
+              />
+            </motion.div>
+          )}
+
           {/* COUNTDOWN TIMER */}
           <motion.div 
             initial={{ opacity: 0, y: 15 }}
@@ -326,7 +342,7 @@ export default function WhiteFridayView({
                     className="w-full aspect-square rounded-2xl overflow-hidden bg-slate-950 relative mb-3 cursor-pointer border border-slate-800"
                   >
                     <img 
-                      src={prod.image} 
+                      src={prod.whiteFridayImage || prod.image} 
                       alt={prod.name}
                       className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-500" 
                     />

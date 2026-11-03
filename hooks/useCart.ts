@@ -63,9 +63,14 @@ export function useCart(products: Product[], offers: Offer[]) {
     triggerFlyAnimation(e);
     const wasCartEmpty = cart.length === 0;
 
-    // Apply White Friday discount price if active on this product
+    // Apply White Friday discount price and custom offer image if active on this product
     const effectiveProduct: Product = (product.isWhiteFriday && typeof product.whiteFridayPrice === 'number' && product.whiteFridayPrice > 0)
-      ? { ...product, originalPrice: product.price, price: product.whiteFridayPrice }
+      ? { 
+          ...product, 
+          originalPrice: product.price, 
+          price: product.whiteFridayPrice,
+          image: product.whiteFridayImage || product.image 
+        }
       : product;
 
     const existingIdx = cart.findIndex(item => item.product.id === product.id);

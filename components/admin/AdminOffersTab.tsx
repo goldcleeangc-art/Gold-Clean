@@ -14,6 +14,7 @@ import {
   Edit 
 } from 'lucide-react';
 import { Offer, Product, OfferItem } from '../../lib/types/store';
+import ImageUploadField from './ImageUploadField';
 
 export interface OfferFormData {
   title: string;
@@ -182,14 +183,12 @@ export default function AdminOffersTab({
           </div>
 
           <div>
-            <label className="block text-slate-700 font-bold mb-1.5 text-xs">رابط صورة العرض (اختياري - يترك فارغاً لاستخدام صور المنتجات)</label>
-            <input 
-              id="offer-image-input"
-              type="url"
+            <ImageUploadField
+              label="صورة العرض / الباقة الترويجية (اختياري)"
               value={offerForm.image}
-              onChange={(e) => setOfferForm({ ...offerForm, image: e.target.value })}
+              onChange={(val) => setOfferForm({ ...offerForm, image: val })}
               placeholder="https://..."
-              className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-xs focus:bg-white focus:ring-1 focus:ring-rose-500 focus:outline-none"
+              helpText="يمكنك رفع صورة مخصصة للباقة من جهازك (تخزن في قاعدة البيانات كـ نص) أو وضع رابط ويب، أو تركها فارغة لاستخدام صور المنظفات."
             />
           </div>
 

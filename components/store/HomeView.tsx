@@ -303,7 +303,15 @@ export default function HomeView({
             <div className="absolute bottom-0 left-10 w-60 h-60 bg-rose-600/15 rounded-full blur-2xl pointer-events-none" />
 
             <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-5 text-center lg:text-right">
-              
+              {whiteFridaySettings?.bannerImage && (
+                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border border-amber-500/40 shrink-0 shadow-lg hidden sm:block">
+                  <img
+                    src={whiteFridaySettings.bannerImage}
+                    alt="White Friday Banner"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
               {/* Text & Badge */}
               <div className="flex-1">
                 <div className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500/20 via-amber-400/30 to-amber-500/20 border border-amber-400/50 text-amber-300 px-3.5 py-1 rounded-full text-xs font-black shadow-xs mb-3">
@@ -487,7 +495,7 @@ export default function HomeView({
                       className="w-full aspect-square rounded-2xl overflow-hidden bg-slate-950 relative mb-3 cursor-pointer border border-slate-800"
                     >
                       <img
-                        src={prod.image}
+                        src={prod.whiteFridayImage || prod.image}
                         alt={prod.name}
                         className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-500"
                       />

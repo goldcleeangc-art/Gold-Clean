@@ -27,6 +27,8 @@ export interface Product {
   whiteFridayPrice?: number;
   whiteFridayBadge?: string;
   originalPrice?: number;
+  whiteFridayImage?: string;
+  originalImage?: string;
 }
 
 export interface WhiteFridaySettings {
@@ -35,6 +37,7 @@ export interface WhiteFridaySettings {
   subtitle: string;
   badgeText: string;
   endDate?: string;
+  bannerImage?: string;
 }
 
 export interface OfferItem {
