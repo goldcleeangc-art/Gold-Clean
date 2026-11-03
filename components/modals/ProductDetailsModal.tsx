@@ -17,6 +17,7 @@ interface ProductDetailsModalProps {
   onAddToCart: (product: Product, e: React.MouseEvent, quantity?: number) => void;
   onCopyLink: (id: string) => void;
   copiedLinkId: string | null;
+  initialQuantity?: number;
 }
 
 export default function ProductDetailsModal({
@@ -28,13 +29,14 @@ export default function ProductDetailsModal({
   onRateProduct,
   onAddToCart,
   onCopyLink,
-  copiedLinkId
+  copiedLinkId,
+  initialQuantity = 1
 }: ProductDetailsModalProps) {
-  const [selectedQuantity, setSelectedQuantity] = useState<number>(1);
+  const [selectedQuantity, setSelectedQuantity] = useState<number>(initialQuantity);
 
   useEffect(() => {
-    setSelectedQuantity(1);
-  }, [product?.id]);
+    setSelectedQuantity(initialQuantity || 1);
+  }, [product?.id, initialQuantity]);
 
   if (!isOpen || !product) return null;
 

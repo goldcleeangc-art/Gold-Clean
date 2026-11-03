@@ -39,7 +39,14 @@ export default function StorePage() {
 
   // Product Details Modal State
   const [selectedProductDetails, setSelectedProductDetails] = useState<Product | null>(null);
+  const [selectedProductInitialQty, setSelectedProductInitialQty] = useState<number>(1);
   const [isProductDetailsOpen, setIsProductDetailsOpen] = useState<boolean>(false);
+
+  const handleOpenProductDetails = (p: Product, initialQty: number = 1) => {
+    setSelectedProductDetails(p);
+    setSelectedProductInitialQty(initialQty || 1);
+    setIsProductDetailsOpen(true);
+  };
 
   // 2. Custom Hooks Initialization
   const authState = useStoreAuth();
@@ -168,10 +175,7 @@ export default function StorePage() {
               whiteFridaySettings={storeData.whiteFridaySettings}
               onAddOfferToCart={cartState.handleAddOfferToCart}
               onAddToCart={cartState.handleAddToCart}
-              onSelectProduct={(p) => {
-                setSelectedProductDetails(p);
-                setIsProductDetailsOpen(true);
-              }}
+              onSelectProduct={handleOpenProductDetails}
               loading={storeData.loading}
             />
           ) : currentTab === 'white_friday' ? (
@@ -181,10 +185,7 @@ export default function StorePage() {
               whiteFridaySettings={storeData.whiteFridaySettings}
               setCurrentTab={setCurrentTab}
               onAddToCart={cartState.handleAddToCart}
-              onSelectProduct={(p) => {
-                setSelectedProductDetails(p);
-                setIsProductDetailsOpen(true);
-              }}
+              onSelectProduct={handleOpenProductDetails}
               copiedLinkId={copiedLinkId}
               onCopyLink={handleCopyLink}
               loading={storeData.loading}
@@ -284,8 +285,10 @@ export default function StorePage() {
           onClose={() => {
             setIsProductDetailsOpen(false);
             setSelectedProductDetails(null);
+            setSelectedProductInitialQty(1);
           }}
           product={selectedProductDetails}
+          initialQuantity={selectedProductInitialQty}
           categories={storeData.categories}
           user={authState.user}
           onRateProduct={(prod, rating) => 

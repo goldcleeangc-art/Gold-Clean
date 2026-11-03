@@ -29,6 +29,7 @@ import {
   Mail
 } from 'lucide-react';
 import { Category, Offer, Product, WhiteFridaySettings } from '../../lib/types/store';
+import { getDecomposedProductOffers, DecomposedOffer } from '../../lib/pricing';
 
 interface HomeViewProps {
   categories: Category[];
@@ -38,8 +39,8 @@ interface HomeViewProps {
   products: Product[];
   whiteFridaySettings?: WhiteFridaySettings;
   onAddOfferToCart: (offer: Offer, e: React.MouseEvent) => void;
-  onAddToCart?: (product: Product, e: React.MouseEvent) => void;
-  onSelectProduct?: (product: Product) => void;
+  onAddToCart?: (product: Product, e: React.MouseEvent, quantity?: number) => void;
+  onSelectProduct?: (product: Product, initialQuantity?: number) => void;
   loading?: boolean;
 }
 
@@ -81,8 +82,11 @@ export default function HomeView({
 }: HomeViewProps) {
   const [heroImgSrc, setHeroImgSrc] = useState(HERO_IMAGE_URL);
 
-  // White Friday products
+  // White Friday products & standalone decomposed bundle offers
   const whiteFridayProducts = products.filter(p => p.isWhiteFriday === true && p.isAvailable !== false);
+  const whiteFridayDecomposedOffers = React.useMemo(() => {
+    return getDecomposedProductOffers(whiteFridayProducts);
+  }, [whiteFridayProducts]);
 
   // Countdown timer for announcement banner
   const [wfTimeLeft, setWfTimeLeft] = useState<{ hours: number; minutes: number; seconds: number }>({
@@ -460,59 +464,53 @@ export default function HomeView({
                 onClick={() => setCurrentTab('white_friday')}
                 className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs px-5 py-2.5 rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer hover:scale-105"
               >
-                <span>مشاهدة كافة عروض الجمعة البيضاء ({whiteFridayProducts.length})</span>
+                <span>مشاهدة كافة عروض الجمعة البيضاء ({whiteFridayDecomposedOffers.length})</span>
                 <ChevronLeft className="w-4 h-4" />
               </button>
             </div>
 
             {/* Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-6">
-              {whiteFridayProducts.slice(0, 8).map((prod) => {
-                const regularPrice = prod.price || 0;
-                const wfPrice = prod.whiteFridayPrice || regularPrice;
-                const discountPct = regularPrice > 0 ? Math.max(0, Math.round(((regularPrice - wfPrice) / regularPrice) * 100)) : 0;
-                const savings = Math.max(0, regularPrice - wfPrice);
-
+              {whiteFridayDecomposedOffers.slice(0, 8).map((offer) => {
                 return (
                   <div
-                    key={prod.id}
+                    key={offer.id}
                     className="bg-slate-900/90 rounded-3xl border border-amber-500/30 hover:border-amber-400 p-3 sm:p-4 shadow-xl hover:shadow-2xl transition-all duration-300 flex flex-col justify-between group relative overflow-hidden"
                   >
                     <div className="flex items-start justify-between gap-1.5 mb-2 relative z-10">
                       <span className="bg-rose-600 text-white text-[10px] sm:text-xs font-black px-2 py-0.5 rounded-xl shadow-xs flex items-center gap-1">
                         <Flame className="w-3 h-3 text-amber-300 animate-bounce" />
-                        <span>{discountPct > 0 ? `-${discountPct}%` : 'تخفيض'}</span>
+                        <span>{offer.discountPct > 0 ? `-${offer.discountPct}%` : 'تخفيض'}</span>
                       </span>
-                      {prod.whiteFridayBadge && (
+                      {offer.badge && (
                         <span className="bg-amber-500/20 text-amber-300 border border-amber-400/30 text-[9px] font-bold px-2 py-0.5 rounded-md truncate max-w-[120px]">
-                          {prod.whiteFridayBadge}
+                          {offer.badge}
                         </span>
                       )}
                     </div>
 
                     <div
-                      onClick={() => onSelectProduct?.(prod)}
+                      onClick={() => onSelectProduct?.(offer.product, offer.quantity)}
                       className="w-full aspect-square rounded-2xl overflow-hidden bg-slate-950 relative mb-3 cursor-pointer border border-slate-800"
                     >
                       <img
-                        src={prod.whiteFridayImage || prod.image}
-                        alt={prod.name}
+                        src={offer.image}
+                        alt={offer.title}
                         className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-500"
                       />
                     </div>
 
                     <div className="flex-1 flex flex-col justify-between">
                       <div>
-                        {prod.volume && (
-                          <span className="text-[10px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded-md font-medium inline-block mb-1">
-                            {prod.volume}
-                          </span>
-                        )}
+                        <span className="text-[10px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded-md font-medium inline-block mb-1">
+                          {offer.isBundle ? `باقة توفير (${offer.quantity} عبوات)` : offer.volume}
+                        </span>
                         <h4
-                          onClick={() => onSelectProduct?.(prod)}
+                          onClick={() => onSelectProduct?.(offer.product, offer.quantity)}
                           className="font-extrabold text-xs sm:text-sm text-white hover:text-amber-300 transition-colors line-clamp-1 cursor-pointer"
+                          title={offer.title}
                         >
-                          {prod.name}
+                          {offer.title}
                         </h4>
                       </div>
 
@@ -520,27 +518,27 @@ export default function HomeView({
                         <div className="flex items-baseline justify-between mb-2">
                           <div>
                             <span className="text-base sm:text-lg font-black text-amber-400 font-mono">
-                              {wfPrice} <span className="text-xs text-amber-300">ج.م</span>
+                              {offer.price} <span className="text-xs text-amber-300">ج.م</span>
                             </span>
-                            {regularPrice > wfPrice && (
+                            {offer.originalPrice > offer.price && (
                               <span className="text-xs text-slate-400 line-through font-mono block">
-                                {regularPrice} ج.م
+                                {offer.originalPrice} ج.م
                               </span>
                             )}
                           </div>
-                          {savings > 0 && (
+                          {offer.savings > 0 && (
                             <span className="text-[9px] font-black text-emerald-400 bg-emerald-950/70 border border-emerald-500/30 px-1.5 py-0.5 rounded">
-                              وفري {savings} ج.م
+                              وفري {offer.savings} ج.م
                             </span>
                           )}
                         </div>
 
                         <button
-                          onClick={(e) => onAddToCart?.(prod, e)}
+                          onClick={(e) => onAddToCart?.(offer.product, e, offer.quantity)}
                           className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs py-2 px-3 rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5 active:scale-95"
                         >
                           <ShoppingCart className="w-3.5 h-3.5" />
-                          <span>أضف للسلة</span>
+                          <span>{offer.isBundle ? `أضف باقة (${offer.quantity}) عبوات` : 'أضف للسلة'}</span>
                         </button>
                       </div>
                     </div>

@@ -118,3 +118,94 @@ export function getProductTierPricing(
     nextTier
   };
 }
+
+export interface DecomposedOffer {
+  id: string;             // unique key e.g. `${product.id}-tier-${tier.quantity}` or `${product.id}`
+  productId: string;
+  product: Product;
+  title: string;
+  quantity: number;
+  price: number;
+  originalPrice: number;
+  savings: number;
+  discountPct: number;
+  image: string;
+  badge?: string;
+  isBundle: boolean;
+  tier?: ProductTierOffer;
+  category: string;
+  volume?: string;
+  code?: string;
+}
+
+/**
+ * Automatically decomposes products into distinct standalone offers for storefront presentation.
+ * If a product has tiered pricing (e.g. 2 packs, 3 packs), each tier is extracted
+ * as an independent offer card alongside the base single unit offer.
+ */
+export function getDecomposedProductOffers(products: Product[]): DecomposedOffer[] {
+  const result: DecomposedOffer[] = [];
+
+  products.forEach(prod => {
+    const regularBase = Number(prod.price) || 0;
+    const effectiveBase = (prod.isWhiteFriday && typeof prod.whiteFridayPrice === 'number' && prod.whiteFridayPrice > 0)
+      ? prod.whiteFridayPrice
+      : regularBase;
+
+    const baseSavings = Math.max(0, regularBase - effectiveBase);
+    const baseDiscountPct = regularBase > 0 ? Math.round((baseSavings / regularBase) * 100) : 0;
+    const baseImage = (prod.isWhiteFriday && prod.whiteFridayImage) || prod.image || 'https://images.unsplash.com/photo-1563453392212-326f518500b1?auto=format&fit=crop&q=80&w=800';
+
+    // 1. The Single Pack Base Offer
+    result.push({
+      id: prod.id,
+      productId: prod.id,
+      product: prod,
+      title: prod.name,
+      quantity: 1,
+      price: effectiveBase,
+      originalPrice: regularBase,
+      savings: baseSavings,
+      discountPct: baseDiscountPct,
+      image: baseImage,
+      badge: prod.isWhiteFriday ? (prod.whiteFridayBadge || 'عرض الجمعة البيضاء 🔥') : undefined,
+      isBundle: false,
+      category: prod.category,
+      volume: prod.volume || '1 لتر',
+      code: prod.code
+    });
+
+    // 2. Extract Each Tier Bundle as an Independent Standalone Offer
+    const validTiers = (prod.tieredPricing || []).filter(t => Number(t.quantity) > 1 && Number(t.price) > 0);
+    validTiers.forEach(tier => {
+      const tierQty = Number(tier.quantity);
+      const tierPrice = Number(tier.price);
+      const tierOriginal = regularBase * tierQty;
+      const tierSavings = Math.max(0, tierOriginal - tierPrice);
+      const tierDiscountPct = tierOriginal > 0 ? Math.round((tierSavings / tierOriginal) * 100) : 0;
+      const tierImage = tier.image || baseImage;
+      const tierTitle = `عرض ${tierQty} عبوات - ${prod.name}`;
+
+      result.push({
+        id: `${prod.id}-tier-${tierQty}`,
+        productId: prod.id,
+        product: prod,
+        title: tierTitle,
+        quantity: tierQty,
+        price: tierPrice,
+        originalPrice: tierOriginal,
+        savings: tierSavings,
+        discountPct: tierDiscountPct,
+        image: tierImage,
+        badge: tier.badge || `باقة ${tierQty} عبوات 🔥`,
+        isBundle: true,
+        tier: tier,
+        category: prod.category,
+        volume: `${prod.volume ? `${tierQty} × ${prod.volume}` : `${tierQty} عبوات`}`,
+        code: prod.code ? `${prod.code}-B${tierQty}` : undefined
+      });
+    });
+  });
+
+  return result;
+}

@@ -23,14 +23,15 @@ import {
   ChevronLeft
 } from 'lucide-react';
 import { Product, Category, WhiteFridaySettings } from '../../lib/types/store';
+import { getDecomposedProductOffers, DecomposedOffer } from '../../lib/pricing';
 
 interface WhiteFridayViewProps {
   products: Product[];
   categories: Category[];
   whiteFridaySettings: WhiteFridaySettings;
   setCurrentTab: (tab: 'home' | 'products' | 'white_friday' | 'offers' | 'about' | 'complaints') => void;
-  onAddToCart: (product: Product, e: React.MouseEvent) => void;
-  onSelectProduct: (product: Product) => void;
+  onAddToCart: (product: Product, e: React.MouseEvent, quantity?: number) => void;
+  onSelectProduct: (product: Product, initialQuantity?: number) => void;
   copiedLinkId: string | null;
   onCopyLink: (id: string) => void;
   loading?: boolean;
@@ -53,12 +54,20 @@ export default function WhiteFridayView({
   // Filter White Friday products
   const whiteFridayProducts = products.filter(p => p.isWhiteFriday === true && p.isAvailable !== false);
 
-  const filteredProducts = whiteFridayProducts.filter(prod => {
-    const searchMatch = prod.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                        prod.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const catMatch = selectedCategory === 'all' || prod.category === selectedCategory;
-    return searchMatch && catMatch;
-  });
+  // Decompose every tiered product into standalone individual offer cards!
+  const allWhiteFridayOffers = React.useMemo(() => {
+    return getDecomposedProductOffers(whiteFridayProducts);
+  }, [whiteFridayProducts]);
+
+  const filteredOffers = React.useMemo(() => {
+    return allWhiteFridayOffers.filter(offer => {
+      const searchMatch = 
+        offer.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        offer.product.description.toLowerCase().includes(searchTerm.toLowerCase());
+      const catMatch = selectedCategory === 'all' || offer.category === selectedCategory;
+      return searchMatch && catMatch;
+    });
+  }, [allWhiteFridayOffers, searchTerm, selectedCategory]);
 
   // Countdown timer logic
   const [timeLeft, setTimeLeft] = useState<{
@@ -247,11 +256,11 @@ export default function WhiteFridayView({
                   : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
               }`}
             >
-              جميع العروض ({whiteFridayProducts.length})
+              جميع العروض ({allWhiteFridayOffers.length})
             </button>
 
             {categories.map((cat) => {
-              const count = whiteFridayProducts.filter(p => p.category === cat.key).length;
+              const count = allWhiteFridayOffers.filter(o => o.category === cat.key).length;
               if (count === 0) return null;
               return (
                 <button
@@ -272,7 +281,7 @@ export default function WhiteFridayView({
         </div>
       </div>
 
-      {/* 3. PRODUCTS GRID */}
+      {/* 3. PRODUCTS & BUNDLE OFFERS GRID */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
         
         {loading ? (
@@ -281,13 +290,13 @@ export default function WhiteFridayView({
               <div key={i} className="bg-slate-900/60 rounded-3xl p-4 border border-slate-800 animate-pulse h-80" />
             ))}
           </div>
-        ) : filteredProducts.length === 0 ? (
+        ) : filteredOffers.length === 0 ? (
           <div className="text-center py-20 px-4 bg-slate-900/40 rounded-3xl border border-slate-800 my-8">
             <div className="w-20 h-20 rounded-full bg-amber-500/10 text-amber-400 mx-auto flex items-center justify-center mb-4">
               <Flame className="w-10 h-10" />
             </div>
             <h3 className="text-lg font-black text-white">
-              {searchTerm ? 'لم يتم العثور على منتجات مطابقة للبحث' : 'ترقبوا أقوى عروض الجمعة البيضاء قريباً!'}
+              {searchTerm ? 'لم يتم العثور على عروض مطابقة للبحث' : 'ترقبوا أقوى عروض الجمعة البيضاء قريباً!'}
             </h3>
             <p className="text-xs text-slate-400 max-w-md mx-auto mt-2 leading-relaxed">
               {searchTerm ? 'جرب البحث بكلمات أخرى أو اختر قسماً مختلفاً.' : 'نحن نجهز لكم تشكيلة مذهلة من العروض والتخفيضات الكبرى. تصفح بقية منتجات المتجر الآن!'}
@@ -302,15 +311,10 @@ export default function WhiteFridayView({
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5 sm:gap-6">
-            {filteredProducts.map((prod) => {
-              const regularPrice = prod.price || 0;
-              const wfPrice = prod.whiteFridayPrice || regularPrice;
-              const discountPct = regularPrice > 0 ? Math.max(0, Math.round(((regularPrice - wfPrice) / regularPrice) * 100)) : 0;
-              const savings = Math.max(0, regularPrice - wfPrice);
-
+            {filteredOffers.map((offer) => {
               return (
                 <div
-                  key={prod.id}
+                  key={offer.id}
                   className="bg-gradient-to-b from-slate-900 to-slate-950 rounded-3xl border border-amber-500/30 hover:border-amber-400 p-3 sm:p-4 shadow-xl hover:shadow-2xl hover:shadow-amber-500/10 transition-all duration-300 flex flex-col justify-between group relative overflow-hidden"
                 >
                   {/* Decorative glowing corner */}
@@ -320,15 +324,15 @@ export default function WhiteFridayView({
                   <div className="flex items-start justify-between gap-1.5 mb-2.5 relative z-10">
                     <span className="bg-gradient-to-r from-rose-600 to-rose-700 text-white text-[10px] sm:text-xs font-black px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-xl shadow-md flex items-center gap-1">
                       <Flame className="w-3 h-3 text-amber-300 animate-bounce" />
-                      <span>{discountPct > 0 ? `-${discountPct}%` : 'عرض حصري'}</span>
+                      <span>{offer.discountPct > 0 ? `-${offer.discountPct}%` : 'عرض حصري'}</span>
                     </span>
 
                     <button
-                      onClick={() => onCopyLink(prod.id)}
+                      onClick={() => onCopyLink(offer.productId)}
                       className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
-                      title="مشاركة رابط المنتج"
+                      title="مشاركة رابط العرض"
                     >
-                      {copiedLinkId === prod.id ? (
+                      {copiedLinkId === offer.productId ? (
                         <Check className="w-3.5 h-3.5 text-emerald-400" />
                       ) : (
                         <Share2 className="w-3.5 h-3.5" />
@@ -336,22 +340,22 @@ export default function WhiteFridayView({
                     </button>
                   </div>
 
-                  {/* Product Image */}
+                  {/* Offer Image */}
                   <div 
-                    onClick={() => onSelectProduct(prod)}
+                    onClick={() => onSelectProduct(offer.product, offer.quantity)}
                     className="w-full aspect-square rounded-2xl overflow-hidden bg-slate-950 relative mb-3 cursor-pointer border border-slate-800"
                   >
                     <img 
-                      src={prod.whiteFridayImage || prod.image} 
-                      alt={prod.name}
+                      src={offer.image} 
+                      alt={offer.title}
                       className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-500" 
                     />
                     
                     {/* Badge Overlay */}
-                    {prod.whiteFridayBadge && (
+                    {offer.badge && (
                       <div className="absolute bottom-2 inset-x-2">
                         <span className="bg-amber-500/95 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-lg block text-center truncate shadow-md backdrop-blur-xs">
-                          {prod.whiteFridayBadge}
+                          {offer.badge}
                         </span>
                       </div>
                     )}
@@ -360,59 +364,69 @@ export default function WhiteFridayView({
                   {/* Details */}
                   <div className="flex-1 flex flex-col justify-between">
                     <div>
-                      {/* Volume & Code */}
+                      {/* Volume & Pieces tag */}
                       <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mb-1">
-                        {prod.volume && (
-                          <span className="bg-slate-800/80 px-2 py-0.5 rounded-md font-medium text-slate-300">
-                            {prod.volume}
-                          </span>
-                        )}
-                        {prod.rating > 0 && (
+                        <span className={`px-2 py-0.5 rounded-md font-bold ${
+                          offer.isBundle 
+                            ? 'bg-amber-500/20 text-amber-300 border border-amber-400/30' 
+                            : 'bg-slate-800/80 text-slate-300'
+                        }`}>
+                          {offer.isBundle ? `باقة توفير (${offer.quantity} عبوات)` : offer.volume}
+                        </span>
+
+                        {offer.product.rating > 0 && (
                           <div className="flex items-center gap-0.5 text-amber-400 mr-auto font-mono font-bold">
                             <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                            <span>{prod.rating}</span>
+                            <span>{offer.product.rating}</span>
                           </div>
                         )}
                       </div>
 
                       {/* Title */}
                       <h3 
-                        onClick={() => onSelectProduct(prod)}
+                        onClick={() => onSelectProduct(offer.product, offer.quantity)}
                         className="font-extrabold text-xs sm:text-sm text-white hover:text-amber-300 transition-colors line-clamp-2 leading-snug cursor-pointer mb-2"
-                        title={prod.name}
+                        title={offer.title}
                       >
-                        {prod.name}
+                        {offer.title}
                       </h3>
                     </div>
 
                     {/* Pricing */}
                     <div className="pt-2 border-t border-slate-800/90 mt-2">
-                      <div className="flex items-baseline justify-between gap-1 mb-3">
+                      <div className="flex items-baseline justify-between gap-1 mb-2">
                         <div>
                           <span className="text-lg sm:text-xl font-black text-amber-400 font-mono">
-                            {wfPrice} <span className="text-xs font-bold text-amber-300">ج.م</span>
+                            {offer.price} <span className="text-xs font-bold text-amber-300">ج.م</span>
                           </span>
-                          {regularPrice > wfPrice && (
+                          {offer.originalPrice > offer.price && (
                             <span className="text-xs text-slate-400 line-through font-mono block">
-                              {regularPrice} ج.م
+                              {offer.originalPrice} ج.م
                             </span>
                           )}
                         </div>
 
-                        {savings > 0 && (
+                        {offer.savings > 0 && (
                           <span className="text-[10px] font-black text-emerald-300 bg-emerald-950/80 border border-emerald-500/30 px-2 py-0.5 rounded-lg">
-                            وفري {savings} ج.م
+                            وفري {offer.savings} ج.م
                           </span>
                         )}
                       </div>
 
+                      {/* Unit price inside bundle if applicable */}
+                      {offer.isBundle && (
+                        <p className="text-[10px] text-slate-400 mb-2 font-mono">
+                          سعر العبوة في العرض: <strong className="text-amber-300">{(offer.price / offer.quantity).toFixed(0)} ج.م</strong>
+                        </p>
+                      )}
+
                       {/* Add to Cart Button */}
                       <button
-                        onClick={(e) => onAddToCart(prod, e)}
+                        onClick={(e) => onAddToCart(offer.product, e, offer.quantity)}
                         className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs py-2.5 px-3 rounded-xl shadow-lg shadow-amber-500/15 hover:shadow-amber-500/30 transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 active:scale-95"
                       >
                         <ShoppingCart className="w-3.5 h-3.5" />
-                        <span>أضف للسلة الآن</span>
+                        <span>{offer.isBundle ? `أضف باقة (${offer.quantity}) عبوات` : 'أضف للسلة الآن'}</span>
                       </button>
                     </div>
 
