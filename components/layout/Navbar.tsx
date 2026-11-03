@@ -179,11 +179,11 @@ export default function Navbar({
           </div>
 
           {/* Center Navigation Links (Main navigation: lg+) */}
-          <nav className="hidden lg:flex items-center justify-center gap-1 xl:gap-1.5 2xl:gap-2 flex-1 min-w-0 px-1" id="header-center-nav">
+          <nav className="hidden lg:flex items-center justify-center gap-1 xl:gap-1.5 2xl:gap-2 flex-1 min-w-0 px-1" id="header-nav-group">
             <button 
               id="nav-home-btn"
               onClick={() => handleNavClick('home')} 
-              className={`px-2 xl:px-2.5 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative whitespace-nowrap shrink-0 text-[11px] xl:text-xs font-semibold ${
+              className={`px-1.5 xl:px-2 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative whitespace-nowrap shrink-0 text-[11px] xl:text-xs font-semibold ${
                 currentTab === 'home' && !isMerchantOpen 
                   ? 'text-amber-600 font-bold bg-amber-50/80 shadow-2xs' 
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -201,7 +201,7 @@ export default function Navbar({
             <button 
               id="nav-products-btn"
               onClick={() => handleNavClick('products')} 
-              className={`px-2 xl:px-2.5 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative whitespace-nowrap shrink-0 text-[11px] xl:text-xs font-semibold ${
+              className={`px-1.5 xl:px-2 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative whitespace-nowrap shrink-0 text-[11px] xl:text-xs font-semibold ${
                 currentTab === 'products' && !isMerchantOpen 
                   ? 'text-amber-600 font-bold bg-amber-50/80 shadow-2xs' 
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -219,7 +219,7 @@ export default function Navbar({
             <button 
               id="nav-white-friday-btn"
               onClick={() => handleNavClick('white_friday')} 
-              className={`px-2 xl:px-2.5 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative flex items-center gap-1 whitespace-nowrap shrink-0 text-[11px] xl:text-xs font-semibold ${
+              className={`px-1.5 xl:px-2 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative flex items-center gap-1 whitespace-nowrap shrink-0 text-[11px] xl:text-xs font-semibold ${
                 currentTab === 'white_friday' && !isMerchantOpen 
                   ? 'text-amber-400 font-black bg-slate-950 shadow-sm border border-amber-500/40' 
                   : 'text-slate-700 hover:text-amber-600 hover:bg-amber-50/70'
@@ -227,7 +227,7 @@ export default function Navbar({
             >
               <Flame className="w-3.5 h-3.5 text-amber-500 animate-pulse shrink-0" />
               <span>الجمعة البيضاء</span>
-              <span className="bg-amber-500 text-slate-950 text-[9px] font-black px-1.5 py-0.2 rounded-full shadow-2xs shrink-0">
+              <span className="bg-amber-500 text-slate-950 text-[9px] font-black px-1.5 py-0.2 rounded-full shadow-2xs shrink-0 hidden 2xl:inline-block">
                 خصم 🔥
               </span>
               {currentTab === 'white_friday' && !isMerchantOpen && (
@@ -241,14 +241,14 @@ export default function Navbar({
             <button 
               id="nav-offers-btn"
               onClick={() => handleNavClick('offers')} 
-              className={`px-2 xl:px-2.5 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative flex items-center gap-1 whitespace-nowrap shrink-0 text-[11px] xl:text-xs font-semibold ${
+              className={`px-1.5 xl:px-2 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative flex items-center gap-1 whitespace-nowrap shrink-0 text-[11px] xl:text-xs font-semibold ${
                 currentTab === 'offers' && !isMerchantOpen 
                   ? 'text-rose-600 font-bold bg-rose-50 shadow-2xs' 
                   : 'text-slate-600 hover:text-rose-600 hover:bg-rose-50/50'
               }`}
             >
               <span>عروض التوفير</span>
-              <span className="bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full shadow-2xs shrink-0">
+              <span className="bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full shadow-2xs shrink-0 hidden 2xl:inline-block">
                 تخفيضات
               </span>
               {currentTab === 'offers' && !isMerchantOpen && (
@@ -266,7 +266,7 @@ export default function Navbar({
                 setIsMerchantOpen?.(false); 
                 window.open('https://portfolio.g-c.store', '_blank', 'noopener,noreferrer'); 
               }} 
-              className={`hidden xl:inline-block px-2 xl:px-2.5 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative whitespace-nowrap shrink-0 text-[11px] xl:text-xs font-semibold ${
+              className={`hidden xl:inline-block px-1.5 xl:px-2 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative whitespace-nowrap shrink-0 text-[11px] xl:text-xs font-semibold ${
                 currentTab === 'about' && !isMerchantOpen 
                   ? 'text-amber-600 font-bold bg-amber-50/80' 
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -278,7 +278,7 @@ export default function Navbar({
             <button 
               id="nav-complaints-btn"
               onClick={() => handleNavClick('complaints')} 
-              className={`hidden xl:inline-block px-2 xl:px-2.5 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative whitespace-nowrap shrink-0 text-[11px] xl:text-xs font-semibold ${
+              className={`hidden xl:inline-block px-1.5 xl:px-2 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative whitespace-nowrap shrink-0 text-[11px] xl:text-xs font-semibold ${
                 currentTab === 'complaints' && !isMerchantOpen 
                   ? 'text-amber-600 font-bold bg-amber-50/80 shadow-2xs' 
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -296,7 +296,7 @@ export default function Navbar({
             <button 
               id="nav-tracker-btn" 
               onClick={onOpenTracker} 
-              className="px-2 xl:px-2.5 py-1.5 rounded-xl text-slate-600 hover:text-[#111827] hover:bg-slate-50 transition-all cursor-pointer outline-none focus:outline-none flex items-center gap-1 whitespace-nowrap shrink-0 text-[11px] xl:text-xs font-semibold"
+              className="px-1.5 xl:px-2 py-1.5 rounded-xl text-slate-600 hover:text-[#111827] hover:bg-slate-50 transition-all cursor-pointer outline-none focus:outline-none flex items-center gap-1 whitespace-nowrap shrink-0 text-[11px] xl:text-xs font-semibold"
             >
               <span>طلباتي</span>
               {userOrdersCount > 0 && (
@@ -358,8 +358,8 @@ export default function Navbar({
             </div>
           </nav>
 
-          {/* Left Section: Store Management + Search Bar + User Account + Shopping Cart */}
-          <div className="flex items-center gap-1.5 sm:gap-2.5 2xl:gap-3 shrink-0" id="header-left-actions">
+          {/* Group 3: Actions Group (Store Management + Search Bar + User Account) */}
+          <div className="flex items-center gap-1.5 sm:gap-2 xl:gap-2.5 shrink-0" id="header-actions-group">
             
             {/* 1. Store Management Button (Shown for manager/admin) */}
             {(userRole === 'manager' || userRole === 'admin') && (
@@ -395,7 +395,7 @@ export default function Navbar({
                 placeholder="ابحث عن المنظفات..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="bg-slate-100/90 hover:bg-slate-100 focus:bg-white border border-slate-200/90 rounded-full py-1.5 pr-8 pl-7 text-xs w-28 md:w-32 lg:w-36 xl:w-44 2xl:w-52 min-w-[110px] max-w-[220px] focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 transition-colors text-slate-800 placeholder:text-slate-400 shadow-2xs font-medium"
+                className="bg-slate-100/90 hover:bg-slate-100 focus:bg-white border border-slate-200/90 rounded-full py-1.5 pr-8 pl-7 text-xs w-28 md:w-32 lg:w-32 xl:w-36 2xl:w-48 min-w-[100px] max-w-[190px] focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 transition-colors text-slate-800 placeholder:text-slate-400 shadow-2xs font-medium"
                 dir="rtl"
               />
               {searchTerm && (
@@ -411,7 +411,7 @@ export default function Navbar({
 
             <div className="h-5 w-px bg-slate-200/80 hidden md:block shrink-0" />
 
-            {/* 3. User Account Information */}
+            {/* 3. User Account Controls */}
             <div className="flex items-center gap-1.5 shrink-0" id="header-user-account">
               {checkingAuth ? (
                 <span className="text-[10px] text-slate-400 hidden sm:inline shrink-0">جاري التحقق...</span>
@@ -431,7 +431,7 @@ export default function Navbar({
                   )}
                   <div className="hidden xl:flex flex-col text-right shrink-0">
                     <div className="flex items-center gap-1 text-[11px] font-bold text-slate-900 leading-tight">
-                      <span className="truncate max-w-[90px]">{user.displayName?.split(' ')[0]}</span>
+                      <span className="truncate max-w-[80px]">{user.displayName?.split(' ')[0]}</span>
                       {userRole === 'admin' ? (
                         <span className="bg-rose-100 text-rose-800 text-[8px] px-1.5 py-0.2 rounded-md font-bold shrink-0">المدير العام</span>
                       ) : userRole === 'manager' ? (
@@ -465,8 +465,10 @@ export default function Navbar({
                 </button>
               )}
             </div>
+          </div>
 
-            {/* 4. Shopping Cart Button with Outer-Corner Badge */}
+          {/* Group 4: Cart Group (Shopping Cart Button at Far Left) */}
+          <div className="flex items-center shrink-0" id="header-cart-group">
             <motion.button 
               id="cart-trigger-btn"
               onClick={onOpenCart}
