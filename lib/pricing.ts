@@ -156,7 +156,7 @@ export function getDecomposedProductOffers(products: Product[]): DecomposedOffer
     const baseDiscountPct = regularBase > 0 ? Math.round((baseSavings / regularBase) * 100) : 0;
     const baseImage = (prod.isWhiteFriday && prod.whiteFridayImage) || prod.image || 'https://images.unsplash.com/photo-1563453392212-326f518500b1?auto=format&fit=crop&q=80&w=800';
 
-    // 1. The Single Pack Base Offer
+    // 1. The Single Pack Base Offer or Multi-product Combo Bundle Offer
     result.push({
       id: prod.id,
       productId: prod.id,
@@ -168,10 +168,12 @@ export function getDecomposedProductOffers(products: Product[]): DecomposedOffer
       savings: baseSavings,
       discountPct: baseDiscountPct,
       image: baseImage,
-      badge: prod.isWhiteFriday ? (prod.whiteFridayBadge || 'عرض الجمعة البيضاء 🔥') : undefined,
-      isBundle: false,
+      badge: prod.isWhiteFriday ? (prod.whiteFridayBadge || (prod.isBundle ? 'باقة مجمعة 🎁' : 'عرض الجمعة البيضاء 🔥')) : undefined,
+      isBundle: Boolean(prod.isBundle),
       category: prod.category,
-      volume: prod.volume || '1 لتر',
+      volume: prod.isBundle
+        ? `${prod.bundleItems?.reduce((sum, it) => sum + (it.quantity || 1), 0) || prod.bundleItems?.length || 2} عبوات مجمعة`
+        : (prod.volume || '1 لتر'),
       code: prod.code
     });
 

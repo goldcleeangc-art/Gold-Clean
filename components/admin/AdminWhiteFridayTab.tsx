@@ -22,11 +22,15 @@ import {
   ArrowRight,
   Percent,
   ImageIcon,
-  Loader2
+  Loader2,
+  Gift,
+  Boxes,
+  Plus,
+  Minus
 } from 'lucide-react';
-import { Product, Category, WhiteFridaySettings, ProductTierOffer } from '../../lib/types/store';
+import { Product, Category, WhiteFridaySettings, ProductTierOffer, BundleProductItem } from '../../lib/types/store';
 import { db } from '../../lib/firebase';
-import { doc, updateDoc, setDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, addDoc, collection, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import ImageUploadField from './ImageUploadField';
 import TieredPricingManager from './TieredPricingManager';
 
@@ -89,9 +93,38 @@ export default function AdminWhiteFridayTab({
   const [productToRemove, setProductToRemove] = useState<Product | null>(null);
   const [isRemoving, setIsRemoving] = useState<boolean>(false);
 
+  // 6. Multi-product Combo Bundle State
+  const [isComboModalOpen, setIsComboModalOpen] = useState<boolean>(false);
+  const [editingComboId, setEditingComboId] = useState<string | null>(null);
+  const [isSavingCombo, setIsSavingCombo] = useState<boolean>(false);
+  const [comboForm, setComboForm] = useState({
+    title: '',
+    code: '',
+    category: categories[0]?.key || 'kitchen',
+    offerPrice: 0,
+    badge: 'باقة مجمعة 🎁',
+    image: '',
+    description: '',
+    items: [] as BundleProductItem[]
+  });
+  const [comboSelectedProdId, setComboSelectedProdId] = useState<string>('');
+  const [comboSelectedProdQty, setComboSelectedProdQty] = useState<number>(1);
+
   // Filter products
   const whiteFridayProducts = products.filter(p => p.isWhiteFriday === true);
   const nonWhiteFridayProducts = products.filter(p => !p.isWhiteFriday);
+  // Available catalog products for combo bundling (excluding combo bundles themselves to prevent nesting)
+  const regularCatalogProducts = products.filter(p => !p.isBundle);
+
+  // Auto-calculated Combo Metrics
+  const comboOriginalPrice = comboForm.items.reduce(
+    (sum, it) => sum + (Number(it.price) * Number(it.quantity)),
+    0
+  );
+  const comboSavings = Math.max(0, comboOriginalPrice - Number(comboForm.offerPrice || 0));
+  const comboDiscountPct = comboOriginalPrice > 0
+    ? Math.max(0, Math.round((comboSavings / comboOriginalPrice) * 100))
+    : 0;
 
   // Selected product object for enrollment
   const currentSelectedProduct = products.find(p => p.id === selectedProductId);
@@ -283,26 +316,208 @@ export default function AdminWhiteFridayTab({
     }
   };
 
-  // Handler: Remove Product from White Friday
+  // Handler: Remove Product or Delete Combo from White Friday
   const handleConfirmRemove = async () => {
     if (!productToRemove) return;
     setIsRemoving(true);
     try {
-      const prodRef = doc(db, 'products', productToRemove.id);
-      const updateData: any = {
-        isWhiteFriday: false,
-        updatedAt: serverTimestamp()
-      };
-      if (productToRemove.originalImage) {
-        updateData.image = productToRemove.originalImage;
+      if (productToRemove.isBundle) {
+        await deleteDoc(doc(db, 'products', productToRemove.id));
+      } else {
+        const prodRef = doc(db, 'products', productToRemove.id);
+        const updateData: any = {
+          isWhiteFriday: false,
+          updatedAt: serverTimestamp()
+        };
+        if (productToRemove.originalImage) {
+          updateData.image = productToRemove.originalImage;
+        }
+        await updateDoc(prodRef, updateData);
       }
-      await updateDoc(prodRef, updateData);
       setProductToRemove(null);
     } catch (err) {
       console.error('Error removing product from White Friday:', err);
       alert('حدث خطأ أثناء إزالة المنتج من الجمعة البيضاء.');
     } finally {
       setIsRemoving(false);
+    }
+  };
+
+  // -------------------------------------------------------------
+  // Combo Bundle Handlers (Multi-product bundles)
+  // -------------------------------------------------------------
+  const handleOpenCreateCombo = () => {
+    setEditingComboId(null);
+    const initialProd = regularCatalogProducts[0] || products[0];
+    setComboForm({
+      title: '',
+      code: `WF-BNDL-${Math.floor(Math.random() * 900) + 100}`,
+      category: categories[0]?.key || 'kitchen',
+      offerPrice: 0,
+      badge: 'باقة مجمعة 🎁',
+      image: '',
+      description: '',
+      items: []
+    });
+    setComboSelectedProdId(initialProd?.id || '');
+    setComboSelectedProdQty(1);
+    setIsComboModalOpen(true);
+  };
+
+  const handleOpenEditCombo = (prod: Product) => {
+    setEditingComboId(prod.id);
+    const initialProd = regularCatalogProducts[0] || products[0];
+    setComboForm({
+      title: prod.name,
+      code: prod.code || `WF-BNDL-${Math.floor(Math.random() * 900) + 100}`,
+      category: prod.category || categories[0]?.key || 'kitchen',
+      offerPrice: prod.whiteFridayPrice || prod.price || 0,
+      badge: prod.whiteFridayBadge || 'باقة مجمعة 🎁',
+      image: prod.whiteFridayImage || prod.image || '',
+      description: prod.description || '',
+      items: prod.bundleItems || []
+    });
+    setComboSelectedProdId(initialProd?.id || '');
+    setComboSelectedProdQty(1);
+    setIsComboModalOpen(true);
+  };
+
+  const handleAddProductToCombo = () => {
+    if (!comboSelectedProdId) {
+      alert('يرجى اختيار منتج من القائمة أولاً.');
+      return;
+    }
+    const targetProd = products.find(p => p.id === comboSelectedProdId);
+    if (!targetProd) return;
+
+    const qty = Math.max(1, Number(comboSelectedProdQty) || 1);
+    setComboForm(prev => {
+      const existingIdx = prev.items.findIndex(it => it.productId === targetProd.id);
+      let newItems: BundleProductItem[];
+      if (existingIdx > -1) {
+        newItems = prev.items.map((it, idx) => 
+          idx === existingIdx ? { ...it, quantity: it.quantity + qty } : it
+        );
+      } else {
+        newItems = [
+          ...prev.items,
+          {
+            productId: targetProd.id,
+            productName: targetProd.name,
+            productCode: targetProd.code || '',
+            quantity: qty,
+            price: targetProd.price,
+            image: targetProd.image || '',
+            volume: targetProd.volume || '1 لتر'
+          }
+        ];
+      }
+
+      // Auto-suggest title if empty
+      const updatedTitle = prev.title.trim()
+        ? prev.title
+        : `باقة: ${newItems.map(i => i.productName).join(' + ')}`;
+
+      // Auto-suggest initial offer price (25% discount off total) if offerPrice is 0
+      const newOrigSum = newItems.reduce((s, it) => s + (it.price * it.quantity), 0);
+      const updatedOfferPrice = prev.offerPrice > 0 ? prev.offerPrice : Math.round(newOrigSum * 0.75);
+
+      // Auto-fill bundle image from first product if empty
+      const updatedImage = prev.image ? prev.image : (newItems[0]?.image || '');
+
+      return {
+        ...prev,
+        title: updatedTitle,
+        offerPrice: updatedOfferPrice,
+        image: updatedImage,
+        items: newItems
+      };
+    });
+  };
+
+  const handleUpdateComboItemQty = (productId: string, delta: number) => {
+    setComboForm(prev => {
+      const updated = prev.items
+        .map(it => {
+          if (it.productId === productId) {
+            const nextQty = it.quantity + delta;
+            return { ...it, quantity: nextQty };
+          }
+          return it;
+        })
+        .filter(it => it.quantity > 0);
+      return { ...prev, items: updated };
+    });
+  };
+
+  const handleRemoveComboItem = (productId: string) => {
+    setComboForm(prev => ({
+      ...prev,
+      items: prev.items.filter(it => it.productId !== productId)
+    }));
+  };
+
+  const handleSaveComboBundle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!comboForm.title.trim()) {
+      alert('يرجى كتابة عنوان أو اسم الباقة المجمعة.');
+      return;
+    }
+    if (comboForm.items.length === 0) {
+      alert('يرجى إضافة منتجات إلى الباقة أولاً.');
+      return;
+    }
+    if (comboForm.items.length === 1) {
+      if (!confirm('الباقة تحتوي على منتج واحد فقط. يفضل إضافة منتجين مختلفين على الأقل لتكوين باقة مجمعة. هل ترغب في المتابعة؟')) {
+        return;
+      }
+    }
+    if (!comboForm.offerPrice || comboForm.offerPrice <= 0) {
+      alert('يرجى تحديد سعر مخفض صحيح للباقة.');
+      return;
+    }
+
+    setIsSavingCombo(true);
+    try {
+      const finalImage = comboForm.image.trim() || comboForm.items[0]?.image || 'https://images.unsplash.com/photo-1585421514738-01798e348b17?auto=format&fit=crop&q=80&w=600';
+      const bundleData = {
+        name: comboForm.title.trim(),
+        code: comboForm.code.trim() || `WF-BNDL-${Math.floor(Math.random() * 900) + 100}`,
+        category: comboForm.category,
+        price: comboOriginalPrice,
+        whiteFridayPrice: Number(comboForm.offerPrice),
+        isWhiteFriday: true,
+        whiteFridayBadge: comboForm.badge.trim() || 'باقة مجمعة 🎁',
+        image: finalImage,
+        whiteFridayImage: finalImage,
+        description: comboForm.description.trim() || `باقة مجمعة مميزة للجمعة البيضاء تشمل: ${comboForm.items.map(i => `${i.quantity}× ${i.productName}`).join(' + ')}`,
+        volume: `${comboForm.items.reduce((s, it) => s + it.quantity, 0)} عبوات`,
+        isAvailable: true,
+        isBundle: true,
+        bundleItems: comboForm.items,
+        rating: 5,
+        reviewsCount: 1,
+        updatedAt: serverTimestamp()
+      };
+
+      if (editingComboId) {
+        const prodRef = doc(db, 'products', editingComboId);
+        await updateDoc(prodRef, bundleData);
+      } else {
+        const prodCol = collection(db, 'products');
+        await addDoc(prodCol, {
+          ...bundleData,
+          createdAt: serverTimestamp()
+        });
+      }
+
+      setIsComboModalOpen(false);
+      setEditingComboId(null);
+    } catch (err) {
+      console.error('Error saving combo bundle:', err);
+      alert('حدث خطأ أثناء حفظ الباقة المجمعة.');
+    } finally {
+      setIsSavingCombo(false);
     }
   };
 
@@ -330,6 +545,14 @@ export default function AdminWhiteFridayTab({
             {/* Quick Action Buttons */}
             <div className="flex flex-wrap items-center gap-2.5">
               <button
+                onClick={handleOpenCreateCombo}
+                className="bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-slate-950 font-black px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-amber-500/25 transition-all cursor-pointer hover:scale-[1.02] border border-amber-300"
+              >
+                <Gift className="w-4 h-4 text-slate-950" />
+                <span>إنشاء باقة مجمعة (منتجين أو أكثر)</span>
+              </button>
+
+              <button
                 onClick={() => {
                   setIsAddExistingOpen(true);
                   if (nonWhiteFridayProducts.length > 0) {
@@ -340,9 +563,9 @@ export default function AdminWhiteFridayTab({
                     setExistingTiers(firstProd.tieredPricing || []);
                   }
                 }}
-                className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20 transition-all cursor-pointer hover:scale-[1.02]"
+                className="bg-white/10 hover:bg-white/20 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 border border-white/20 transition-all cursor-pointer"
               >
-                <PlusCircle className="w-4 h-4" />
+                <PlusCircle className="w-4 h-4 text-amber-300" />
                 <span>إضافة منتج من الكتالوج</span>
               </button>
 
@@ -566,6 +789,14 @@ export default function AdminWhiteFridayTab({
 
           <div className="flex items-center gap-2">
             <button
+              onClick={handleOpenCreateCombo}
+              className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-black px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+            >
+              <Gift className="w-3.5 h-3.5 text-slate-950" />
+              <span>إنشاء باقة مجمعة</span>
+            </button>
+
+            <button
               onClick={() => {
                 setIsAddExistingOpen(true);
                 if (nonWhiteFridayProducts.length > 0) {
@@ -593,9 +824,17 @@ export default function AdminWhiteFridayTab({
               لا توجد منتجات مضافة لقسم الجمعة البيضاء حتى الآن
             </h4>
             <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 leading-relaxed">
-              ابدأ الآن بإضافة منتجات من كتالوج المتجر وحدد سعر الخصم والشارة لتظهر للزبائن في قسم الجمعة البيضاء والصفحة الرئيسية.
+              ابدأ الآن بإنشاء باقة مجمعة من منتجين أو أكثر أو إضافة منتجات من كتالوج المتجر لتظهر للزبائن في قسم الجمعة البيضاء.
             </p>
-            <div className="flex items-center justify-center gap-3 mt-4">
+            <div className="flex flex-wrap items-center justify-center gap-3 mt-4">
+              <button
+                onClick={handleOpenCreateCombo}
+                className="bg-slate-900 hover:bg-amber-600 text-white font-black px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer"
+              >
+                <Gift className="w-4 h-4 text-amber-400" />
+                <span>إنشاء باقة مجمعة (منتجين أو أكثر)</span>
+              </button>
+
               <button
                 onClick={() => {
                   setIsAddExistingOpen(true);
@@ -628,13 +867,20 @@ export default function AdminWhiteFridayTab({
                 >
                   {/* Top Badges */}
                   <div className="flex items-start justify-between gap-2 mb-3">
-                    <span className="bg-rose-500 text-white font-black text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
-                      <Flame className="w-3 h-3" />
-                      <span>{discountPct > 0 ? `خصم ${discountPct}%` : 'عرض خاص'}</span>
-                    </span>
+                    {prod.isBundle ? (
+                      <span className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black text-[10px] px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                        <Gift className="w-3 h-3 text-slate-950" />
+                        <span>باقة مجمعة ({prod.bundleItems?.length || 2} أصناف)</span>
+                      </span>
+                    ) : (
+                      <span className="bg-rose-500 text-white font-black text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                        <Flame className="w-3 h-3" />
+                        <span>{discountPct > 0 ? `خصم ${discountPct}%` : 'عرض خاص'}</span>
+                      </span>
+                    )}
 
                     <span className="bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-md truncate max-w-[140px]">
-                      {prod.whiteFridayBadge || 'الجمعة البيضاء'}
+                      {prod.whiteFridayBadge || (prod.isBundle ? 'باقة مجمعة 🎁' : 'الجمعة البيضاء')}
                     </span>
                   </div>
 
@@ -672,6 +918,22 @@ export default function AdminWhiteFridayTab({
                         )}
                       </div>
 
+                      {/* Bundle Items Breakdown (if combo bundle) */}
+                      {prod.isBundle && prod.bundleItems && prod.bundleItems.length > 0 && (
+                        <div className="mt-2.5 p-2 rounded-xl bg-amber-50/80 border border-amber-200/90 text-xs">
+                          <span className="text-[10px] font-black text-amber-950 block mb-1">🎁 محتويات الباقة:</span>
+                          <div className="space-y-0.5">
+                            {prod.bundleItems.map((bi, idx) => (
+                              <div key={idx} className="flex items-center justify-between text-[11px] text-slate-700">
+                                <span className="line-clamp-1">• {bi.quantity}× {bi.productName}</span>
+                                <span className="font-mono text-[10px] text-slate-500 shrink-0 mr-1">{bi.price * bi.quantity} ج.م</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Tiered pricing tag (if regular tiered product) */}
                       {prod.tieredPricing && prod.tieredPricing.length > 0 && (
                         <div className="mt-2 flex items-center gap-1.5 flex-wrap">
                           <span className="text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/80 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
@@ -687,25 +949,29 @@ export default function AdminWhiteFridayTab({
                   <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
                     <button
                       onClick={() => {
-                        setEditingItem(prod);
-                        setEditPrice(prod.whiteFridayPrice || prod.price);
-                        setEditBadge(prod.whiteFridayBadge || 'عرض الجمعة البيضاء 🔥');
-                        setEditImage(prod.whiteFridayImage || prod.image || '');
-                        setEditTiers(prod.tieredPricing || []);
+                        if (prod.isBundle) {
+                          handleOpenEditCombo(prod);
+                        } else {
+                          setEditingItem(prod);
+                          setEditPrice(prod.whiteFridayPrice || prod.price);
+                          setEditBadge(prod.whiteFridayBadge || 'عرض الجمعة البيضاء 🔥');
+                          setEditImage(prod.whiteFridayImage || prod.image || '');
+                          setEditTiers(prod.tieredPricing || []);
+                        }
                       }}
                       className="text-xs font-bold text-slate-600 hover:text-amber-700 bg-slate-50 hover:bg-amber-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
-                      <span>تعديل العرض والصورة</span>
+                      <span>{prod.isBundle ? 'تعديل الباقة المجمعة' : 'تعديل العرض والصورة'}</span>
                     </button>
 
                     <button
                       onClick={() => setProductToRemove(prod)}
                       className="text-xs font-bold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
-                      title="إزالة من عروض الجمعة البيضاء"
+                      title={prod.isBundle ? 'حذف الباقة المجمعة' : 'إزالة من عروض الجمعة البيضاء'}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      <span>إلغاء من العرض</span>
+                      <span>{prod.isBundle ? 'حذف الباقة' : 'إلغاء من العرض'}</span>
                     </button>
                   </div>
                 </div>
@@ -1405,10 +1671,14 @@ export default function AdminWhiteFridayTab({
               <AlertCircle className="w-6 h-6" />
             </div>
             <h4 className="font-extrabold text-slate-900 text-sm">
-              إلغاء المنتج من عروض الجمعة البيضاء؟
+              {productToRemove.isBundle ? 'حذف الباقة المجمعة نهائياً؟' : 'إلغاء المنتج من عروض الجمعة البيضاء؟'}
             </h4>
             <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-              سيتم إزالة <strong className="text-slate-800">{productToRemove.name}</strong> من قسم الجمعة البيضاء ويعود لسعره الطبيعي السابق ({productToRemove.price} ج.م) في المتجر.
+              {productToRemove.isBundle ? (
+                <>سيتم حذف الباقة المجمعة <strong className="text-slate-800">{productToRemove.name}</strong> نهائياً من العروض والمتجر.</>
+              ) : (
+                <>سيتم إزالة <strong className="text-slate-800">{productToRemove.name}</strong> من قسم الجمعة البيضاء ويعود لسعره الطبيعي السابق ({productToRemove.price} ج.م) في المتجر.</>
+              )}
             </p>
 
             <div className="flex items-center justify-center gap-2 mt-5">
@@ -1425,9 +1695,406 @@ export default function AdminWhiteFridayTab({
                 onClick={handleConfirmRemove}
                 className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-all cursor-pointer disabled:opacity-50"
               >
-                {isRemoving ? 'جاري الإزالة...' : 'تأكيد الإزالة'}
+                {isRemoving ? 'جاري الإزالة...' : (productToRemove.isBundle ? 'تأكيد الحذف' : 'تأكيد الإزالة')}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: CREATE / EDIT COMBO BUNDLE (MULTI-PRODUCT) */}
+      {isComboModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5 overflow-hidden" dir="rtl">
+          <div className="bg-white rounded-3xl max-w-3xl lg:max-w-4xl w-full shadow-2xl border border-slate-200/90 flex flex-col max-h-[92vh] overflow-hidden">
+            
+            {/* 1. Sticky Header */}
+            <div className="px-5 sm:px-7 py-4 sm:py-5 border-b border-slate-150 bg-white flex items-center justify-between shrink-0 z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-slate-950 flex items-center justify-center shadow-md shadow-amber-500/20 shrink-0">
+                  <Gift className="w-5 h-5 text-slate-950" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-black text-sm sm:text-base text-slate-900">
+                      {editingComboId ? 'تعديل الباقة المجمعة للجمعة البيضاء' : 'إنشاء باقة مجمعة جديدة (منتجين مختلفين أو أكثر)'}
+                    </h3>
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200">
+                      باقة مجمعة 🎁
+                    </span>
+                  </div>
+                  <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 font-medium">
+                    اجمع منتجين أو أكثر في باقة واحدة، مع تحديد سعر الباقة المخفض ورفع صورة ترويجية مخصصة.
+                  </p>
+                </div>
+              </div>
+
+              <button 
+                onClick={() => { setIsComboModalOpen(false); setEditingComboId(null); }}
+                className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                title="إغلاق"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 2. Scrollable Body */}
+            <form 
+              id="combo-bundle-form" 
+              onSubmit={handleSaveComboBundle}
+              className="flex-1 overflow-y-auto p-5 sm:p-7 space-y-5 custom-scrollbar overscroll-contain"
+            >
+              {/* CARD 1: Select & Add Products to Bundle */}
+              <div className="bg-slate-50/70 rounded-2xl border border-slate-200/90 p-4 sm:p-5 space-y-4">
+                <div className="flex items-center justify-between pb-2.5 border-b border-slate-200">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
+                      <Boxes className="w-4 h-4 text-amber-600" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm font-black text-slate-900">
+                        1. اختيار المنتجات المكوّنة للباقة
+                      </h4>
+                      <p className="text-[10px] sm:text-[11px] text-slate-500">
+                        اختر أي منتج من كتالوج المتجر وحدد الكمية المطلوبة منه واضغط &quot;إضافة للباقة&quot;
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="text-xs font-black text-amber-900 bg-amber-100/80 px-2.5 py-1 rounded-full border border-amber-200">
+                    {comboForm.items.length} أصناف مضافة
+                  </span>
+                </div>
+
+                {/* Add Product Row */}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                  <div className="sm:col-span-7">
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      اختر المنتج من الكتالوج:
+                    </label>
+                    <select
+                      value={comboSelectedProdId}
+                      onChange={(e) => setComboSelectedProdId(e.target.value)}
+                      className="w-full text-xs font-bold px-3 py-2 rounded-xl border border-slate-200 bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none"
+                    >
+                      {regularCatalogProducts.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} — ({p.volume || 'بدون حجم'}) — {p.price} ج.م
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      الكمية بالباقة:
+                    </label>
+                    <input 
+                      type="number"
+                      min="1"
+                      max="50"
+                      value={comboSelectedProdQty}
+                      onChange={(e) => setComboSelectedProdQty(Math.max(1, Number(e.target.value)))}
+                      className="w-full text-xs font-black font-mono text-center px-2 py-2 rounded-xl border border-slate-200 focus:border-amber-500 outline-none"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-3">
+                    <button
+                      type="button"
+                      onClick={handleAddProductToCombo}
+                      className="w-full bg-slate-900 hover:bg-amber-600 text-white font-black text-xs py-2 px-3 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-sm"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>إضافة للباقة</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Products List Inside Bundle */}
+                {comboForm.items.length === 0 ? (
+                  <div className="text-center py-8 px-4 rounded-xl border-2 border-dashed border-slate-200 bg-white text-slate-400">
+                    <Boxes className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+                    <p className="text-xs font-bold text-slate-600">لم تضف منتجات إلى هذه الباقة حتى الآن</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">اختر منتجين أو أكثر من القائمة بالأعلى واضغط &quot;إضافة للباقة&quot;.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <span className="text-[11px] font-bold text-slate-600 block">المنتجات الموجودة في الباقة:</span>
+                    <div className="divide-y divide-slate-100 bg-white rounded-xl border border-slate-200/90 overflow-hidden shadow-2xs">
+                      {comboForm.items.map((item) => (
+                        <div key={item.productId} className="p-3 flex items-center justify-between gap-3 hover:bg-slate-50/70 transition-colors">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-12 h-12 rounded-lg bg-slate-50 border border-slate-150 p-1 shrink-0 overflow-hidden flex items-center justify-center">
+                              <img 
+                                src={item.image || 'https://images.unsplash.com/photo-1585421514738-01798e348b17?auto=format&fit=crop&q=80&w=200'} 
+                                alt="" 
+                                className="w-full h-full object-contain" 
+                              />
+                            </div>
+                            <div className="min-w-0">
+                              <h5 className="font-extrabold text-xs text-slate-900 truncate">{item.productName}</h5>
+                              <p className="text-[10px] text-slate-500 mt-0.5">
+                                الحجم: {item.volume || '1 لتر'} • السعر الفردي: <span className="font-mono text-slate-700 font-bold">{item.price} ج.م</span>
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 shrink-0">
+                            {/* Quantity Stepper */}
+                            <div className="flex items-center border border-slate-200 rounded-lg bg-slate-50 overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateComboItemQty(item.productId, -1)}
+                                className="px-2 py-1 text-xs hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                                title="إنقاص"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </button>
+                              <span className="px-2.5 py-1 text-xs font-black font-mono text-slate-900 bg-white min-w-[28px] text-center">
+                                {item.quantity}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateComboItemQty(item.productId, 1)}
+                                className="px-2 py-1 text-xs hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+                                title="زيادة"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
+                            </div>
+
+                            {/* Total for this product */}
+                            <div className="text-left min-w-[65px]">
+                              <span className="text-[10px] text-slate-400 block">الإجمالي:</span>
+                              <span className="text-xs font-black text-slate-800 font-mono">
+                                {item.price * item.quantity} ج.م
+                              </span>
+                            </div>
+
+                            {/* Remove button */}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveComboItem(item.productId)}
+                              className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                              title="حذف هذا الصنف من الباقة"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* CARD 2: Bundle Pricing & Discount Calculation */}
+              <div className="bg-slate-50/70 rounded-2xl border border-slate-200/90 p-4 sm:p-5 space-y-4">
+                <div className="flex items-center gap-2 pb-2.5 border-b border-slate-200">
+                  <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
+                    <Tag className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <h4 className="text-xs sm:text-sm font-black text-slate-900">
+                    2. تسعير الباقة وعرض الخصم
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200">
+                    <span className="text-[11px] text-slate-500 font-bold block mb-1">
+                      إجمالي السعر الأصلي للمنتجات:
+                    </span>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-xl font-black text-slate-900 font-mono">
+                        {comboOriginalPrice}
+                      </span>
+                      <span className="text-xs font-bold text-slate-500">ج.م</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 block mt-1">
+                      (محسوب تلقائياً من أسعار المنتجات المضافة × كمياتها)
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                      سعر بيع الباقة في الجمعة البيضاء (ج.م) *
+                    </label>
+                    <div className="relative">
+                      <input 
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={comboForm.offerPrice || ''}
+                        onChange={(e) => setComboForm(prev => ({ ...prev, offerPrice: Number(e.target.value) }))}
+                        placeholder="مثال: 180"
+                        className="w-full text-sm font-black font-mono px-4 py-2.5 rounded-xl border border-amber-300 bg-amber-50/40 text-amber-950 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none"
+                        required
+                      />
+                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-amber-700 pointer-events-none">
+                        ج.م
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Live Savings calculation preview */}
+                {comboOriginalPrice > 0 && comboForm.offerPrice > 0 && (
+                  <div className="p-3.5 bg-white border border-amber-200/90 rounded-xl shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <span className="text-xs text-slate-800 font-black block">معاينة توفير العميل في هذه الباقة:</span>
+                      <span className="text-[11px] text-emerald-700 font-bold">
+                        الزبون سيوفر {comboSavings} جنيه (من {comboOriginalPrice} ج.م إلى {comboForm.offerPrice} ج.م)
+                      </span>
+                    </div>
+                    <span className="text-sm font-black text-amber-700 font-mono bg-amber-50 px-3.5 py-1 rounded-lg border border-amber-200 self-start sm:self-auto">
+                      خصم {comboDiscountPct}% 🔥
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* CARD 3: Bundle Info (Title, Category, Badge, Description) */}
+              <div className="bg-slate-50/70 rounded-2xl border border-slate-200/90 p-4 sm:p-5 space-y-4">
+                <div className="flex items-center gap-2 pb-2.5 border-b border-slate-200">
+                  <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
+                    <Sparkles className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <h4 className="text-xs sm:text-sm font-black text-slate-900">
+                    3. بيانات وشارة الباقة الترويجية
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                      عنوان / اسم الباقة المجمعة *
+                    </label>
+                    <input 
+                      type="text"
+                      value={comboForm.title}
+                      onChange={(e) => setComboForm(prev => ({ ...prev, title: e.target.value }))}
+                      placeholder="مثال: باقة النظافة الشاملة: مسحوق غسيل + معطر ملابس"
+                      className="w-full text-xs font-medium px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                      القسم / الفئة
+                    </label>
+                    <select
+                      value={comboForm.category}
+                      onChange={(e) => setComboForm(prev => ({ ...prev, category: e.target.value }))}
+                      className="w-full text-xs font-bold px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none"
+                    >
+                      {categories.map(c => (
+                        <option key={c.key} value={c.key}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                      شارة العرض الترويجية (Badge)
+                    </label>
+                    <input 
+                      type="text"
+                      value={comboForm.badge}
+                      onChange={(e) => setComboForm(prev => ({ ...prev, badge: e.target.value }))}
+                      placeholder="مثال: باقة مجمعة 🎁"
+                      className="w-full text-xs font-medium px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none text-slate-900"
+                    />
+                  </div>
+                </div>
+
+                {/* Quick Badge Suggestions */}
+                <div>
+                  <span className="text-[11px] text-slate-500 font-bold block mb-1.5">شارات جاهزة للباقات:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['باقة مجمعة 🎁', 'عرض التوفير الخارق 🔥', 'باقة الجمعة البيضاء ⭐', 'اشتري قطعتين ووفر 👑', 'صفقة الموسم ⚡'].map(badge => (
+                      <button
+                        type="button"
+                        key={badge}
+                        onClick={() => setComboForm(prev => ({ ...prev, badge }))}
+                        className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all cursor-pointer border ${
+                          comboForm.badge === badge 
+                            ? 'bg-amber-100 text-amber-950 border-amber-300 shadow-2xs' 
+                            : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        {badge}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                    وصف الباقة (اختياري)
+                  </label>
+                  <textarea 
+                    rows={2}
+                    value={comboForm.description}
+                    onChange={(e) => setComboForm(prev => ({ ...prev, description: e.target.value }))}
+                    placeholder="اكتب وصفاً جذاباً لمكونات وجودة الباقة..."
+                    className="w-full text-xs font-medium p-3 rounded-xl border border-slate-200 bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none resize-none"
+                  />
+                </div>
+              </div>
+
+              {/* CARD 4: Bundle Promotional Image */}
+              <div className="bg-slate-50/70 rounded-2xl border border-slate-200/90 p-4 sm:p-5 space-y-3">
+                <ImageUploadField
+                  label="صورة الباقة المجمعة (صورة مجمعة تظهر المنتجات معاً)"
+                  value={comboForm.image}
+                  onChange={(val) => setComboForm(prev => ({ ...prev, image: val }))}
+                  originalValue={comboForm.items[0]?.image}
+                  onResetToOriginal={() => comboForm.items[0]?.image && setComboForm(prev => ({ ...prev, image: comboForm.items[0].image || '' }))}
+                  helpText="ارفع صورة عالية الجودة تجمع المنتجات في لقطة واحدة لتبدو الباقة احترافية وجذابة للزبائن."
+                />
+              </div>
+            </form>
+
+            {/* 3. Sticky Modal Footer */}
+            <div className="px-5 sm:px-7 py-3.5 sm:py-4 border-t border-slate-200 bg-slate-50/95 backdrop-blur flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 z-10">
+              <div className="flex items-center gap-2 text-xs text-slate-600 font-medium">
+                <span>المكونات: <strong className="text-slate-900 font-mono">{comboForm.items.length} أصناف</strong></span>
+                <span>•</span>
+                <span>السعر الأصلي: <strong className="text-slate-700 font-mono">{comboOriginalPrice} ج.م</strong></span>
+                <span>•</span>
+                <span>سعر العرض: <strong className="text-amber-800 font-mono">{comboForm.offerPrice || 0} ج.م</strong></span>
+              </div>
+
+              <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => { setIsComboModalOpen(false); setEditingComboId(null); }}
+                  className="flex-1 sm:flex-none px-5 py-2.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all cursor-pointer shadow-2xs"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  form="combo-bundle-form"
+                  disabled={isSavingCombo}
+                  className="flex-1 sm:flex-none bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black text-xs px-6 py-2.5 rounded-xl shadow-md shadow-amber-500/20 transition-all cursor-pointer flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-95 disabled:opacity-50"
+                >
+                  {isSavingCombo ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                      <span>جاري حفظ الباقة...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Gift className="w-4 h-4 text-slate-950" />
+                      <span>{editingComboId ? 'حفظ تعديلات الباقة' : 'حفظ الباقة في عروض الجمعة البيضاء'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
           </div>
         </div>
       )}

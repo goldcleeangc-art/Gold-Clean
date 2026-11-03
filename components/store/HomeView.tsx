@@ -503,7 +503,9 @@ export default function HomeView({
                     <div className="flex-1 flex flex-col justify-between">
                       <div>
                         <span className="text-[10px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded-md font-medium inline-block mb-1">
-                          {offer.isBundle ? `باقة توفير (${offer.quantity} عبوات)` : offer.volume}
+                          {offer.product.isBundle 
+                            ? `🎁 باقة مجمعة (${offer.product.bundleItems?.length || 2} أصناف)`
+                            : (offer.isBundle ? `باقة توفير (${offer.quantity} عبوات)` : offer.volume)}
                         </span>
                         <h4
                           onClick={() => onSelectProduct?.(offer.product, offer.quantity)}
@@ -538,7 +540,7 @@ export default function HomeView({
                           className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs py-2 px-3 rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-1.5 active:scale-95"
                         >
                           <ShoppingCart className="w-3.5 h-3.5" />
-                          <span>{offer.isBundle ? `أضف باقة (${offer.quantity}) عبوات` : 'أضف للسلة'}</span>
+                          <span>{offer.product.isBundle ? 'أضف الباقة للسلة' : (offer.isBundle ? `أضف باقة (${offer.quantity}) عبوات` : 'أضف للسلة')}</span>
                         </button>
                       </div>
                     </div>

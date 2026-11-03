@@ -214,11 +214,20 @@ export async function POST(req: NextRequest) {
         // Authoritative verified product price (supporting White Friday discount pricing & tiered volume pricing)
         const pricing = getProductTierPricing(prodData, qty);
         const verifiedProdPrice = Math.max(0, pricing.unitPrice);
-        const verifiedWeight = parseProductWeight(prodData);
 
-        const displayName = pricing.isTierApplied && pricing.appliedTier && pricing.appliedTier.quantity > 1
-          ? `${prodData.name} (عرض ${qty} عبوات${pricing.appliedTier.badge ? ` - ${pricing.appliedTier.badge}` : ''})`
-          : (prodData.name || 'منتج');
+        let bundleTotalWeight = 0;
+        if (prodData.isBundle && Array.isArray(prodData.bundleItems)) {
+          for (const bi of prodData.bundleItems) {
+            bundleTotalWeight += parseProductWeight({ volume: bi.volume }) * (bi.quantity || 1);
+          }
+        }
+        const verifiedWeight = bundleTotalWeight > 0 ? bundleTotalWeight : parseProductWeight(prodData);
+
+        const displayName = prodData.isBundle && Array.isArray(prodData.bundleItems) && prodData.bundleItems.length > 0
+          ? `${prodData.name} [باقة تشمل: ${prodData.bundleItems.map((b: any) => `${b.quantity}× ${b.productName}`).join(' + ')}]`
+          : (pricing.isTierApplied && pricing.appliedTier && pricing.appliedTier.quantity > 1
+              ? `${prodData.name} (عرض ${qty} عبوات${pricing.appliedTier.badge ? ` - ${pricing.appliedTier.badge}` : ''})`
+              : (prodData.name || 'منتج'));
 
         verifiedOrderItems.push({
           productId: rawId,
@@ -226,7 +235,8 @@ export async function POST(req: NextRequest) {
           productCode: prodData.code || '',
           quantity: qty,
           price: verifiedProdPrice,
-          isOffer: false,
+          isOffer: Boolean(prodData.isBundle),
+          bundleItems: prodData.isBundle && Array.isArray(prodData.bundleItems) ? prodData.bundleItems : undefined,
           weight: verifiedWeight
         });
       }

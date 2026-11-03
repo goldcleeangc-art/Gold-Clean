@@ -13,6 +13,16 @@ export interface ProductTierOffer {
   image?: string;     // صورة مخصصة للباقة (تخزن كنص Base64 أو رابط ويب)
 }
 
+export interface BundleProductItem {
+  productId: string;
+  productName: string;
+  productCode?: string;
+  quantity: number;
+  price: number;
+  image?: string;
+  volume?: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -38,6 +48,9 @@ export interface Product {
   originalImage?: string;
   // Tiered / Quantity volume pricing
   tieredPricing?: ProductTierOffer[];
+  // Multi-product combo bundle
+  isBundle?: boolean;
+  bundleItems?: BundleProductItem[];
 }
 
 export interface WhiteFridaySettings {

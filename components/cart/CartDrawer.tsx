@@ -181,6 +181,14 @@ export default function CartDrawer({
                             )}
                           </span>
                         </div>
+
+                        {/* Multi-product Bundle Contents Pill */}
+                        {item.product.isBundle && item.product.bundleItems && item.product.bundleItems.length > 0 && (
+                          <div className="text-[10px] text-amber-900 bg-amber-50/90 border border-amber-200/80 rounded-lg p-1.5 mt-1 font-medium">
+                            <span className="font-bold">🎁 تشمل: </span>
+                            <span>{item.product.bundleItems.map(bi => `${bi.quantity}× ${bi.productName}`).join(' + ')}</span>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100">

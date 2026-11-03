@@ -128,12 +128,51 @@ export default function ProductDetailsModal({
             </div>
           </div>
 
-          {/* Tiered Quantity Pricing Offers Selector */}
-          <TieredOfferSelector
-            product={product}
-            selectedQuantity={selectedQuantity}
-            onSelectQuantity={setSelectedQuantity}
-          />
+          {/* Multi-product Bundle Contents Card */}
+          {product.isBundle && product.bundleItems && product.bundleItems.length > 0 && (
+            <div className="mb-6 p-4 rounded-2xl bg-gradient-to-br from-amber-500/10 via-amber-50/40 to-slate-50 border border-amber-300/80 shadow-2xs">
+              <div className="flex items-center gap-2 mb-3 pb-2.5 border-b border-amber-200/80">
+                <span className="text-lg">🎁</span>
+                <div>
+                  <h3 className="text-xs sm:text-sm font-black text-slate-900">محتويات هذه الباقة المجمعة</h3>
+                  <p className="text-[10px] sm:text-[11px] text-slate-600 font-medium">تحصل على جميع المنتجات التالية معاً بسعر العرض المخفض:</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {product.bundleItems.map((bi, idx) => (
+                  <div key={idx} className="flex items-center gap-3 p-2.5 rounded-xl bg-white border border-amber-200/80 shadow-2xs">
+                    <div className="w-12 h-12 rounded-lg bg-slate-50 border border-slate-200 shrink-0 overflow-hidden p-1 flex items-center justify-center">
+                      <img 
+                        src={bi.image || 'https://images.unsplash.com/photo-1585421514738-01798e348b17?auto=format&fit=crop&q=80&w=200'} 
+                        alt={bi.productName} 
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-xs font-black text-slate-900 line-clamp-1">{bi.productName}</h4>
+                      <div className="flex items-center gap-2 mt-0.5 text-[10px] text-slate-500">
+                        <span className="font-bold text-amber-900 bg-amber-100/80 px-1.5 py-0.5 rounded border border-amber-200">
+                          الكمية: {bi.quantity}
+                        </span>
+                        {bi.volume && <span>{bi.volume}</span>}
+                        {bi.price > 0 && <span className="font-mono text-slate-600">({bi.price} ج.م)</span>}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Tiered Quantity Pricing Offers Selector (Only for non-bundle products) */}
+          {!product.isBundle && (
+            <TieredOfferSelector
+              product={product}
+              selectedQuantity={selectedQuantity}
+              onSelectQuantity={setSelectedQuantity}
+            />
+          )}
 
           <div className="prose prose-sm md:prose-base text-slate-600 mb-8 max-w-none">
             <h3 className="text-base font-bold text-slate-900 mb-2">وصف المنظف</h3>

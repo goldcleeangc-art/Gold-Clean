@@ -371,7 +371,9 @@ export default function WhiteFridayView({
                             ? 'bg-amber-500/20 text-amber-300 border border-amber-400/30' 
                             : 'bg-slate-800/80 text-slate-300'
                         }`}>
-                          {offer.isBundle ? `باقة توفير (${offer.quantity} عبوات)` : offer.volume}
+                          {offer.product.isBundle 
+                            ? `🎁 باقة مجمعة (${offer.product.bundleItems?.length || 2} أصناف)`
+                            : (offer.isBundle ? `باقة توفير (${offer.quantity} عبوات)` : offer.volume)}
                         </span>
 
                         {offer.product.rating > 0 && (
@@ -413,11 +415,17 @@ export default function WhiteFridayView({
                         )}
                       </div>
 
-                      {/* Unit price inside bundle if applicable */}
-                      {offer.isBundle && (
-                        <p className="text-[10px] text-slate-400 mb-2 font-mono">
-                          سعر العبوة في العرض: <strong className="text-amber-300">{(offer.price / offer.quantity).toFixed(0)} ج.م</strong>
+                      {/* Unit price inside bundle or bundle contents */}
+                      {offer.product.isBundle && offer.product.bundleItems && offer.product.bundleItems.length > 0 ? (
+                        <p className="text-[10px] text-slate-300 mb-2 truncate" title={offer.product.bundleItems.map(bi => `${bi.quantity}× ${bi.productName}`).join(' + ')}>
+                          يشمل: {offer.product.bundleItems.map(bi => `${bi.quantity}× ${bi.productName}`).join(' + ')}
                         </p>
+                      ) : (
+                        offer.isBundle && (
+                          <p className="text-[10px] text-slate-400 mb-2 font-mono">
+                            سعر العبوة في العرض: <strong className="text-amber-300">{(offer.price / offer.quantity).toFixed(0)} ج.م</strong>
+                          </p>
+                        )
                       )}
 
                       {/* Add to Cart Button */}
@@ -426,7 +434,7 @@ export default function WhiteFridayView({
                         className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs py-2.5 px-3 rounded-xl shadow-lg shadow-amber-500/15 hover:shadow-amber-500/30 transition-all duration-200 cursor-pointer flex items-center justify-center gap-1.5 active:scale-95"
                       >
                         <ShoppingCart className="w-3.5 h-3.5" />
-                        <span>{offer.isBundle ? `أضف باقة (${offer.quantity}) عبوات` : 'أضف للسلة الآن'}</span>
+                        <span>{offer.product.isBundle ? 'أضف الباقة للسلة' : (offer.isBundle ? `أضف باقة (${offer.quantity}) عبوات` : 'أضف للسلة الآن')}</span>
                       </button>
                     </div>
 
