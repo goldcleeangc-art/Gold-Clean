@@ -143,10 +143,10 @@ export default function Navbar({
         id="header-nav" 
         dir="rtl"
       >
-        <div className="max-w-7xl mx-auto h-18 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-2 sm:gap-4 w-full">
+        <div className="max-w-[1440px] mx-auto h-18 px-3 sm:px-6 lg:px-8 flex items-center justify-between gap-2 sm:gap-4 w-full">
           
           {/* Right Section: Mobile Hamburger + Brand Logo */}
-          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0" id="header-right-brand">
             {/* Mobile Menu Trigger (Visible on < lg screens) */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -178,12 +178,12 @@ export default function Navbar({
             </div>
           </div>
 
-          {/* Center Navigation Links (Desktop: lg+) */}
-          <nav className="hidden lg:flex items-center gap-1 xl:gap-1.5 text-xs font-semibold shrink min-w-0">
+          {/* Center Navigation Links (Main navigation: lg+) */}
+          <nav className="hidden lg:flex items-center justify-center gap-1 xl:gap-1.5 2xl:gap-2 flex-1 min-w-0 px-1" id="header-center-nav">
             <button 
               id="nav-home-btn"
               onClick={() => handleNavClick('home')} 
-              className={`px-2.5 xl:px-3 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative whitespace-nowrap ${
+              className={`px-2 xl:px-2.5 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative whitespace-nowrap shrink-0 text-[11px] xl:text-xs font-semibold ${
                 currentTab === 'home' && !isMerchantOpen 
                   ? 'text-amber-600 font-bold bg-amber-50/80 shadow-2xs' 
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -201,7 +201,7 @@ export default function Navbar({
             <button 
               id="nav-products-btn"
               onClick={() => handleNavClick('products')} 
-              className={`px-2.5 xl:px-3 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative whitespace-nowrap ${
+              className={`px-2 xl:px-2.5 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative whitespace-nowrap shrink-0 text-[11px] xl:text-xs font-semibold ${
                 currentTab === 'products' && !isMerchantOpen 
                   ? 'text-amber-600 font-bold bg-amber-50/80 shadow-2xs' 
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -219,7 +219,7 @@ export default function Navbar({
             <button 
               id="nav-white-friday-btn"
               onClick={() => handleNavClick('white_friday')} 
-              className={`px-2.5 xl:px-3 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative flex items-center gap-1.5 whitespace-nowrap ${
+              className={`px-2 xl:px-2.5 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative flex items-center gap-1 whitespace-nowrap shrink-0 text-[11px] xl:text-xs font-semibold ${
                 currentTab === 'white_friday' && !isMerchantOpen 
                   ? 'text-amber-400 font-black bg-slate-950 shadow-sm border border-amber-500/40' 
                   : 'text-slate-700 hover:text-amber-600 hover:bg-amber-50/70'
@@ -228,7 +228,7 @@ export default function Navbar({
               <Flame className="w-3.5 h-3.5 text-amber-500 animate-pulse shrink-0" />
               <span>الجمعة البيضاء</span>
               <span className="bg-amber-500 text-slate-950 text-[9px] font-black px-1.5 py-0.2 rounded-full shadow-2xs shrink-0">
-                خصم 60%
+                خصم 🔥
               </span>
               {currentTab === 'white_friday' && !isMerchantOpen && (
                 <motion.div 
@@ -241,7 +241,7 @@ export default function Navbar({
             <button 
               id="nav-offers-btn"
               onClick={() => handleNavClick('offers')} 
-              className={`px-2.5 xl:px-3 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative flex items-center gap-1 whitespace-nowrap ${
+              className={`px-2 xl:px-2.5 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative flex items-center gap-1 whitespace-nowrap shrink-0 text-[11px] xl:text-xs font-semibold ${
                 currentTab === 'offers' && !isMerchantOpen 
                   ? 'text-rose-600 font-bold bg-rose-50 shadow-2xs' 
                   : 'text-slate-600 hover:text-rose-600 hover:bg-rose-50/50'
@@ -249,7 +249,7 @@ export default function Navbar({
             >
               <span>عروض التوفير</span>
               <span className="bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full shadow-2xs shrink-0">
-                خصومات 🔥
+                تخفيضات
               </span>
               {currentTab === 'offers' && !isMerchantOpen && (
                 <motion.div 
@@ -260,27 +260,13 @@ export default function Navbar({
             </button>
 
             <button 
-              id="nav-tracker-btn" 
-              onClick={onOpenTracker} 
-              className="px-2.5 xl:px-3 py-1.5 rounded-xl text-slate-600 hover:text-[#111827] hover:bg-slate-50 transition-all cursor-pointer outline-none focus:outline-none flex items-center gap-1 whitespace-nowrap"
-            >
-              <span>طلباتي</span>
-              {userOrdersCount > 0 && (
-                <span className="bg-slate-900 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full font-mono shrink-0">
-                  {userOrdersCount}
-                </span>
-              )}
-            </button>
-
-            {/* Direct Links on xl+ (1280px+) */}
-            <button 
               id="nav-about-btn"
               onClick={() => { 
                 setCurrentTab('about'); 
                 setIsMerchantOpen?.(false); 
                 window.open('https://portfolio.g-c.store', '_blank', 'noopener,noreferrer'); 
               }} 
-              className={`hidden xl:inline-block px-2.5 xl:px-3 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative whitespace-nowrap ${
+              className={`hidden xl:inline-block px-2 xl:px-2.5 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative whitespace-nowrap shrink-0 text-[11px] xl:text-xs font-semibold ${
                 currentTab === 'about' && !isMerchantOpen 
                   ? 'text-amber-600 font-bold bg-amber-50/80' 
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -292,7 +278,7 @@ export default function Navbar({
             <button 
               id="nav-complaints-btn"
               onClick={() => handleNavClick('complaints')} 
-              className={`hidden 2xl:inline-block px-2.5 xl:px-3 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative whitespace-nowrap ${
+              className={`hidden xl:inline-block px-2 xl:px-2.5 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative whitespace-nowrap shrink-0 text-[11px] xl:text-xs font-semibold ${
                 currentTab === 'complaints' && !isMerchantOpen 
                   ? 'text-amber-600 font-bold bg-amber-50/80 shadow-2xs' 
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -307,35 +293,25 @@ export default function Navbar({
               )}
             </button>
 
-            {(userRole === 'manager' || userRole === 'admin') && (
-              <Link 
-                id="nav-admin-btn" 
-                href="/admin" 
-                className={`hidden xl:flex px-2.5 py-1.5 rounded-xl transition-all relative cursor-pointer outline-none focus:outline-none items-center gap-1 text-xs font-bold whitespace-nowrap ${
-                  isMerchantOpen 
-                    ? 'text-amber-700 bg-amber-100/80 border border-amber-300' 
-                    : 'text-amber-600 bg-amber-50 hover:bg-amber-100/80 border border-amber-200'
-                }`}
-              >
-                <Settings className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                <span>إدارة المتجر</span>
-                {pendingComplaintsCount > 0 && (
-                  <span 
-                    className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full animate-pulse shadow-xs shrink-0" 
-                    title={`${pendingComplaintsCount} شكاوى جديدة بانتظار المراجعة`}
-                  >
-                    {pendingComplaintsCount}
-                  </span>
-                )}
-              </Link>
-            )}
+            <button 
+              id="nav-tracker-btn" 
+              onClick={onOpenTracker} 
+              className="px-2 xl:px-2.5 py-1.5 rounded-xl text-slate-600 hover:text-[#111827] hover:bg-slate-50 transition-all cursor-pointer outline-none focus:outline-none flex items-center gap-1 whitespace-nowrap shrink-0 text-[11px] xl:text-xs font-semibold"
+            >
+              <span>طلباتي</span>
+              {userOrdersCount > 0 && (
+                <span className="bg-slate-900 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full font-mono shrink-0">
+                  {userOrdersCount}
+                </span>
+              )}
+            </button>
 
             {/* "المزيد ▾" Dropdown on lg screens (1024px-1279px) */}
-            <div className="relative xl:hidden">
+            <div className="relative xl:hidden shrink-0">
               <button
                 type="button"
                 onClick={() => setMoreMenuOpen(!moreMenuOpen)}
-                className="px-2.5 py-1.5 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all cursor-pointer flex items-center gap-1 whitespace-nowrap text-xs font-bold"
+                className="px-2 py-1.5 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all cursor-pointer flex items-center gap-1 whitespace-nowrap text-xs font-bold"
               >
                 <span>المزيد</span>
                 <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${moreMenuOpen ? 'rotate-180' : ''}`} />
@@ -376,43 +352,50 @@ export default function Navbar({
                         <span>الشكاوى والمقترحات</span>
                       </span>
                     </button>
-
-                    {(userRole === 'manager' || userRole === 'admin') && (
-                      <Link
-                        href="/admin"
-                        onClick={() => setMoreMenuOpen(false)}
-                        className="w-full text-right px-4 py-2 hover:bg-amber-50 text-amber-700 font-bold flex items-center justify-between border-t border-slate-100 mt-1 pt-2"
-                      >
-                        <span className="flex items-center gap-2">
-                          <Settings className="w-4 h-4 text-amber-600" />
-                          <span>إدارة المتجر</span>
-                        </span>
-                        {pendingComplaintsCount > 0 && (
-                          <span className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full">
-                            {pendingComplaintsCount}
-                          </span>
-                        )}
-                      </Link>
-                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
             </div>
           </nav>
 
-          {/* Left Actions: Search Bar + Account Profile + Shopping Cart */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* Left Section: Store Management + Search Bar + User Account + Shopping Cart */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5 2xl:gap-3 shrink-0" id="header-left-actions">
             
-            {/* Prominent Search Bar (Desktop: md+) */}
-            <form onSubmit={handleSearchSubmit} className="relative hidden md:block">
-              <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            {/* 1. Store Management Button (Shown for manager/admin) */}
+            {(userRole === 'manager' || userRole === 'admin') && (
+              <Link 
+                id="header-admin-btn" 
+                href="/admin" 
+                className={`flex px-2 sm:px-2.5 py-1.5 rounded-xl transition-all relative cursor-pointer outline-none focus:outline-none items-center gap-1 sm:gap-1.5 text-xs font-bold whitespace-nowrap shrink-0 shadow-2xs ${
+                  isMerchantOpen 
+                    ? 'text-amber-800 bg-amber-100/90 border border-amber-300' 
+                    : 'text-amber-700 bg-amber-50 hover:bg-amber-100/80 border border-amber-200/90'
+                }`}
+                title="لوحة إدارة المتجر"
+              >
+                <Settings className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span className="hidden sm:inline">إدارة المتجر</span>
+                {pendingComplaintsCount > 0 && (
+                  <span 
+                    className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full animate-pulse shadow-xs shrink-0" 
+                    title={`${pendingComplaintsCount} شكاوى جديدة`}
+                  >
+                    {pendingComplaintsCount}
+                  </span>
+                )}
+              </Link>
+            )}
+
+            {/* 2. Search Bar (Desktop / Tablet: md+) */}
+            <form onSubmit={handleSearchSubmit} className="relative hidden md:flex items-center shrink min-w-0">
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input 
                 id="header-search"
                 type="text" 
                 placeholder="ابحث عن المنظفات..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="bg-slate-100/80 hover:bg-slate-100 focus:bg-white border border-slate-200 rounded-full py-1.5 pr-8 pl-3 text-xs w-28 md:w-36 lg:w-44 xl:w-56 focus:w-40 md:focus:w-48 lg:focus:w-56 xl:focus:w-64 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 transition-all text-slate-800 placeholder:text-slate-400 shadow-2xs font-medium"
+                className="bg-slate-100/90 hover:bg-slate-100 focus:bg-white border border-slate-200/90 rounded-full py-1.5 pr-8 pl-7 text-xs w-28 md:w-32 lg:w-36 xl:w-44 2xl:w-52 min-w-[110px] max-w-[220px] focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-400 transition-colors text-slate-800 placeholder:text-slate-400 shadow-2xs font-medium"
                 dir="rtl"
               />
               {searchTerm && (
@@ -426,33 +409,33 @@ export default function Navbar({
               )}
             </form>
 
-            <div className="h-5 w-px bg-slate-200 hidden md:block shrink-0" />
+            <div className="h-5 w-px bg-slate-200/80 hidden md:block shrink-0" />
 
-            {/* Admin / User Sign In / Profile */}
-            <div className="flex items-center gap-2 shrink-0">
+            {/* 3. User Account Information */}
+            <div className="flex items-center gap-1.5 shrink-0" id="header-user-account">
               {checkingAuth ? (
-                <span className="text-[10px] text-slate-400 hidden sm:inline">جاري التحقق...</span>
+                <span className="text-[10px] text-slate-400 hidden sm:inline shrink-0">جاري التحقق...</span>
               ) : user ? (
-                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/80 rounded-2xl py-1 px-2">
+                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/80 rounded-2xl py-1 px-2 shrink-0">
                   {user.photoURL ? (
                     <img 
                       src={user.photoURL} 
                       alt={user.displayName || ''} 
                       referrerPolicy="no-referrer" 
-                      className="w-7 h-7 rounded-full object-cover border border-amber-300" 
+                      className="w-7 h-7 rounded-full object-cover border border-amber-300 shrink-0" 
                     />
                   ) : (
-                    <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 text-xs font-bold font-mono">
+                    <div className="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 text-xs font-bold font-mono shrink-0">
                       {user.displayName ? user.displayName.charAt(0) : 'A'}
                     </div>
                   )}
-                  <div className="hidden xl:flex flex-col text-right">
+                  <div className="hidden xl:flex flex-col text-right shrink-0">
                     <div className="flex items-center gap-1 text-[11px] font-bold text-slate-900 leading-tight">
-                      <span>{user.displayName?.split(' ')[0]}</span>
+                      <span className="truncate max-w-[90px]">{user.displayName?.split(' ')[0]}</span>
                       {userRole === 'admin' ? (
-                        <span className="bg-rose-100 text-rose-800 text-[8px] px-1.5 py-0.2 rounded-md font-bold">المدير العام</span>
+                        <span className="bg-rose-100 text-rose-800 text-[8px] px-1.5 py-0.2 rounded-md font-bold shrink-0">المدير العام</span>
                       ) : userRole === 'manager' ? (
-                        <span className="bg-amber-100 text-amber-800 text-[8px] px-1.5 py-0.2 rounded-md font-bold">مشرف</span>
+                        <span className="bg-amber-100 text-amber-800 text-[8px] px-1.5 py-0.2 rounded-md font-bold shrink-0">مشرف</span>
                       ) : null}
                     </div>
                     <button 
@@ -464,7 +447,7 @@ export default function Navbar({
                   </div>
                   <button 
                     onClick={onSignOut} 
-                    className="xl:hidden p-1 text-slate-400 hover:text-rose-500 cursor-pointer outline-none focus:outline-none"
+                    className="xl:hidden p-1 text-slate-400 hover:text-rose-500 cursor-pointer outline-none focus:outline-none shrink-0" 
                     title="تسجيل الخروج"
                   >
                     <LogOut className="w-3.5 h-3.5" />
@@ -474,33 +457,33 @@ export default function Navbar({
                 <button 
                   id="admin-portal-login-btn"
                   onClick={onOpenAuthModal}
-                  className="flex items-center gap-1.5 bg-[#111827] hover:bg-amber-600 text-white font-bold py-2 px-3 sm:px-3.5 rounded-xl text-xs transition-colors shrink-0 cursor-pointer shadow-xs outline-none focus:outline-none"
+                  className="flex items-center gap-1.5 bg-[#111827] hover:bg-amber-600 text-white font-bold py-2 px-3 sm:px-3.5 rounded-xl text-xs transition-colors shrink-0 cursor-pointer shadow-xs outline-none focus:outline-none whitespace-nowrap"
                   title="بوابة دخول الإدارة والمشرفين"
                 >
-                  <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                   <span className="hidden sm:inline">دخول الإدارة</span>
                 </button>
               )}
             </div>
 
-            {/* Shopping Cart Button with Dynamic Counter & Bounce */}
+            {/* 4. Shopping Cart Button with Outer-Corner Badge */}
             <motion.button 
               id="cart-trigger-btn"
               onClick={onOpenCart}
               animate={isCartBouncing ? { scale: [1, 1.35, 0.9, 1.15, 1], rotate: [0, -8, 8, -4, 0] } : { scale: 1, rotate: 0 }}
               transition={{ duration: 0.4 }}
-              className={`w-10 h-10 rounded-xl bg-amber-50 hover:bg-amber-100/90 text-amber-800 border border-amber-200/80 flex items-center justify-center relative cursor-pointer transition-all outline-none focus:outline-none shrink-0 shadow-2xs group ${
+              className={`w-9.5 h-9.5 2xl:w-10 2xl:h-10 rounded-xl bg-amber-50 hover:bg-amber-100/90 text-amber-800 border border-amber-200/80 flex items-center justify-center relative cursor-pointer transition-all outline-none focus:outline-none shrink-0 shadow-2xs group ${
                 isCartBouncing ? 'ring-4 ring-amber-300 ring-offset-2' : ''
               }`}
               aria-label="سلة المشتريات"
             >
               <motion.span 
                 animate={isCartBouncing ? { scale: [1, 1.45, 1] } : { scale: 1 }}
-                className="absolute -top-1.5 -right-1.5 bg-rose-600 text-white text-[10px] font-black min-w-5 h-5 px-1 flex items-center justify-center rounded-full border-2 border-white font-mono shadow-xs"
+                className="absolute -top-1.5 -left-1.5 bg-rose-600 text-white text-[10px] font-black min-w-5 h-5 px-1 flex items-center justify-center rounded-full border-2 border-white font-mono shadow-xs shrink-0"
               >
                 {cartItemsCount}
               </motion.span>
-              <ShoppingCart className="w-4.5 h-4.5 text-amber-700 group-hover:scale-105 transition-transform" />
+              <ShoppingCart className="w-4.5 h-4.5 text-amber-700 group-hover:scale-105 transition-transform shrink-0" />
             </motion.button>
           </div>
 
