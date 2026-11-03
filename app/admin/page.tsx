@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { 
   Category, 
   Product, 
+  ProductTierOffer,
   Offer, 
   OfferItem, 
   Order, 
@@ -45,6 +46,7 @@ import {
 
 // Admin Components & Modals
 import MerchantPortal from '@/components/admin/MerchantPortal';
+import { ProductFormData } from '@/components/admin/AdminProductsTab';
 import { StatsMetrics } from '@/components/admin/AdminStatsTab';
 import DeleteOrdersModal from '@/components/admin/DeleteOrdersModal';
 import FailedSyncModal from '@/components/admin/FailedSyncModal';
@@ -126,7 +128,7 @@ export default function AdminPage() {
   const [isGeneratingSeo, setIsGeneratingSeo] = useState<boolean>(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productToDelete, setProductToDelete] = useState<string | null>(null);
-  const [productForm, setProductForm] = useState({
+  const [productForm, setProductForm] = useState<ProductFormData>({
     name: '',
     code: '',
     description: '',
@@ -137,7 +139,8 @@ export default function AdminPage() {
     isAvailable: true,
     seoTitle: '',
     seoDescription: '',
-    seoKeywords: ''
+    seoKeywords: '',
+    tieredPricing: [] as ProductTierOffer[]
   });
 
   // Offers Tab State
@@ -501,6 +504,7 @@ export default function AdminPage() {
         code: productForm.code?.trim() || '',
         price: Number(productForm.price),
         isAvailable: Boolean(productForm.isAvailable),
+        tieredPricing: (productForm.tieredPricing || []).filter(t => Number(t.quantity) > 1 && Number(t.price) > 0),
         rating: editingProduct ? editingProduct.rating : 0,
         reviewsCount: editingProduct ? editingProduct.reviewsCount : 0,
         image: productForm.image || 'https://images.unsplash.com/photo-1563453392212-326f518500b1?auto=format&fit=crop&q=80&w=600'
@@ -526,7 +530,8 @@ export default function AdminPage() {
         isAvailable: true,
         seoTitle: '',
         seoDescription: '',
-        seoKeywords: ''
+        seoKeywords: '',
+        tieredPricing: []
       });
     } catch (e) {
       console.error(e);
@@ -547,7 +552,8 @@ export default function AdminPage() {
       isAvailable: prod.isAvailable,
       seoTitle: prod.seoTitle || '',
       seoDescription: prod.seoDescription || '',
-      seoKeywords: prod.seoKeywords || ''
+      seoKeywords: prod.seoKeywords || '',
+      tieredPricing: prod.tieredPricing || []
     });
     setIsProductFormOpen(true);
   };

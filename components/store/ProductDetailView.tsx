@@ -23,6 +23,8 @@ import {
 import { Product, CartItem } from '../../lib/types/store';
 import { db, auth } from '../../lib/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
+import TieredOfferSelector from './TieredOfferSelector';
+import { getProductTierPricing } from '../../lib/pricing';
 
 interface ProductDetailViewProps {
   product: Product;
@@ -81,10 +83,12 @@ export default function ProductDetailView({
     }, 2800);
   };
 
-  // Effective price (supporting White Friday discounts)
+  // Effective price & Tiered pricing calculation
   const effectivePrice = (currentProduct.isWhiteFriday && typeof currentProduct.whiteFridayPrice === 'number' && currentProduct.whiteFridayPrice > 0)
     ? currentProduct.whiteFridayPrice
     : currentProduct.price;
+
+  const pricing = getProductTierPricing(currentProduct, quantity);
 
   // Add to cart handler
   const handleAddToCart = () => {
@@ -119,7 +123,7 @@ export default function ProductDetailView({
           content_name: currentProduct.name,
           content_ids: [currentProduct.id],
           content_type: 'product',
-          value: effectivePrice * quantity,
+          value: pricing.totalPrice,
           currency: 'EGP'
         });
       }
@@ -134,11 +138,14 @@ export default function ProductDetailView({
   // Direct WhatsApp Quick Order
   const handleWhatsAppOrder = () => {
     const whatsappPhone = process.env.NEXT_PUBLIC_WHATSAPP_PHONE || '201000000000';
-    const totalOrderPrice = (effectivePrice * quantity).toFixed(2);
+    const totalOrderPrice = pricing.totalPrice.toFixed(2);
     const codeSnippet = currentProduct.code ? ` (كود: ${currentProduct.code})` : '';
     const currentUrl = typeof window !== 'undefined' ? window.location.href : '';
+    const tierInfo = pricing.isTierApplied && pricing.appliedTier && pricing.appliedTier.quantity > 1 
+      ? ` [عرض ${pricing.appliedTier.quantity} عبوات بتوفير ${pricing.savings} ج.م]` 
+      : '';
 
-    const message = `مرحباً متجر Gold Clean، أود طلب المنتج التالي:\n- المنتج: ${currentProduct.name}${codeSnippet}\n- الحجم: ${currentProduct.volume || 'الافتراضي'}\n- الكمية: ${quantity}\n- السعر الإجمالي: ${totalOrderPrice} جنيه\n- الرابط: ${currentUrl}\n\nيرجى تزويدي بتفاصيل التوصيل وتأكيد الطلب.`;
+    const message = `مرحباً متجر Gold Clean، أود طلب المنتج التالي:\n- المنتج: ${currentProduct.name}${codeSnippet}${tierInfo}\n- الحجم: ${currentProduct.volume || 'الافتراضي'}\n- الكمية: ${quantity}\n- السعر الإجمالي: ${totalOrderPrice} جنيه\n- الرابط: ${currentUrl}\n\nيرجى تزويدي بتفاصيل التوصيل وتأكيد الطلب.`;
     
     const url = `https://wa.me/${whatsappPhone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
@@ -421,6 +428,13 @@ export default function ProductDetailView({
                   </p>
                 </div>
 
+                {/* Tiered Quantity Pricing Offers Selector */}
+                <TieredOfferSelector
+                  product={currentProduct}
+                  selectedQuantity={quantity}
+                  onSelectQuantity={setQuantity}
+                />
+
                 {/* Quantity Selector */}
                 <div className="flex items-center gap-4 mb-6">
                   <span className="text-xs font-bold text-slate-700">الكمية المطلوبة:</span>
@@ -443,8 +457,15 @@ export default function ProductDetailView({
                       <Plus className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <span className="text-xs font-medium text-slate-400">
-                    الإجمالي: <strong className="text-amber-600 font-bold font-mono">{(effectivePrice * quantity).toFixed(2)}</strong> جنيه
+                  <span className="text-xs font-medium text-slate-500 flex items-center gap-1.5 flex-wrap">
+                    <span>الإجمالي:</span>
+                    <strong className="text-amber-600 font-bold font-mono text-sm">{pricing.totalPrice.toFixed(2)}</strong>
+                    <span>جنيه</span>
+                    {pricing.savings > 0 && (
+                      <span className="text-[10px] font-black text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full mr-1">
+                        وفرت {pricing.savings} ج.م ({pricing.savingsPercent}%) 🔥
+                      </span>
+                    )}
                   </span>
                 </div>
 

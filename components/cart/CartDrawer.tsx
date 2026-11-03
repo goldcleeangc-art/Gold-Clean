@@ -4,6 +4,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ShoppingCart, X, Sparkles, ShoppingBag, Trash2, Truck, Minus, Plus } from 'lucide-react';
 import { CartItem, Offer } from '../../lib/types/store';
+import { getProductTierPricing } from '../../lib/pricing';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -111,81 +112,118 @@ export default function CartDrawer({
               </button>
             </div>
           ) : (
-            cart.map((item) => (
-              <div 
-                key={item.product.id} 
-                className="flex gap-4 p-4 rounded-2xl bg-white border border-slate-200/80 hover:border-slate-300 shadow-xs relative group transition-all"
-              >
-                <div className="w-20 h-20 rounded-xl bg-slate-50 overflow-hidden border border-slate-100 shrink-0">
-                  <img src={item.product.image} className="w-full h-full object-cover" alt={item.product.name} />
-                </div>
+            cart.map((item) => {
+              const pricing = !item.isOffer ? getProductTierPricing(item.product, item.quantity) : null;
+              const itemTotal = item.isOffer 
+                ? (item.product.price * item.quantity) 
+                : (pricing ? pricing.totalPrice : (item.product.price * item.quantity));
 
-                <div className="flex-1 min-w-0 flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-start justify-between gap-2">
-                      <h5 className="font-bold text-xs sm:text-sm text-slate-900 line-clamp-1">{item.product.name}</h5>
-                      <button 
-                        onClick={() => onRemoveItem(item.product.id)} 
-                        className="text-slate-300 hover:text-rose-600 transition-colors p-1 cursor-pointer"
-                        title="حذف من السلة"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+              return (
+                <div 
+                  key={item.product.id} 
+                  className="flex flex-col p-4 rounded-2xl bg-white border border-slate-200/80 hover:border-slate-300 shadow-xs relative group transition-all space-y-2.5"
+                >
+                  <div className="flex gap-4">
+                    <div className="w-20 h-20 rounded-xl bg-slate-50 overflow-hidden border border-slate-100 shrink-0">
+                      <img src={item.product.image} className="w-full h-full object-cover" alt={item.product.name} />
                     </div>
-                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      {item.product.volume && (
-                        <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md font-medium">
-                          {item.product.volume}
+
+                    <div className="flex-1 min-w-0 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-start justify-between gap-2">
+                          <h5 className="font-bold text-xs sm:text-sm text-slate-900 line-clamp-1">{item.product.name}</h5>
+                          <button 
+                            onClick={() => onRemoveItem(item.product.id)} 
+                            className="text-slate-300 hover:text-rose-600 transition-colors p-1 cursor-pointer"
+                            title="حذف من السلة"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          {item.product.volume && (
+                            <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md font-medium">
+                              {item.product.volume}
+                            </span>
+                          )}
+                          {item.product.code && (
+                            <span className="text-[9px] font-mono text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 font-bold">
+                              كود: {item.product.code}
+                            </span>
+                          )}
+                          {item.product.isWhiteFriday && (
+                            <span className="text-[9px] font-bold text-amber-800 bg-amber-100/90 border border-amber-300 px-1.5 py-0.5 rounded flex items-center gap-1">
+                              <Sparkles className="w-2.5 h-2.5 text-amber-600 animate-pulse" />
+                              <span>{item.product.whiteFridayBadge || 'عروض الجمعة البيضاء'}</span>
+                            </span>
+                          )}
+                          {pricing?.isTierApplied && pricing.appliedTier && pricing.appliedTier.quantity > 1 && (
+                            <span className="text-[9px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-300 px-1.5 py-0.5 rounded flex items-center gap-1">
+                              <span>{pricing.appliedTier.badge || `عرض ${pricing.appliedTier.quantity} عبوات`}</span>
+                              <span>(وفرت {pricing.savings} ج.م)</span>
+                            </span>
+                          )}
+                          {item.isOffer && (item.offerDetails?.isFreeShipping || offers.find(o => o.id === (item.offerDetails?.offerId || item.product.id.replace('offer-', '')))?.isFreeShipping) && (
+                            <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
+                              <Truck className="w-2.5 h-2.5" />
+                              <span>شحن مجاني</span>
+                            </span>
+                          )}
+                          <span className="text-[11px] text-slate-500 font-bold">
+                            {pricing?.isTierApplied && pricing.appliedTier && pricing.appliedTier.quantity > 1 ? (
+                              <span>سعر العبوة بالعرض: <strong className="text-emerald-700 font-mono">{pricing.unitPrice.toFixed(1)}</strong> ج.م</span>
+                            ) : (
+                              <span>سعر القطعة: {item.product.price} جنيه</span>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100">
+                        {/* Quantity selector */}
+                        <div className="flex items-center gap-2 border border-slate-200 bg-slate-50 rounded-xl px-2 py-1">
+                          <button 
+                            onClick={() => onUpdateQty(item.product.id, -1)} 
+                            className="w-6 h-6 flex items-center justify-center text-slate-600 hover:text-blue-600 hover:bg-white rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <span className="text-xs font-black text-slate-900 px-2 min-w-[20px] text-center font-mono">{item.quantity}</span>
+                          <button 
+                            onClick={() => onUpdateQty(item.product.id, 1)} 
+                            className="w-6 h-6 flex items-center justify-center text-slate-600 hover:text-blue-600 hover:bg-white rounded-lg transition-colors cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        {/* Item total */}
+                        <div className="text-left">
+                          <span className="text-xs font-extrabold text-blue-700 font-mono">{itemTotal.toFixed(2)} جنيه</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Next Tier Upsell Nudge */}
+                  {pricing?.nextTier && (
+                    <div 
+                      onClick={() => onUpdateQty(item.product.id, pricing.nextTier!.neededQty)}
+                      className="bg-amber-50/80 hover:bg-amber-100/80 border border-amber-200/80 rounded-xl p-2 flex items-center justify-between gap-2 text-[10px] text-amber-900 cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0 animate-pulse" />
+                        <span>
+                          أضف <strong className="font-bold">{pricing.nextTier.neededQty}</strong> عبوة أخرى لتفعيل عرض <strong className="font-bold">{pricing.nextTier.tier.quantity} عبوات</strong> ووفر <strong className="font-bold font-mono">{pricing.nextTier.additionalSavings} ج.م</strong> إضافية!
                         </span>
-                      )}
-                      {item.product.code && (
-                        <span className="text-[9px] font-mono text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 font-bold">
-                          كود: {item.product.code}
-                        </span>
-                      )}
-                      {item.product.isWhiteFriday && (
-                        <span className="text-[9px] font-bold text-amber-800 bg-amber-100/90 border border-amber-300 px-1.5 py-0.5 rounded flex items-center gap-1">
-                          <Sparkles className="w-2.5 h-2.5 text-amber-600 animate-pulse" />
-                          <span>{item.product.whiteFridayBadge || 'عروض الجمعة البيضاء'}</span>
-                        </span>
-                      )}
-                      {item.isOffer && (item.offerDetails?.isFreeShipping || offers.find(o => o.id === (item.offerDetails?.offerId || item.product.id.replace('offer-', '')))?.isFreeShipping) && (
-                        <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 flex items-center gap-1">
-                          <Truck className="w-2.5 h-2.5" />
-                          <span>شحن مجاني</span>
-                        </span>
-                      )}
-                      <span className="text-[11px] text-slate-500 font-bold">
-                        سعر القطعة: {item.product.price} جنيه
+                      </div>
+                      <span className="shrink-0 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black px-2 py-0.5 rounded-md text-[9px]">
+                        + تفعيل
                       </span>
                     </div>
-                  </div>
-
-                  <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100">
-                    {/* Quantity selector */}
-                    <div className="flex items-center gap-2 border border-slate-200 bg-slate-50 rounded-xl px-2 py-1">
-                      <button 
-                        onClick={() => onUpdateQty(item.product.id, -1)} 
-                        className="w-6 h-6 flex items-center justify-center text-slate-600 hover:text-blue-600 hover:bg-white rounded-lg transition-colors cursor-pointer"
-                      >
-                        <Minus className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="text-xs font-black text-slate-900 px-2 min-w-[20px] text-center font-mono">{item.quantity}</span>
-                      <button 
-                        onClick={() => onUpdateQty(item.product.id, 1)} 
-                        className="w-6 h-6 flex items-center justify-center text-slate-600 hover:text-blue-600 hover:bg-white rounded-lg transition-colors cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    {/* Item total */}
-                    <div className="text-left">
-                      <span className="text-xs font-extrabold text-blue-700 font-mono">{(item.product.price * item.quantity).toFixed(2)} جنيه</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
 

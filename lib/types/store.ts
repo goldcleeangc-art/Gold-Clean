@@ -6,6 +6,12 @@ export interface Category {
   key: string;
 }
 
+export interface ProductTierOffer {
+  quantity: number;   // عدد العبوات / القطع (مثلاً 2، 3، 4)
+  price: number;      // إجمالي السعر لهذه الكمية (ج.م)
+  badge?: string;     // شارة مميزة (مثلاً: الأكثر طلباً 🔥)
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -29,6 +35,8 @@ export interface Product {
   originalPrice?: number;
   whiteFridayImage?: string;
   originalImage?: string;
+  // Tiered / Quantity volume pricing
+  tieredPricing?: ProductTierOffer[];
 }
 
 export interface WhiteFridaySettings {

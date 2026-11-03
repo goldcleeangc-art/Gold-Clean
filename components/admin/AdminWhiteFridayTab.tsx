@@ -23,10 +23,11 @@ import {
   Percent,
   ImageIcon
 } from 'lucide-react';
-import { Product, Category, WhiteFridaySettings } from '../../lib/types/store';
+import { Product, Category, WhiteFridaySettings, ProductTierOffer } from '../../lib/types/store';
 import { db } from '../../lib/firebase';
 import { doc, updateDoc, setDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import ImageUploadField from './ImageUploadField';
+import TieredPricingManager from './TieredPricingManager';
 
 interface AdminWhiteFridayTabProps {
   products: Product[];
@@ -56,6 +57,7 @@ export default function AdminWhiteFridayTab({
   const [existingWhiteFridayPrice, setExistingWhiteFridayPrice] = useState<number>(0);
   const [existingBadge, setExistingBadge] = useState<string>('عرض الجمعة البيضاء 🔥');
   const [existingImage, setExistingImage] = useState<string>('');
+  const [existingTiers, setExistingTiers] = useState<ProductTierOffer[]>([]);
   const [isAddingExisting, setIsAddingExisting] = useState<boolean>(false);
 
   // 3. Create brand-new product state
@@ -70,7 +72,8 @@ export default function AdminWhiteFridayTab({
     volume: '1 لتر',
     image: '',
     description: '',
-    badge: 'عرض الجمعة البيضاء 🔥'
+    badge: 'عرض الجمعة البيضاء 🔥',
+    tieredPricing: [] as ProductTierOffer[]
   });
 
   // 4. Edit existing enrolled product state
@@ -78,6 +81,7 @@ export default function AdminWhiteFridayTab({
   const [editPrice, setEditPrice] = useState<number>(0);
   const [editBadge, setEditBadge] = useState<string>('');
   const [editImage, setEditImage] = useState<string>('');
+  const [editTiers, setEditTiers] = useState<ProductTierOffer[]>([]);
   const [isSavingEdit, setIsSavingEdit] = useState<boolean>(false);
 
   // 5. Product to remove from White Friday
@@ -161,12 +165,14 @@ export default function AdminWhiteFridayTab({
     try {
       const prodRef = doc(db, 'products', selectedProductId);
       const chosenImage = existingImage.trim() || currentSelectedProduct.image;
+      const validTiers = existingTiers.filter(t => Number(t.quantity) > 1 && Number(t.price) > 0);
       const updateData: any = {
         isWhiteFriday: true,
         whiteFridayPrice: Number(existingWhiteFridayPrice),
         whiteFridayBadge: existingBadge.trim() || 'عرض الجمعة البيضاء 🔥',
         originalPrice: currentSelectedProduct.price,
         whiteFridayImage: chosenImage,
+        tieredPricing: validTiers,
         updatedAt: serverTimestamp()
       };
 
@@ -182,6 +188,7 @@ export default function AdminWhiteFridayTab({
       setExistingWhiteFridayPrice(0);
       setExistingBadge('عرض الجمعة البيضاء 🔥');
       setExistingImage('');
+      setExistingTiers([]);
     } catch (err) {
       console.error('Error enrolling product into White Friday:', err);
       alert('حدث خطأ أثناء إضافة المنتج إلى الجمعة البيضاء.');
@@ -206,6 +213,7 @@ export default function AdminWhiteFridayTab({
     try {
       const prodCollection = collection(db, 'products');
       const finalImage = newProductForm.image.trim() || 'https://images.unsplash.com/photo-1585421514738-01798e348b17?auto=format&fit=crop&q=80&w=600';
+      const validTiers = (newProductForm.tieredPricing || []).filter(t => Number(t.quantity) > 1 && Number(t.price) > 0);
       await addDoc(prodCollection, {
         name: newProductForm.name.trim(),
         code: newProductForm.code.trim() || `WF${Math.floor(Math.random() * 900) + 100}`,
@@ -217,6 +225,7 @@ export default function AdminWhiteFridayTab({
         volume: newProductForm.volume.trim() || '1 لتر',
         image: finalImage,
         whiteFridayImage: finalImage,
+        tieredPricing: validTiers,
         description: newProductForm.description.trim() || 'منتج عالي التركيز والجودة من مصنع جولد كلين بعرض حصري للجمعة البيضاء.',
         isAvailable: true,
         rating: 5,
@@ -234,7 +243,8 @@ export default function AdminWhiteFridayTab({
         volume: '1 لتر',
         image: '',
         description: '',
-        badge: 'عرض الجمعة البيضاء 🔥'
+        badge: 'عرض الجمعة البيضاء 🔥',
+        tieredPricing: []
       });
     } catch (err) {
       console.error('Error creating new White Friday product:', err);
@@ -253,14 +263,17 @@ export default function AdminWhiteFridayTab({
     try {
       const prodRef = doc(db, 'products', editingItem.id);
       const finalImage = editImage.trim() || editingItem.whiteFridayImage || editingItem.image;
+      const validTiers = editTiers.filter(t => Number(t.quantity) > 1 && Number(t.price) > 0);
       await updateDoc(prodRef, {
         whiteFridayPrice: Number(editPrice),
         whiteFridayBadge: editBadge.trim(),
         whiteFridayImage: finalImage,
         image: finalImage,
+        tieredPricing: validTiers,
         updatedAt: serverTimestamp()
       });
       setEditingItem(null);
+      setEditTiers([]);
     } catch (err) {
       console.error('Error updating White Friday product:', err);
       alert('حدث خطأ أثناء تعديل المنتج.');
@@ -323,6 +336,7 @@ export default function AdminWhiteFridayTab({
                     setSelectedProductId(firstProd.id);
                     setExistingWhiteFridayPrice(Math.round(firstProd.price * 0.7));
                     setExistingImage(firstProd.whiteFridayImage || firstProd.image || '');
+                    setExistingTiers(firstProd.tieredPricing || []);
                   }
                 }}
                 className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black px-4 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-amber-500/20 transition-all cursor-pointer hover:scale-[1.02]"
@@ -558,6 +572,7 @@ export default function AdminWhiteFridayTab({
                   setSelectedProductId(firstProd.id);
                   setExistingWhiteFridayPrice(Math.round(firstProd.price * 0.7));
                   setExistingImage(firstProd.whiteFridayImage || firstProd.image || '');
+                  setExistingTiers(firstProd.tieredPricing || []);
                 }
               }}
               className="bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100 font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all cursor-pointer"
@@ -655,6 +670,15 @@ export default function AdminWhiteFridayTab({
                           </span>
                         )}
                       </div>
+
+                      {prod.tieredPricing && prod.tieredPricing.length > 0 && (
+                        <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/80 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                            <span>📦</span>
+                            <span>{prod.tieredPricing.length} عروض كميات وباقات</span>
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -666,6 +690,7 @@ export default function AdminWhiteFridayTab({
                         setEditPrice(prod.whiteFridayPrice || prod.price);
                         setEditBadge(prod.whiteFridayBadge || 'عرض الجمعة البيضاء 🔥');
                         setEditImage(prod.whiteFridayImage || prod.image || '');
+                        setEditTiers(prod.tieredPricing || []);
                       }}
                       className="text-xs font-bold text-slate-600 hover:text-amber-700 bg-slate-50 hover:bg-amber-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
                     >
@@ -696,7 +721,7 @@ export default function AdminWhiteFridayTab({
       {/* MODAL 1: ADD EXISTING PRODUCT */}
       {isAddExistingOpen && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4" dir="rtl">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-4 border-b border-slate-150 mb-4">
               <div className="flex items-center gap-2">
                 <Flame className="w-5 h-5 text-amber-500" />
@@ -731,6 +756,7 @@ export default function AdminWhiteFridayTab({
                       if (p) {
                         setExistingWhiteFridayPrice(Math.round(p.price * 0.7));
                         setExistingImage(p.whiteFridayImage || p.image || '');
+                        setExistingTiers(p.tieredPricing || []);
                       }
                     }}
                     className="w-full text-xs font-medium px-4 py-2.5 rounded-xl border border-slate-200 focus:border-amber-500 outline-none"
@@ -815,6 +841,15 @@ export default function AdminWhiteFridayTab({
                     originalValue={currentSelectedProduct?.image}
                     onResetToOriginal={() => currentSelectedProduct && setExistingImage(currentSelectedProduct.image)}
                     helpText="يمكنك ترك الصورة الحالية للمنتج أو رفع صورة ترويجية مخصصة لهذا العرض (تخزن كنص في قاعدة البيانات)."
+                  />
+                </div>
+
+                {/* Tiered / Volume Pricing Manager */}
+                <div className="pt-2 border-t border-slate-150">
+                  <TieredPricingManager
+                    basePrice={existingWhiteFridayPrice || currentSelectedProduct?.price || 0}
+                    tiers={existingTiers}
+                    onChange={setExistingTiers}
                   />
                 </div>
 
@@ -987,6 +1022,15 @@ export default function AdminWhiteFridayTab({
                 />
               </div>
 
+              {/* Volume / Tiered Pricing Offers */}
+              <div className="pt-2 border-t border-slate-150">
+                <TieredPricingManager
+                  basePrice={newProductForm.whiteFridayPrice || 0}
+                  tiers={newProductForm.tieredPricing}
+                  onChange={(t) => setNewProductForm(prev => ({ ...prev, tieredPricing: t }))}
+                />
+              </div>
+
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-150">
                 <button
                   type="button"
@@ -1065,6 +1109,15 @@ export default function AdminWhiteFridayTab({
                   originalValue={editingItem.originalImage || editingItem.image}
                   onResetToOriginal={() => setEditImage(editingItem.originalImage || editingItem.image)}
                   helpText="ارفع صورة جديدة من جهازك أو ضع رابط ويب لتخزينها في قاعدة البيانات."
+                />
+              </div>
+
+              {/* Volume / Tiered Pricing Offers */}
+              <div className="pt-2 border-t border-slate-150">
+                <TieredPricingManager
+                  basePrice={editPrice || editingItem.price || 0}
+                  tiers={editTiers}
+                  onChange={setEditTiers}
                 />
               </div>
 

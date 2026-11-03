@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { CartItem, Product, Offer } from '../lib/types/store';
 import { trackAddToCartPixel } from '../lib/pixel';
+import { getProductTierPricing } from '../lib/pricing';
 
 export function useCart(products: Product[], offers: Offer[]) {
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -59,9 +60,10 @@ export function useCart(products: Product[], offers: Offer[]) {
     }, 850);
   };
 
-  const handleAddToCart = (product: Product, e?: React.MouseEvent) => {
+  const handleAddToCart = (product: Product, e?: React.MouseEvent, quantityToAdd = 1) => {
     triggerFlyAnimation(e);
     const wasCartEmpty = cart.length === 0;
+    const addQty = Math.max(1, quantityToAdd);
 
     // Apply White Friday discount price and custom offer image if active on this product
     const effectiveProduct: Product = (product.isWhiteFriday && typeof product.whiteFridayPrice === 'number' && product.whiteFridayPrice > 0)
@@ -77,14 +79,15 @@ export function useCart(products: Product[], offers: Offer[]) {
     const newCart = [...cart];
 
     if (existingIdx > -1) {
-      newCart[existingIdx].quantity += 1;
+      newCart[existingIdx].quantity += addQty;
       newCart[existingIdx].product = effectiveProduct;
     } else {
-      newCart.push({ product: effectiveProduct, quantity: 1 });
+      newCart.push({ product: effectiveProduct, quantity: addQty });
     }
     saveCart(newCart);
 
-    setAddedItemName(effectiveProduct.name);
+    const displayName = addQty > 1 ? `${effectiveProduct.name} (${addQty} عبوات)` : effectiveProduct.name;
+    setAddedItemName(displayName);
     setTimeout(() => setAddedItemName(null), 2500);
     if (wasCartEmpty) setIsCartOpen(true);
 
@@ -157,7 +160,13 @@ export function useCart(products: Product[], offers: Offer[]) {
   };
 
   const subtotal = useMemo(() => {
-    return cart.reduce((sum, item) => sum + (item.product.price * item.quantity), 0);
+    return cart.reduce((sum, item) => {
+      if (item.isOffer) {
+        return sum + (item.product.price * item.quantity);
+      }
+      const pricing = getProductTierPricing(item.product, item.quantity);
+      return sum + pricing.totalPrice;
+    }, 0);
   }, [cart]);
 
   const hasFreeShippingOffer = useMemo(() => {

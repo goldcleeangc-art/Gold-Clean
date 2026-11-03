@@ -1,8 +1,9 @@
 'use client';
 
 import React from 'react';
-import { PlusCircle, Sparkles, Edit, Trash2 } from 'lucide-react';
-import { Product, Category } from '../../lib/types/store';
+import { PlusCircle, Sparkles, Edit, Trash2, Layers } from 'lucide-react';
+import { Product, Category, ProductTierOffer } from '../../lib/types/store';
+import TieredPricingManager from './TieredPricingManager';
 
 export interface ProductFormData {
   name: string;
@@ -16,6 +17,7 @@ export interface ProductFormData {
   seoTitle: string;
   seoDescription: string;
   seoKeywords: string;
+  tieredPricing?: ProductTierOffer[];
 }
 
 interface AdminProductsTabProps {
@@ -158,6 +160,13 @@ export default function AdminProductsTab({
               </select>
             </div>
           </div>
+
+          {/* Tiered / Volume Quantity Offers */}
+          <TieredPricingManager
+            basePrice={productForm.price}
+            tiers={productForm.tieredPricing || []}
+            onChange={(tiers) => setProductForm({ ...productForm, tieredPricing: tiers })}
+          />
 
           <div>
             <label className="block text-[10px] text-slate-500 mb-1">صورة المنظف (رفع ملف أو رابط ويب)</label>
@@ -316,6 +325,12 @@ export default function AdminProductsTab({
                 <span className="text-[10px] text-slate-400 block mt-0.5">
                   السعر: {p.price} جنيه • متوفر: {p.isAvailable ? 'نعم' : 'لا'}
                 </span>
+                {p.tieredPricing && p.tieredPricing.length > 0 && (
+                  <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded mt-1">
+                    <Layers className="w-2.5 h-2.5 text-amber-600" />
+                    <span>عروض كمية ({p.tieredPricing.length})</span>
+                  </span>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">

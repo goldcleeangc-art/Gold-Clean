@@ -10,6 +10,7 @@ import {
 } from '@/lib/shipping';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { Order, OrderItem, ShippingInfo } from '@/lib/types/store';
+import { getProductTierPricing } from '@/lib/pricing';
 
 // Helper to extract clean SKU code from productCode or text
 function extractSkuCode(rawCode?: any, rawName?: any, rawId?: any, fallbackIndex: number = 1): string {
@@ -210,15 +211,18 @@ export async function POST(req: NextRequest) {
           );
         }
 
-        // Authoritative verified product price (supporting White Friday discount pricing)
-        const verifiedProdPrice = (prodData.isWhiteFriday && typeof prodData.whiteFridayPrice === 'number' && prodData.whiteFridayPrice > 0)
-          ? Math.max(0, Number(prodData.whiteFridayPrice))
-          : Math.max(0, Number(prodData.price) || 0);
+        // Authoritative verified product price (supporting White Friday discount pricing & tiered volume pricing)
+        const pricing = getProductTierPricing(prodData, qty);
+        const verifiedProdPrice = Math.max(0, pricing.unitPrice);
         const verifiedWeight = parseProductWeight(prodData);
+
+        const displayName = pricing.isTierApplied && pricing.appliedTier && pricing.appliedTier.quantity > 1
+          ? `${prodData.name} (عرض ${qty} عبوات${pricing.appliedTier.badge ? ` - ${pricing.appliedTier.badge}` : ''})`
+          : (prodData.name || 'منتج');
 
         verifiedOrderItems.push({
           productId: rawId,
-          productName: prodData.name || 'منتج',
+          productName: displayName,
           productCode: prodData.code || '',
           quantity: qty,
           price: verifiedProdPrice,

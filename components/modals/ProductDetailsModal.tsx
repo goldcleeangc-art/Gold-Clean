@@ -1,9 +1,11 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Star, ShoppingCart, Link2, Check, ExternalLink } from 'lucide-react';
 import { Product, Category } from '../../lib/types/store';
+import TieredOfferSelector from '../store/TieredOfferSelector';
+import { getProductTierPricing } from '../../lib/pricing';
 
 interface ProductDetailsModalProps {
   isOpen: boolean;
@@ -12,7 +14,7 @@ interface ProductDetailsModalProps {
   categories: Category[];
   user: any;
   onRateProduct: (product: Product, star: number) => void;
-  onAddToCart: (product: Product, e: React.MouseEvent) => void;
+  onAddToCart: (product: Product, e: React.MouseEvent, quantity?: number) => void;
   onCopyLink: (id: string) => void;
   copiedLinkId: string | null;
 }
@@ -28,7 +30,15 @@ export default function ProductDetailsModal({
   onCopyLink,
   copiedLinkId
 }: ProductDetailsModalProps) {
+  const [selectedQuantity, setSelectedQuantity] = useState<number>(1);
+
+  useEffect(() => {
+    setSelectedQuantity(1);
+  }, [product?.id]);
+
   if (!isOpen || !product) return null;
+
+  const pricing = getProductTierPricing(product, selectedQuantity);
 
   return (
     <AnimatePresence>
@@ -116,6 +126,13 @@ export default function ProductDetailsModal({
             </div>
           </div>
 
+          {/* Tiered Quantity Pricing Offers Selector */}
+          <TieredOfferSelector
+            product={product}
+            selectedQuantity={selectedQuantity}
+            onSelectQuantity={setSelectedQuantity}
+          />
+
           <div className="prose prose-sm md:prose-base text-slate-600 mb-8 max-w-none">
             <h3 className="text-base font-bold text-slate-900 mb-2">وصف المنظف</h3>
             <p className="leading-relaxed whitespace-pre-wrap">{product.description}</p>
@@ -174,7 +191,7 @@ export default function ProductDetailsModal({
           </div>
           <button
             disabled={!product.isAvailable}
-            onClick={(e) => onAddToCart(product, e)}
+            onClick={(e) => onAddToCart(product, e, selectedQuantity)}
             className={`flex-1 flex items-center justify-center gap-2 py-3 px-6 rounded-xl font-bold text-sm transition-all focus:ring-4 focus:ring-blue-100 outline-none cursor-pointer
               ${!product.isAvailable 
                 ? 'bg-slate-200 text-slate-400 cursor-not-allowed' 
@@ -182,7 +199,11 @@ export default function ProductDetailsModal({
           >
             <ShoppingCart className="w-5 h-5" />
             <span>
-              {!product.isAvailable ? 'المنتج غير متوفر' : 'أضف إلى سلة التسوق'}
+              {!product.isAvailable 
+                ? 'المنتج غير متوفر' 
+                : selectedQuantity > 1 
+                  ? `أضف ${selectedQuantity} عبوات (${pricing.totalPrice.toFixed(0)} ج.م)` 
+                  : 'أضف إلى سلة التسوق'}
             </span>
           </button>
         </div>
