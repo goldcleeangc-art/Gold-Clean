@@ -125,7 +125,11 @@ export default function CartDrawer({
                 >
                   <div className="flex gap-4">
                     <div className="w-20 h-20 rounded-xl bg-slate-50 overflow-hidden border border-slate-100 shrink-0">
-                      <img src={item.product.image} className="w-full h-full object-cover" alt={item.product.name} />
+                      <img 
+                        src={(item.product.tieredPricing?.find(t => t.quantity === item.quantity)?.image) || ((item.product.isWhiteFriday && item.product.whiteFridayImage) ? item.product.whiteFridayImage : item.product.image)} 
+                        className="w-full h-full object-cover" 
+                        alt={item.product.name} 
+                      />
                     </div>
 
                     <div className="flex-1 min-w-0 flex flex-col justify-between">

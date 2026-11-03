@@ -1,8 +1,22 @@
 'use client';
 
-import React from 'react';
-import { Plus, Trash2, Sparkles, Layers, Check, AlertCircle, TrendingDown, Tag } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { 
+  Plus, 
+  Trash2, 
+  Sparkles, 
+  Layers, 
+  Check, 
+  AlertCircle, 
+  Tag, 
+  Upload, 
+  Image as ImageIcon, 
+  Loader2, 
+  X,
+  Link as LinkIcon 
+} from 'lucide-react';
 import { ProductTierOffer } from '../../lib/types/store';
+import { compressImageFile } from '../../lib/utils';
 
 interface TieredPricingManagerProps {
   basePrice: number;
@@ -18,8 +32,12 @@ export default function TieredPricingManager({
   accentColor = 'amber'
 }: TieredPricingManagerProps) {
   const currentBase = Number(basePrice) || 0;
+  const fileInputRefs = useRef<{ [key: number]: HTMLInputElement | null }>({});
+  const [uploadingIndex, setUploadingIndex] = useState<number | null>(null);
+  const [showUrlInputIndex, setShowUrlInputIndex] = useState<number | null>(null);
+  const [tempUrl, setTempUrl] = useState<string>('');
 
-  const handleAddTier = (quantity: number, price: number, badge = '') => {
+  const handleAddTier = (quantity: number, price: number, badge = '', image = '') => {
     // Avoid duplicate quantity
     if (tiers.some(t => t.quantity === quantity)) {
       alert(`يوجد بالفعل عرض محدد للكمية (${quantity} عبوة). يمكنك تعديله مباشرة.`);
@@ -31,7 +49,8 @@ export default function TieredPricingManager({
       {
         quantity,
         price,
-        badge: badge || (quantity === 2 ? 'الأكثر طلباً 🔥' : quantity === 3 ? 'أفضل توفير 👑' : 'عرض خاص ⭐')
+        badge: badge || (quantity === 2 ? 'الأكثر طلباً 🔥' : quantity === 3 ? 'أفضل توفير 👑' : 'عرض خاص ⭐'),
+        image: image || ''
       }
     ].sort((a, b) => a.quantity - b.quantity);
 
@@ -51,6 +70,28 @@ export default function TieredPricingManager({
 
   const handleRemoveTier = (index: number) => {
     onChange(tiers.filter((_, i) => i !== index));
+  };
+
+  // Upload image for a specific tier
+  const handleFileSelectForTier = async (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert('يرجى اختيار ملف صورة صالح (JPG, PNG, WebP).');
+      return;
+    }
+
+    setUploadingIndex(index);
+    try {
+      const base64 = await compressImageFile(file, 600, 600, 0.7);
+      handleUpdateTier(index, 'image', base64);
+    } catch (err: any) {
+      console.error('Tier image compression error:', err);
+      alert('حدث خطأ أثناء معالجة صورة الباقة.');
+    } finally {
+      setUploadingIndex(null);
+      if (e.target) e.target.value = '';
+    }
   };
 
   // Preset calculation
@@ -80,7 +121,7 @@ export default function TieredPricingManager({
               </span>
             </h4>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              حدد أسعاراً خاصة وتخفيضات تصاعدية عند شراء أكثر من عبوة لتشجيع العميل على زيادة كمية الطلب.
+              حدد أسعاراً خاصة، تخفيضات، وصوراً مميزة عند شراء أكثر من عبوة لتشجيع العميل على رفع قيمة سلة مشترياته.
             </p>
           </div>
         </div>
@@ -140,11 +181,11 @@ export default function TieredPricingManager({
             لم تقم بإضافة عروض كميات لهذا المنتج بعد
           </p>
           <p className="text-[11px] text-slate-500 max-w-md mx-auto">
-            يمكنك الضغط على أحد العروض السريعة بالأعلى لتطبيق خصومات جاهزة فوراً، أو إضافة مستوى مخصص بالأسفل.
+            يمكنك الضغط على أحد العروض السريعة بالأعلى لتطبيق خصومات جاهزة فوراً، ثم رفع صورة مخصصة لكل باقة إن أردت.
           </p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3.5">
           {tiers.map((tier, idx) => {
             const qty = Math.max(1, tier.quantity || 1);
             const price = Math.max(0, tier.price || 0);
@@ -247,6 +288,143 @@ export default function TieredPricingManager({
                       onChange={(e) => handleUpdateTier(idx, 'badge', e.target.value)}
                       placeholder="مثال: الأكثر طلباً 🔥"
                       className="w-full text-xs font-medium px-3.5 py-2 rounded-xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none text-slate-800"
+                    />
+                  </div>
+                </div>
+
+                {/* BUNDLE IMAGE UPLOAD SECTION */}
+                <div className="pt-2.5 pb-1 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4 text-amber-600 shrink-0" />
+                    <div>
+                      <span className="text-xs font-bold text-slate-800 block">
+                        صورة خاصة بهذه الباقة (اختياري):
+                      </span>
+                      <span className="text-[10px] text-slate-400 block">
+                        ارفع صورة تعبر عن الباقة (مثلاً العبوتين معاً) تظهر تلقائياً للعميل عند اختيارها.
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-start sm:justify-end gap-2 flex-wrap">
+                    {tier.image ? (
+                      <div className="flex items-center gap-2.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
+                        <div className="w-12 h-12 rounded-lg bg-white border border-slate-200 overflow-hidden shrink-0 flex items-center justify-center p-0.5">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img 
+                            src={tier.image} 
+                            alt="صورة الباقة" 
+                            className="w-full h-full object-contain rounded" 
+                          />
+                        </div>
+
+                        <div className="text-right">
+                          <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1">
+                            <Check className="w-3 h-3 text-emerald-600" />
+                            <span>صورة الباقة جاهزة</span>
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono block">
+                            تظهر عند تحديد {qty} عبوات
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 mr-2">
+                          <button
+                            type="button"
+                            onClick={() => fileInputRefs.current[idx]?.click()}
+                            disabled={uploadingIndex === idx}
+                            className="text-[11px] font-bold text-amber-900 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-300 transition-colors cursor-pointer shadow-2xs"
+                          >
+                            تغيير
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateTier(idx, 'image', '')}
+                            className="text-[11px] font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg border border-rose-200 transition-colors cursor-pointer shadow-2xs"
+                          >
+                            حذف
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => fileInputRefs.current[idx]?.click()}
+                          disabled={uploadingIndex === idx}
+                          className="text-xs font-bold text-amber-950 bg-amber-50 hover:bg-amber-100 border border-dashed border-amber-300 hover:border-amber-400 px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
+                        >
+                          {uploadingIndex === idx ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                              <span>جاري معالجة الصورة...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-3.5 h-3.5 text-amber-700" />
+                              <span>+ رفع صورة للباقة من الجهاز</span>
+                            </>
+                          )}
+                        </button>
+
+                        {showUrlInputIndex === idx ? (
+                          <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-2 py-1 shadow-2xs">
+                            <input
+                              type="url"
+                              value={tempUrl}
+                              onChange={(e) => setTempUrl(e.target.value)}
+                              placeholder="https://..."
+                              className="text-xs font-mono px-2 py-0.5 outline-none w-36 sm:w-44 text-left"
+                              dir="ltr"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (tempUrl.trim()) {
+                                  handleUpdateTier(idx, 'image', tempUrl.trim());
+                                }
+                                setTempUrl('');
+                                setShowUrlInputIndex(null);
+                              }}
+                              className="text-[10px] font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 px-2 py-1 rounded-md cursor-pointer"
+                            >
+                              حفظ
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTempUrl('');
+                                setShowUrlInputIndex(null);
+                              }}
+                              className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowUrlInputIndex(idx);
+                              setTempUrl('');
+                            }}
+                            className="text-[11px] font-bold text-slate-500 hover:text-slate-800 underline cursor-pointer flex items-center gap-1"
+                          >
+                            <LinkIcon className="w-3 h-3 text-slate-400" />
+                            <span>رابط مباشر</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Hidden file input for this tier */}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      ref={(el) => { fileInputRefs.current[idx] = el; }}
+                      onChange={(e) => handleFileSelectForTier(idx, e)}
+                      className="hidden"
                     />
                   </div>
                 </div>

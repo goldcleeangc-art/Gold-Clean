@@ -10,6 +10,7 @@ export interface ProductTierOffer {
   quantity: number;   // عدد العبوات / القطع (مثلاً 2، 3، 4)
   price: number;      // إجمالي السعر لهذه الكمية (ج.م)
   badge?: string;     // شارة مميزة (مثلاً: الأكثر طلباً 🔥)
+  image?: string;     // صورة مخصصة للباقة (تخزن كنص Base64 أو رابط ويب)
 }
 
 export interface Product {

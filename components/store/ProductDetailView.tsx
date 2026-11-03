@@ -344,7 +344,7 @@ export default function ProductDetailView({
               {/* Main Product Image */}
               <div className="w-full max-w-sm aspect-square relative flex items-center justify-center p-4">
                 <img
-                  src={(currentProduct.isWhiteFriday && currentProduct.whiteFridayImage) ? currentProduct.whiteFridayImage : (currentProduct.image || 'https://images.unsplash.com/photo-1563453392212-326f518500b1?auto=format&fit=crop&q=80&w=1000')}
+                  src={(currentProduct.tieredPricing?.find(t => t.quantity === quantity)?.image) || ((currentProduct.isWhiteFriday && currentProduct.whiteFridayImage) ? currentProduct.whiteFridayImage : (currentProduct.image || 'https://images.unsplash.com/photo-1563453392212-326f518500b1?auto=format&fit=crop&q=80&w=1000'))}
                   alt={currentProduct.name}
                   className="max-h-full max-w-full object-contain filter drop-shadow-lg transition-transform duration-500 hover:scale-105"
                 />

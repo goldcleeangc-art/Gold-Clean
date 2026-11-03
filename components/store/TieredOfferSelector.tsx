@@ -71,6 +71,15 @@ export default function TieredOfferSelector({
             </div>
           </div>
 
+          {/* Thumbnail */}
+          <div className="w-10 h-10 rounded-lg bg-white border border-slate-200/80 overflow-hidden shrink-0 my-1 p-0.5 shadow-2xs">
+            <img 
+              src={(product.isWhiteFriday && product.whiteFridayImage) || product.image || 'https://images.unsplash.com/photo-1563453392212-326f518500b1?auto=format&fit=crop&q=80&w=400'} 
+              alt="عبوة واحدة" 
+              className="w-full h-full object-contain"
+            />
+          </div>
+
           <div>
             <div className="flex items-baseline gap-1">
               <span className={`text-lg font-black font-mono ${isDark ? 'text-amber-400' : 'text-slate-900'}`}>
@@ -95,6 +104,7 @@ export default function TieredOfferSelector({
           const isSelected = selectedQuantity === qty;
 
           const labelText = qty === 2 ? 'عبوتان (عرض التوفير)' : qty === 3 ? '3 عبوات (الباقة الأكثر طلباً)' : `${qty} عبوات`;
+          const bundleImage = tier.image || (product.isWhiteFriday && product.whiteFridayImage) || product.image;
 
           return (
             <div
@@ -132,6 +142,17 @@ export default function TieredOfferSelector({
                   {isSelected && <CheckCircle2 className="w-3.5 h-3.5" />}
                 </div>
               </div>
+
+              {/* Bundle Thumbnail */}
+              {bundleImage && (
+                <div className="w-10 h-10 rounded-lg bg-white border border-slate-200/80 overflow-hidden shrink-0 my-1 p-0.5 shadow-2xs">
+                  <img 
+                    src={bundleImage} 
+                    alt={labelText} 
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              )}
 
               <div>
                 <div className="flex items-baseline gap-1.5">
