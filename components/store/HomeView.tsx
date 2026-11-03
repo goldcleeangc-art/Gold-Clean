@@ -117,10 +117,10 @@ export default function HomeView({
   const featuredProducts = products.slice(0, 8);
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#F8FAFC] relative pb-20 md:pb-12" dir="rtl" id="home-view">
+    <div className="flex-1 overflow-y-auto bg-[#F8FAFC] relative pb-20 md:pb-12 w-full min-w-0" dir="rtl" id="home-view">
       
       {/* 1. HERO SECTION */}
-      <section className="relative bg-white pt-8 sm:pt-12 md:pt-16 pb-14 md:pb-20 border-b border-slate-200/80 overflow-hidden shrink-0">
+      <section className="relative bg-white pt-8 sm:pt-12 md:pt-16 pb-14 md:pb-20 border-b border-slate-200/80 overflow-hidden shrink-0 w-full min-w-0">
         {/* Soft luxury ambient background glows */}
         <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
           <div className="absolute -left-20 -top-20 w-[550px] h-[550px] bg-amber-100/40 rounded-full blur-3xl" />
@@ -128,20 +128,20 @@ export default function HomeView({
           <div className="absolute bottom-0 left-1/3 w-[350px] h-[350px] bg-amber-50/50 rounded-full blur-2xl" />
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 xl:gap-12 items-center">
             
             {/* Right Column: Arabic Text Content & CTAs */}
-            <div className="lg:col-span-7 text-center lg:text-right order-2 lg:order-1">
+            <div className="lg:col-span-7 flex flex-col justify-center text-center lg:text-right order-2 lg:order-1 min-w-0">
               {/* Eyebrow Badge */}
               <motion.div 
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5 }}
-                className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-50 via-amber-100/70 to-amber-50 border border-amber-200/90 text-amber-900 px-4 py-1.5 rounded-full text-xs font-black tracking-wide mb-6 shadow-2xs"
+                className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-50 via-amber-100/70 to-amber-50 border border-amber-200/90 text-amber-900 px-4 py-1.5 rounded-full text-xs font-black tracking-wide mb-5 sm:mb-6 shadow-2xs self-center lg:self-start max-w-full"
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-600 animate-pulse" />
-                <span>النظافة اللي تستاهليها.. جودة ذهبية وفخامة تدوم ✨</span>
+                <Sparkles className="w-3.5 h-3.5 text-amber-600 animate-pulse shrink-0" />
+                <span className="truncate">النظافة اللي تستاهليها.. جودة ذهبية وفخامة تدوم ✨</span>
               </motion.div>
               
               {/* Main Headline */}
@@ -149,13 +149,13 @@ export default function HomeView({
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: 0.1 }}
-                className="text-3xl sm:text-4xl md:text-5xl font-black text-[#111827] mb-6 leading-[1.25] tracking-tight"
+                className="text-2xl sm:text-4xl md:text-5xl font-black text-[#111827] mb-5 sm:mb-6 leading-[1.3] tracking-tight"
               >
                 مرحباً بكِ في عالم <br />
                 <span className="font-sans font-black text-amber-500 tracking-tight drop-shadow-xs">
                   GOLDCLEAN
                 </span>
-                <span className="text-xl sm:text-2xl md:text-3xl font-extrabold text-slate-800 block mt-1">
+                <span className="text-lg sm:text-2xl md:text-3xl font-extrabold text-slate-800 block mt-1">
                   لأرقى المنظفات والمعقمات فائقة التركيز
                 </span>
               </motion.h1>
@@ -165,7 +165,7 @@ export default function HomeView({
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: 0.2 }}
-                className="text-slate-600 text-sm sm:text-base mb-8 leading-relaxed max-w-2xl mx-auto lg:mx-0 font-medium"
+                className="text-slate-600 text-xs sm:text-base mb-6 sm:mb-8 leading-relaxed max-w-2xl mx-auto lg:mx-0 font-medium"
               >
                 نحن في <strong className="text-slate-900 font-bold">جولد كلين</strong> نصنع لكِ تركيبات مبتكرة ومعتمدة تمنحكِ أعلى درجات النظافة العميقة والتعقيم الشامل لمنزلك وملابسك ومطبخك. روائح منعشة تدوم طويلاً وحماية مؤكدة بأفضل أسعار التوفير من المصنع مباشرة.
               </motion.p>
@@ -175,11 +175,11 @@ export default function HomeView({
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: 0.3 }}
-                className="flex flex-col sm:flex-row gap-3.5 justify-center lg:justify-start mb-8"
+                className="flex flex-wrap gap-2.5 sm:gap-3.5 justify-center lg:justify-start mb-6 sm:mb-8 w-full"
               >
                 <button 
                   onClick={() => setCurrentTab('products')}
-                  className="bg-[#111827] hover:bg-amber-600 text-white px-7 py-3.5 rounded-2xl text-sm font-bold shadow-lg shadow-slate-900/15 hover:shadow-amber-500/25 transition-all duration-300 hover:scale-[1.02] cursor-pointer inline-flex items-center justify-center gap-2 group"
+                  className="bg-[#111827] hover:bg-amber-600 text-white px-5 sm:px-7 py-3 sm:py-3.5 rounded-2xl text-xs sm:text-sm font-bold shadow-lg shadow-slate-900/15 hover:shadow-amber-500/25 transition-all duration-300 hover:scale-[1.02] cursor-pointer inline-flex items-center justify-center gap-2 group shrink-0"
                 >
                   <span>تصفح تشكيلة المنتجات</span>
                   <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
@@ -187,7 +187,7 @@ export default function HomeView({
                 
                 <button 
                   onClick={() => setCurrentTab('offers')}
-                  className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-6 py-3.5 rounded-2xl text-sm font-bold shadow-xs transition-all duration-300 hover:scale-[1.02] cursor-pointer inline-flex items-center justify-center gap-2"
+                  className="bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-5 sm:px-6 py-3 sm:py-3.5 rounded-2xl text-xs sm:text-sm font-bold shadow-xs transition-all duration-300 hover:scale-[1.02] cursor-pointer inline-flex items-center justify-center gap-2 shrink-0"
                 >
                   <Flame className="w-4 h-4 text-rose-600 animate-bounce" />
                   <span>عروض وباقات التوفير</span>
@@ -198,7 +198,7 @@ export default function HomeView({
                     setCurrentTab('about');
                     window.open('https://portfolio.g-c.store', '_blank', 'noopener,noreferrer');
                   }}
-                  className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 px-5 py-3.5 rounded-2xl text-sm font-semibold transition-all hover:border-slate-300 cursor-pointer inline-flex items-center justify-center gap-1.5"
+                  className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 px-4 sm:px-5 py-3 sm:py-3.5 rounded-2xl text-xs sm:text-sm font-semibold transition-all hover:border-slate-300 cursor-pointer inline-flex items-center justify-center gap-1.5 shrink-0"
                 >
                   <Info className="w-4 h-4 text-slate-500" />
                   <span>تعرّف على مصنعنا</span>
@@ -210,82 +210,82 @@ export default function HomeView({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.6, delay: 0.4 }}
-                className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-6 border-t border-slate-100 text-right"
+                className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-2.5 sm:gap-3 pt-6 border-t border-slate-100 text-right w-full min-w-0"
               >
-                <div className="flex items-center gap-2 text-slate-700">
+                <div className="flex items-center gap-2 text-slate-700 min-w-0">
                   <div className="w-7 h-7 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shrink-0">
                     <Award className="w-3.5 h-3.5" />
                   </div>
-                  <span className="text-[11px] font-bold">جودة معتمدة ١٠٠٪</span>
+                  <span className="text-[11px] font-bold truncate">جودة معتمدة ١٠٠٪</span>
                 </div>
 
-                <div className="flex items-center gap-2 text-slate-700">
+                <div className="flex items-center gap-2 text-slate-700 min-w-0">
                   <div className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600 shrink-0">
                     <Truck className="w-3.5 h-3.5" />
                   </div>
-                  <span className="text-[11px] font-bold">شحن سريع ومباشر</span>
+                  <span className="text-[11px] font-bold truncate">شحن سريع ومباشر</span>
                 </div>
 
-                <div className="flex items-center gap-2 text-slate-700">
+                <div className="flex items-center gap-2 text-slate-700 min-w-0">
                   <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600 shrink-0">
                     <Banknote className="w-3.5 h-3.5" />
                   </div>
-                  <span className="text-[11px] font-bold">دفع عند الاستلام</span>
+                  <span className="text-[11px] font-bold truncate">دفع عند الاستلام</span>
                 </div>
 
-                <div className="flex items-center gap-2 text-slate-700">
+                <div className="flex items-center gap-2 text-slate-700 min-w-0">
                   <div className="w-7 h-7 rounded-lg bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 shrink-0">
                     <ShieldCheck className="w-3.5 h-3.5" />
                   </div>
-                  <span className="text-[11px] font-bold">ضمان المعاينة</span>
+                  <span className="text-[11px] font-bold truncate">ضمان المعاينة</span>
                 </div>
               </motion.div>
 
             </div>
 
             {/* Left Column: Premium Framed Visual */}
-            <div className="lg:col-span-5 order-1 lg:order-2 flex justify-center">
+            <div className="lg:col-span-5 order-1 lg:order-2 flex justify-center w-full min-w-0">
               <motion.div 
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.6, delay: 0.2 }}
-                className="relative max-w-[310px] sm:max-w-[360px] md:max-w-[420px] w-full"
+                className="relative max-w-[320px] sm:max-w-[380px] lg:max-w-[420px] w-full"
               >
                 {/* Decorative Frame */}
-                <div className="relative rounded-3xl overflow-hidden shadow-2xl shadow-slate-300/60 border-4 border-white bg-slate-100 group">
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#111827]/40 via-transparent to-transparent opacity-50 z-10 pointer-events-none" />
-                  
-                  <img 
-                    src={heroImgSrc} 
-                    alt="جولد كلين - GoldClean للمنظفات الفاخرة" 
-                    onError={() => setHeroImgSrc(FALLBACK_PRODUCT_IMAGE)}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-auto object-cover max-h-[460px] md:max-h-[520px] transition-transform duration-700 group-hover:scale-103"
-                  />
+                <div className="relative rounded-3xl overflow-hidden shadow-2xl shadow-slate-300/60 border-4 border-white bg-gradient-to-b from-slate-50 to-amber-50/20 flex flex-col group">
+                  <div className="relative w-full p-2 sm:p-3 flex items-center justify-center overflow-hidden">
+                    <img 
+                      src={heroImgSrc} 
+                      alt="جولد كلين - GoldClean للمنظفات الفاخرة" 
+                      onError={() => setHeroImgSrc(FALLBACK_PRODUCT_IMAGE)}
+                      referrerPolicy="no-referrer"
+                      className="w-full h-auto max-h-[460px] sm:max-h-[500px] object-contain rounded-2xl transition-transform duration-500 group-hover:scale-[1.01]"
+                    />
+                  </div>
 
-                  {/* Floating badge inside image container */}
-                  <div className="absolute bottom-4 inset-x-4 z-20 bg-white/95 backdrop-blur-md p-3 rounded-2xl border border-white/60 shadow-lg flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs">
+                  {/* Clean footer strip below image - never covers products */}
+                  <div className="bg-white/95 border-t border-slate-100/90 p-3 sm:p-3.5 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-xs shrink-0">
                         <Star className="w-4 h-4 fill-white text-white" />
                       </div>
-                      <div className="text-right">
-                        <p className="text-[11px] font-extrabold text-slate-900">تركيز فائق ورائحة ممتدة</p>
-                        <p className="text-[9px] text-slate-500 font-semibold">اختيار الأمهات والبيوت العصرية</p>
+                      <div className="text-right min-w-0">
+                        <p className="text-[11px] font-extrabold text-slate-900 leading-tight truncate">تركيز فائق ورائحة ممتدة</p>
+                        <p className="text-[9px] text-slate-500 font-semibold leading-tight mt-0.5 truncate">اختيار الأمهات والبيوت العصرية</p>
                       </div>
                     </div>
-                    <span className="bg-amber-100 text-amber-800 text-[10px] font-black px-2 py-0.5 rounded-lg">
+                    <span className="bg-amber-100 text-amber-800 text-[10px] font-black px-2.5 py-1 rounded-lg shrink-0">
                       الأعلى تقييماً
                     </span>
                   </div>
                 </div>
 
-                {/* Floating pill badge top left */}
+                {/* Floating pill badge top corner */}
                 <motion.div 
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ duration: 0.6, delay: 0.4 }}
-                  className="absolute -top-3 -right-3 z-20 bg-white text-slate-800 border border-slate-200/90 px-3.5 py-1.5 rounded-2xl shadow-lg flex items-center gap-2 hidden sm:flex"
+                  className="absolute -top-3 -right-2 sm:-right-3 z-20 bg-white text-slate-800 border border-slate-200/90 px-3 py-1.5 rounded-2xl shadow-lg flex items-center gap-2 hidden sm:flex"
                 >
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
                   <span className="text-[11px] font-extrabold text-[#111827]">أصلي ومعتمد ١٠٠٪</span>
@@ -300,13 +300,13 @@ export default function HomeView({
 
       {/* 1.5 WHITE FRIDAY ANNOUNCEMENT BANNER */}
       {whiteFridaySettings?.isActive !== false && (
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 sm:-mt-8 mb-4 relative z-20">
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 sm:-mt-8 mb-4 relative z-20 w-full min-w-0">
           <div className="bg-gradient-to-r from-slate-950 via-[#1B1126] to-slate-950 border-2 border-amber-500/50 rounded-3xl p-5 sm:p-7 shadow-2xl relative overflow-hidden group">
             {/* Ambient glowing blobs */}
             <div className="absolute top-0 right-1/4 w-72 h-72 bg-amber-500/15 rounded-full blur-3xl pointer-events-none group-hover:bg-amber-500/25 transition-colors" />
             <div className="absolute bottom-0 left-10 w-60 h-60 bg-rose-600/15 rounded-full blur-2xl pointer-events-none" />
 
-            <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-5 text-center lg:text-right">
+            <div className="relative z-10 flex flex-col xl:flex-row items-center justify-between gap-5 text-center xl:text-right">
               {whiteFridaySettings?.bannerImage && (
                 <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden border border-amber-500/40 shrink-0 shadow-lg hidden sm:block">
                   <img
@@ -317,7 +317,7 @@ export default function HomeView({
                 </div>
               )}
               {/* Text & Badge */}
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <div className="inline-flex items-center gap-2 bg-gradient-to-r from-amber-500/20 via-amber-400/30 to-amber-500/20 border border-amber-400/50 text-amber-300 px-3.5 py-1 rounded-full text-xs font-black shadow-xs mb-3">
                   <Flame className="w-4 h-4 text-amber-400 animate-bounce" />
                   <span>{whiteFridaySettings?.badgeText || 'إعلان عروض الجمعة البيضاء 🔥'}</span>
@@ -327,15 +327,15 @@ export default function HomeView({
                   {whiteFridaySettings?.title || 'مهرجان عروض وتخفيضات الجمعة البيضاء الكبرى!'}
                 </h3>
                 
-                <p className="text-xs sm:text-sm text-slate-300 font-medium mt-1.5 max-w-2xl">
+                <p className="text-xs sm:text-sm text-slate-300 font-medium mt-1.5 max-w-2xl mx-auto xl:mx-0">
                   {whiteFridaySettings?.subtitle || 'خصومات حصرية تصل حتى 60% على تشكيلة فاخرة من المنظفات والمعقمات — لفترة محدودة وحتى نفاد الكمية!'}
                 </p>
               </div>
 
               {/* Countdown & CTA */}
-              <div className="flex flex-col sm:flex-row items-center gap-3.5 shrink-0">
+              <div className="flex flex-col sm:flex-row items-center gap-3.5 shrink-0 max-w-full">
                 {/* Mini countdown */}
-                <div className="flex items-center gap-1.5 font-mono text-center bg-slate-900/90 border border-amber-500/30 px-3 py-2 rounded-2xl">
+                <div className="flex items-center gap-1.5 font-mono text-center bg-slate-900/90 border border-amber-500/30 px-3 py-2 rounded-2xl shrink-0">
                   <div className="flex flex-col items-center">
                     <span className="text-sm sm:text-base font-black text-amber-400 font-mono">
                       {String(wfTimeLeft.hours).padStart(2, '0')}
@@ -361,7 +361,7 @@ export default function HomeView({
                 {/* Primary Button to White Friday */}
                 <button
                   onClick={() => setCurrentTab('white_friday')}
-                  className="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black px-6 py-3.5 rounded-2xl text-xs sm:text-sm shadow-xl shadow-amber-500/20 hover:scale-105 transition-all duration-300 cursor-pointer flex items-center gap-2 group/btn"
+                  className="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black px-5 sm:px-6 py-3.5 rounded-2xl text-xs sm:text-sm shadow-xl shadow-amber-500/20 hover:scale-105 transition-all duration-300 cursor-pointer flex items-center gap-2 group/btn shrink-0"
                 >
                   <Sparkles className="w-4 h-4 text-slate-950 group-hover/btn:rotate-12 transition-transform" />
                   <span>تسوق عروض الجمعة البيضاء الآن</span>

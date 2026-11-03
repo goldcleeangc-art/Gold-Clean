@@ -18,7 +18,8 @@ import {
   Info,
   Clock,
   User,
-  LogOut
+  LogOut,
+  ChevronDown
 } from 'lucide-react';
 
 interface NavbarProps {
@@ -63,6 +64,7 @@ export default function Navbar({
   onResetCategory
 }: NavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 
   const handleNavClick = (tab: 'home' | 'products' | 'white_friday' | 'offers' | 'about' | 'complaints') => {
     setCurrentTab(tab);
@@ -71,6 +73,7 @@ export default function Navbar({
       onResetCategory();
     }
     setMobileMenuOpen(false);
+    setMoreMenuOpen(false);
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -106,18 +109,18 @@ export default function Navbar({
         </div>
       ) : (
         <div 
-          className="bg-[#111827] text-slate-100 py-1.5 px-4 text-center text-[11px] sm:text-xs font-medium flex items-center justify-center gap-2 shrink-0 border-b border-slate-800/80 z-50 select-none" 
+          className="bg-[#111827] text-slate-100 py-1.5 px-4 text-center text-[11px] sm:text-xs font-medium flex items-center justify-center gap-2 shrink-0 border-b border-slate-800/80 z-50 select-none w-full" 
           id="promo-ribbon"
           dir="rtl"
         >
-          <div className="max-w-6xl mx-auto w-full flex items-center justify-between gap-2">
-            <div className="hidden sm:flex items-center gap-2 text-slate-400 text-[10px]">
+          <div className="max-w-6xl mx-auto w-full flex items-center justify-between gap-2 min-w-0">
+            <div className="hidden sm:flex items-center gap-2 text-slate-400 text-[10px] shrink-0">
               <Clock className="w-3 h-3 text-amber-400" />
               <span>خدمة عملاء على مدار الساعة</span>
             </div>
 
-            <div className="flex items-center justify-center gap-2 mx-auto sm:mx-0">
-              <span className="bg-amber-500/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1">
+            <div className="flex items-center justify-center gap-2 mx-auto sm:mx-0 min-w-0 overflow-hidden">
+              <span className="bg-amber-500/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shrink-0">
                 <Sparkles className="w-3 h-3 text-amber-400 animate-pulse" />
                 <span>عروض حصرية</span>
               </span>
@@ -126,7 +129,7 @@ export default function Navbar({
               </span>
             </div>
 
-            <div className="hidden sm:flex items-center gap-2 text-slate-400 text-[10px]">
+            <div className="hidden sm:flex items-center gap-2 text-slate-400 text-[10px] shrink-0">
               <Truck className="w-3 h-3 text-emerald-400" />
               <span>شحن مجاني على باقات التوفير المختارة</span>
             </div>
@@ -136,51 +139,51 @@ export default function Navbar({
 
       {/* 2. MAIN HEADER NAVBAR */}
       <header 
-        className="h-18 bg-white/95 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-40 transition-all shadow-xs" 
+        className="h-auto md:h-18 bg-white/95 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-40 transition-all shadow-xs w-full" 
         id="header-nav" 
         dir="rtl"
       >
-        <div className="max-w-7xl mx-auto h-full px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-4">
+        <div className="max-w-7xl mx-auto h-18 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-2 sm:gap-4 w-full">
           
           {/* Right Section: Mobile Hamburger + Brand Logo */}
-          <div className="flex items-center gap-3 sm:gap-4 shrink-0">
-            {/* Mobile Menu Trigger */}
+          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+            {/* Mobile Menu Trigger (Visible on < lg screens) */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer outline-none focus:outline-none"
+              className="lg:hidden p-2 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer outline-none focus:outline-none shrink-0"
               aria-label="القائمة الرئيسية"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
 
-            {/* Brand Logo */}
+            {/* Brand Logo - Completely preserved and never clipped */}
             <div 
-              className="flex items-center gap-2.5 cursor-pointer select-none group" 
+              className="flex items-center gap-2 sm:gap-2.5 cursor-pointer select-none group shrink-0" 
               onClick={() => handleNavClick('home')}
             >
-              <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-600 flex items-center justify-center text-white font-extrabold text-base shadow-md shadow-amber-500/20 group-hover:scale-105 transition-transform duration-300 border border-amber-300/40">
+              <div className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-600 flex items-center justify-center text-white font-extrabold text-base shadow-md shadow-amber-500/20 group-hover:scale-105 transition-transform duration-300 border border-amber-300/40 shrink-0">
                 <span className="font-sans font-black tracking-tighter">G</span>
                 <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-200 rounded-full blur-[1px] opacity-75 animate-ping" />
               </div>
-              <div className="flex flex-col">
+              <div className="flex flex-col shrink-0">
                 <div className="flex items-baseline gap-1">
-                  <span className="font-black text-lg sm:text-xl tracking-tight font-sans text-amber-500">
+                  <span className="font-black text-lg sm:text-xl tracking-tight font-sans text-amber-500 whitespace-nowrap">
                     GOLD<span className="text-[#111827]">CLEAN</span>
                   </span>
                 </div>
-                <span className="text-[10px] text-slate-400 font-semibold tracking-wider -mt-1 font-sans">
+                <span className="text-[10px] text-slate-400 font-semibold tracking-wider -mt-1 font-sans whitespace-nowrap">
                   للمنظفات الفاخرة
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Center Navigation Links (Desktop) */}
-          <nav className="hidden md:flex items-center gap-1 lg:gap-2 text-xs lg:text-sm font-semibold shrink-0">
+          {/* Center Navigation Links (Desktop: lg+) */}
+          <nav className="hidden lg:flex items-center gap-1 xl:gap-1.5 text-xs font-semibold shrink min-w-0">
             <button 
               id="nav-home-btn"
               onClick={() => handleNavClick('home')} 
-              className={`px-3 py-2 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative ${
+              className={`px-2.5 xl:px-3 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative whitespace-nowrap ${
                 currentTab === 'home' && !isMerchantOpen 
                   ? 'text-amber-600 font-bold bg-amber-50/80 shadow-2xs' 
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -190,7 +193,7 @@ export default function Navbar({
               {currentTab === 'home' && !isMerchantOpen && (
                 <motion.div 
                   layoutId="activeNavTab" 
-                  className="absolute bottom-0 inset-x-3 h-0.5 bg-amber-500 rounded-full" 
+                  className="absolute bottom-0 inset-x-2 h-0.5 bg-amber-500 rounded-full" 
                 />
               )}
             </button>
@@ -198,7 +201,7 @@ export default function Navbar({
             <button 
               id="nav-products-btn"
               onClick={() => handleNavClick('products')} 
-              className={`px-3 py-2 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative ${
+              className={`px-2.5 xl:px-3 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative whitespace-nowrap ${
                 currentTab === 'products' && !isMerchantOpen 
                   ? 'text-amber-600 font-bold bg-amber-50/80 shadow-2xs' 
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -208,7 +211,7 @@ export default function Navbar({
               {currentTab === 'products' && !isMerchantOpen && (
                 <motion.div 
                   layoutId="activeNavTab" 
-                  className="absolute bottom-0 inset-x-3 h-0.5 bg-amber-500 rounded-full" 
+                  className="absolute bottom-0 inset-x-2 h-0.5 bg-amber-500 rounded-full" 
                 />
               )}
             </button>
@@ -216,21 +219,21 @@ export default function Navbar({
             <button 
               id="nav-white-friday-btn"
               onClick={() => handleNavClick('white_friday')} 
-              className={`px-3 py-2 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative flex items-center gap-1.5 ${
+              className={`px-2.5 xl:px-3 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative flex items-center gap-1.5 whitespace-nowrap ${
                 currentTab === 'white_friday' && !isMerchantOpen 
                   ? 'text-amber-400 font-black bg-slate-950 shadow-sm border border-amber-500/40' 
                   : 'text-slate-700 hover:text-amber-600 hover:bg-amber-50/70'
               }`}
             >
-              <Flame className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+              <Flame className="w-3.5 h-3.5 text-amber-500 animate-pulse shrink-0" />
               <span>الجمعة البيضاء</span>
-              <span className="bg-amber-500 text-slate-950 text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-2xs">
+              <span className="bg-amber-500 text-slate-950 text-[9px] font-black px-1.5 py-0.2 rounded-full shadow-2xs shrink-0">
                 خصم 60%
               </span>
               {currentTab === 'white_friday' && !isMerchantOpen && (
                 <motion.div 
                   layoutId="activeNavTab" 
-                  className="absolute bottom-0 inset-x-3 h-0.5 bg-amber-500 rounded-full" 
+                  className="absolute bottom-0 inset-x-2 h-0.5 bg-amber-500 rounded-full" 
                 />
               )}
             </button>
@@ -238,24 +241,38 @@ export default function Navbar({
             <button 
               id="nav-offers-btn"
               onClick={() => handleNavClick('offers')} 
-              className={`px-3 py-2 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative flex items-center gap-1.5 ${
+              className={`px-2.5 xl:px-3 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative flex items-center gap-1 whitespace-nowrap ${
                 currentTab === 'offers' && !isMerchantOpen 
                   ? 'text-rose-600 font-bold bg-rose-50 shadow-2xs' 
                   : 'text-slate-600 hover:text-rose-600 hover:bg-rose-50/50'
               }`}
             >
               <span>عروض التوفير</span>
-              <span className="bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-2xs animate-pulse">
+              <span className="bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full shadow-2xs shrink-0">
                 خصومات 🔥
               </span>
               {currentTab === 'offers' && !isMerchantOpen && (
                 <motion.div 
                   layoutId="activeNavTab" 
-                  className="absolute bottom-0 inset-x-3 h-0.5 bg-rose-600 rounded-full" 
+                  className="absolute bottom-0 inset-x-2 h-0.5 bg-rose-600 rounded-full" 
                 />
               )}
             </button>
 
+            <button 
+              id="nav-tracker-btn" 
+              onClick={onOpenTracker} 
+              className="px-2.5 xl:px-3 py-1.5 rounded-xl text-slate-600 hover:text-[#111827] hover:bg-slate-50 transition-all cursor-pointer outline-none focus:outline-none flex items-center gap-1 whitespace-nowrap"
+            >
+              <span>طلباتي</span>
+              {userOrdersCount > 0 && (
+                <span className="bg-slate-900 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full font-mono shrink-0">
+                  {userOrdersCount}
+                </span>
+              )}
+            </button>
+
+            {/* Direct Links on xl+ (1280px+) */}
             <button 
               id="nav-about-btn"
               onClick={() => { 
@@ -263,7 +280,7 @@ export default function Navbar({
                 setIsMerchantOpen?.(false); 
                 window.open('https://portfolio.g-c.store', '_blank', 'noopener,noreferrer'); 
               }} 
-              className={`px-3 py-2 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative ${
+              className={`hidden xl:inline-block px-2.5 xl:px-3 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative whitespace-nowrap ${
                 currentTab === 'about' && !isMerchantOpen 
                   ? 'text-amber-600 font-bold bg-amber-50/80' 
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -275,7 +292,7 @@ export default function Navbar({
             <button 
               id="nav-complaints-btn"
               onClick={() => handleNavClick('complaints')} 
-              className={`px-3 py-2 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative ${
+              className={`hidden 2xl:inline-block px-2.5 xl:px-3 py-1.5 rounded-xl transition-all cursor-pointer outline-none focus:outline-none relative whitespace-nowrap ${
                 currentTab === 'complaints' && !isMerchantOpen 
                   ? 'text-amber-600 font-bold bg-amber-50/80 shadow-2xs' 
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
@@ -285,21 +302,8 @@ export default function Navbar({
               {currentTab === 'complaints' && !isMerchantOpen && (
                 <motion.div 
                   layoutId="activeNavTab" 
-                  className="absolute bottom-0 inset-x-3 h-0.5 bg-amber-500 rounded-full" 
+                  className="absolute bottom-0 inset-x-2 h-0.5 bg-amber-500 rounded-full" 
                 />
-              )}
-            </button>
-
-            <button 
-              id="nav-tracker-btn" 
-              onClick={onOpenTracker} 
-              className="px-3 py-2 rounded-xl text-slate-600 hover:text-[#111827] hover:bg-slate-50 transition-all cursor-pointer outline-none focus:outline-none flex items-center gap-1.5"
-            >
-              <span>طلباتي</span>
-              {userOrdersCount > 0 && (
-                <span className="bg-slate-900 text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full font-mono">
-                  {userOrdersCount}
-                </span>
               )}
             </button>
 
@@ -307,17 +311,17 @@ export default function Navbar({
               <Link 
                 id="nav-admin-btn" 
                 href="/admin" 
-                className={`px-3 py-1.5 rounded-xl transition-all relative cursor-pointer outline-none focus:outline-none flex items-center gap-1.5 text-xs font-bold ${
+                className={`hidden xl:flex px-2.5 py-1.5 rounded-xl transition-all relative cursor-pointer outline-none focus:outline-none items-center gap-1 text-xs font-bold whitespace-nowrap ${
                   isMerchantOpen 
                     ? 'text-amber-700 bg-amber-100/80 border border-amber-300' 
                     : 'text-amber-600 bg-amber-50 hover:bg-amber-100/80 border border-amber-200'
                 }`}
               >
-                <Settings className="w-3.5 h-3.5 text-amber-600" />
-                <span>إدارة المتجر ⚙️</span>
+                <Settings className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                <span>إدارة المتجر</span>
                 {pendingComplaintsCount > 0 && (
                   <span 
-                    className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full animate-pulse shadow-xs" 
+                    className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full animate-pulse shadow-xs shrink-0" 
                     title={`${pendingComplaintsCount} شكاوى جديدة بانتظار المراجعة`}
                   >
                     {pendingComplaintsCount}
@@ -325,35 +329,104 @@ export default function Navbar({
                 )}
               </Link>
             )}
+
+            {/* "المزيد ▾" Dropdown on lg screens (1024px-1279px) */}
+            <div className="relative xl:hidden">
+              <button
+                type="button"
+                onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+                className="px-2.5 py-1.5 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all cursor-pointer flex items-center gap-1 whitespace-nowrap text-xs font-bold"
+              >
+                <span>المزيد</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${moreMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              <AnimatePresence>
+                {moreMenuOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                    className="absolute left-0 mt-2 w-48 bg-white rounded-2xl shadow-xl border border-slate-200/90 py-2 z-50 text-right text-xs"
+                    dir="rtl"
+                  >
+                    <button
+                      onClick={() => {
+                        setMoreMenuOpen(false);
+                        setCurrentTab('about');
+                        window.open('https://portfolio.g-c.store', '_blank', 'noopener,noreferrer');
+                      }}
+                      className="w-full text-right px-4 py-2 hover:bg-amber-50 text-slate-700 hover:text-amber-600 font-semibold flex items-center justify-between"
+                    >
+                      <span className="flex items-center gap-2">
+                        <Info className="w-4 h-4 text-slate-400" />
+                        <span>عن الشركة ومصنعنا</span>
+                      </span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setMoreMenuOpen(false);
+                        handleNavClick('complaints');
+                      }}
+                      className="w-full text-right px-4 py-2 hover:bg-amber-50 text-slate-700 hover:text-amber-600 font-semibold flex items-center justify-between"
+                    >
+                      <span className="flex items-center gap-2">
+                        <MessageSquareWarning className="w-4 h-4 text-amber-500" />
+                        <span>الشكاوى والمقترحات</span>
+                      </span>
+                    </button>
+
+                    {(userRole === 'manager' || userRole === 'admin') && (
+                      <Link
+                        href="/admin"
+                        onClick={() => setMoreMenuOpen(false)}
+                        className="w-full text-right px-4 py-2 hover:bg-amber-50 text-amber-700 font-bold flex items-center justify-between border-t border-slate-100 mt-1 pt-2"
+                      >
+                        <span className="flex items-center gap-2">
+                          <Settings className="w-4 h-4 text-amber-600" />
+                          <span>إدارة المتجر</span>
+                        </span>
+                        {pendingComplaintsCount > 0 && (
+                          <span className="bg-rose-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded-full">
+                            {pendingComplaintsCount}
+                          </span>
+                        )}
+                      </Link>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </nav>
 
           {/* Left Actions: Search Bar + Account Profile + Shopping Cart */}
-          <div className="flex items-center gap-2.5 sm:gap-3.5 shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             
-            {/* Prominent Search Bar (Desktop) */}
+            {/* Prominent Search Bar (Desktop: md+) */}
             <form onSubmit={handleSearchSubmit} className="relative hidden md:block">
-              <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <input 
                 id="header-search"
                 type="text" 
-                placeholder="ابحث عن المنظفات، المعقمات..." 
+                placeholder="ابحث عن المنظفات..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="bg-slate-100/80 hover:bg-slate-100 focus:bg-white border border-slate-200 rounded-full py-2 pr-9 pl-4 text-xs w-44 lg:w-56 xl:w-64 focus:w-64 lg:focus:w-72 xl:focus:w-80 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 transition-all text-slate-800 placeholder:text-slate-400 shadow-2xs font-medium"
+                className="bg-slate-100/80 hover:bg-slate-100 focus:bg-white border border-slate-200 rounded-full py-1.5 pr-8 pl-3 text-xs w-28 md:w-36 lg:w-44 xl:w-56 focus:w-40 md:focus:w-48 lg:focus:w-56 xl:focus:w-64 focus:outline-none focus:ring-2 focus:ring-amber-400/40 focus:border-amber-400 transition-all text-slate-800 placeholder:text-slate-400 shadow-2xs font-medium"
                 dir="rtl"
               />
               {searchTerm && (
                 <button
                   type="button"
                   onClick={() => setSearchTerm('')}
-                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs px-1"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs px-1"
                 >
                   ✕
                 </button>
               )}
             </form>
 
-            <div className="h-6 w-px bg-slate-200 hidden md:block shrink-0" />
+            <div className="h-5 w-px bg-slate-200 hidden md:block shrink-0" />
 
             {/* Admin / User Sign In / Profile */}
             <div className="flex items-center gap-2 shrink-0">
@@ -448,14 +521,14 @@ export default function Navbar({
           </form>
         </div>
 
-        {/* 4. MOBILE DRAWER MENU */}
+        {/* 4. MOBILE / TABLET DRAWER MENU (Visible < lg when opened) */}
         <AnimatePresence>
           {mobileMenuOpen && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="md:hidden bg-white border-b border-slate-200 px-5 py-4 shadow-xl overflow-hidden"
+              className="lg:hidden bg-white border-b border-slate-200 px-5 py-4 shadow-xl overflow-hidden"
               dir="rtl"
             >
               <div className="flex flex-col gap-2">

@@ -120,7 +120,7 @@ export default function StorePage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(seoStructuredData) }}
       />
       
-      <div className="flex flex-col min-h-screen bg-[#F8FAFC] text-slate-800" id="main-app">
+      <div className="flex flex-col min-h-screen bg-[#F8FAFC] text-slate-800 w-full min-w-0" id="main-app">
         
         {/* Toast Notification */}
         <AnimatePresence>
@@ -164,7 +164,7 @@ export default function StorePage() {
         />
 
         {/* MAIN VIEW */}
-        <main className="flex-1 flex overflow-hidden relative" id="layout-body">
+        <main className="flex-1 w-full min-w-0 flex flex-col overflow-hidden relative" id="layout-body">
           {currentTab === 'home' ? (
             <HomeView
               categories={storeData.categories}
