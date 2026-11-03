@@ -21,7 +21,8 @@ import {
   Package,
   ArrowRight,
   Percent,
-  ImageIcon
+  ImageIcon,
+  Loader2
 } from 'lucide-react';
 import { Product, Category, WhiteFridaySettings, ProductTierOffer } from '../../lib/types/store';
 import { db } from '../../lib/firebase';
@@ -720,171 +721,245 @@ export default function AdminWhiteFridayTab({
 
       {/* MODAL 1: ADD EXISTING PRODUCT */}
       {isAddExistingOpen && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4" dir="rtl">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-150 mb-4">
-              <div className="flex items-center gap-2">
-                <Flame className="w-5 h-5 text-amber-500" />
-                <h3 className="font-extrabold text-sm sm:text-base text-slate-900">
-                  إضافة منتج من الكتالوج لقسم الجمعة البيضاء
-                </h3>
+        <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5 overflow-hidden" dir="rtl">
+          <div className="bg-white rounded-3xl max-w-2xl lg:max-w-3xl w-full shadow-2xl border border-slate-200/90 flex flex-col max-h-[92vh] overflow-hidden">
+            
+            {/* Sticky Header */}
+            <div className="px-5 sm:px-7 py-4 sm:py-5 border-b border-slate-150 bg-white flex items-center justify-between shrink-0 z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-slate-950 flex items-center justify-center shadow-md shadow-amber-500/20 shrink-0">
+                  <Flame className="w-5 h-5 text-slate-950" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-black text-sm sm:text-base text-slate-900">
+                      إضافة منتج من الكتالوج لقسم الجمعة البيضاء
+                    </h3>
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200 hidden sm:inline-block">
+                      White Friday
+                    </span>
+                  </div>
+                  <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 font-medium">
+                    اختر منتجاً موجوداً وحدد سعره المخفض وعروض الكميات الترويجية الخاصة به.
+                  </p>
+                </div>
               </div>
+
               <button 
                 onClick={() => setIsAddExistingOpen(false)}
-                className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
+                className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                title="إغلاق"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {nonWhiteFridayProducts.length === 0 ? (
-              <div className="py-6 text-center text-xs text-slate-500">
+              <div className="p-8 text-center text-xs text-slate-500">
                 جميع المنتجات الحالية في الكتالوج مضافة بالفعل لقسم الجمعة البيضاء!
               </div>
             ) : (
-              <form onSubmit={handleEnrollExistingProduct} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    اختر المنتج من الكتالوج
-                  </label>
-                  <select
-                    value={selectedProductId}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      setSelectedProductId(id);
-                      const p = products.find(prod => prod.id === id);
-                      if (p) {
-                        setExistingWhiteFridayPrice(Math.round(p.price * 0.7));
-                        setExistingImage(p.whiteFridayImage || p.image || '');
-                        setExistingTiers(p.tieredPricing || []);
-                      }
-                    }}
-                    className="w-full text-xs font-medium px-4 py-2.5 rounded-xl border border-slate-200 focus:border-amber-500 outline-none"
-                    required
-                  >
-                    {nonWhiteFridayProducts.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} — السعر الحالي: {p.price} ج.م ({p.volume || 'بدون حجم'})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {currentSelectedProduct && (
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center gap-3">
-                    <img 
-                      src={currentSelectedProduct.image} 
-                      alt="" 
-                      className="w-12 h-12 rounded-lg object-cover bg-white border border-slate-150 shrink-0" 
-                    />
-                    <div className="text-xs">
-                      <p className="font-bold text-slate-900">{currentSelectedProduct.name}</p>
-                      <p className="text-[11px] text-slate-500">السعر الأساسي في المتجر: <strong className="text-slate-800 font-mono">{currentSelectedProduct.price} جنيه</strong></p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                      سعر عرض الجمعة البيضاء (ج.م) *
+              <>
+                {/* Scrollable Form Content */}
+                <form 
+                  id="add-existing-wf-form" 
+                  onSubmit={handleEnrollExistingProduct} 
+                  className="flex-1 overflow-y-auto p-5 sm:p-7 space-y-5 custom-scrollbar overscroll-contain"
+                >
+                  {/* Select Product Card */}
+                  <div className="bg-slate-50/70 rounded-2xl border border-slate-200/90 p-4 sm:p-5 space-y-3.5">
+                    <label className="block text-xs font-bold text-slate-800">
+                      اختر المنتج من قائمة الكتالوج *
                     </label>
-                    <input 
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={existingWhiteFridayPrice || ''}
-                      onChange={(e) => setExistingWhiteFridayPrice(Number(e.target.value))}
-                      placeholder="مثال: 65"
-                      className="w-full text-xs font-bold font-mono px-4 py-2.5 rounded-xl border border-slate-200 focus:border-amber-500 outline-none text-amber-700"
+                    <select
+                      value={selectedProductId}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setSelectedProductId(id);
+                        const p = products.find(prod => prod.id === id);
+                        if (p) {
+                          setExistingWhiteFridayPrice(Math.round(p.price * 0.7));
+                          setExistingImage(p.whiteFridayImage || p.image || '');
+                          setExistingTiers(p.tieredPricing || []);
+                        }
+                      }}
+                      className="w-full text-xs font-bold px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none"
                       required
-                    />
+                    >
+                      {nonWhiteFridayProducts.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} — السعر الحالي: {p.price} ج.م ({p.volume || 'بدون حجم'})
+                        </option>
+                      ))}
+                    </select>
+
+                    {currentSelectedProduct && (
+                      <div className="p-3.5 rounded-xl bg-white border border-slate-200/90 flex items-center justify-between gap-3 shadow-2xs">
+                        <div className="flex items-center gap-3">
+                          <img 
+                            src={currentSelectedProduct.image} 
+                            alt="" 
+                            className="w-12 h-12 rounded-lg object-contain bg-slate-50 border border-slate-150 shrink-0 p-1" 
+                          />
+                          <div className="text-xs">
+                            <p className="font-extrabold text-slate-900">{currentSelectedProduct.name}</p>
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              الحجم: {currentSelectedProduct.volume || 'الافتراضي'} • كود: <span className="font-mono text-slate-700 font-bold">{currentSelectedProduct.code || 'GC'}</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="text-left bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+                          <span className="text-[10px] text-slate-500 block">السعر الأساسي:</span>
+                          <strong className="text-xs font-black text-slate-800 font-mono">{currentSelectedProduct.price} ج.م</strong>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                      شارة العرض (Badge)
-                    </label>
-                    <input 
-                      type="text"
-                      value={existingBadge}
-                      onChange={(e) => setExistingBadge(e.target.value)}
-                      placeholder="مثال: خصم 35% 🔥"
-                      className="w-full text-xs font-medium px-4 py-2.5 rounded-xl border border-slate-200 focus:border-amber-500 outline-none"
-                    />
-                  </div>
-                </div>
-
-                {/* Quick Badge Suggestions */}
-                <div>
-                  <span className="text-[11px] text-slate-400 block mb-1.5">شارات سريعة جاهزة:</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {['خصم 50% 🔥', 'خصم 40% 🔥', 'عرض حصري ⭐', 'الأكثر طلباً 👑', 'صفقة الجمعة البيضاء'].map(badge => (
-                      <button
-                        type="button"
-                        key={badge}
-                        onClick={() => setExistingBadge(badge)}
-                        className="text-[10px] font-bold px-2 py-1 rounded-md bg-slate-100 hover:bg-amber-100 hover:text-amber-900 text-slate-700 transition-colors cursor-pointer"
-                      >
-                        {badge}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Custom White Friday Offer Image */}
-                <div className="pt-2 border-t border-slate-150">
-                  <ImageUploadField
-                    label="صورة مخصصة لعرض الجمعة البيضاء (اختياري)"
-                    value={existingImage}
-                    onChange={setExistingImage}
-                    originalValue={currentSelectedProduct?.image}
-                    onResetToOriginal={() => currentSelectedProduct && setExistingImage(currentSelectedProduct.image)}
-                    helpText="يمكنك ترك الصورة الحالية للمنتج أو رفع صورة ترويجية مخصصة لهذا العرض (تخزن كنص في قاعدة البيانات)."
-                  />
-                </div>
-
-                {/* Tiered / Volume Pricing Manager */}
-                <div className="pt-2 border-t border-slate-150">
-                  <TieredPricingManager
-                    basePrice={existingWhiteFridayPrice || currentSelectedProduct?.price || 0}
-                    tiers={existingTiers}
-                    onChange={setExistingTiers}
-                  />
-                </div>
-
-                {/* Calculation preview */}
-                {currentSelectedProduct && existingWhiteFridayPrice > 0 && (
-                  <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl text-xs flex items-center justify-between">
-                    <div>
-                      <span className="text-amber-950 font-bold block">معاينة الخصم:</span>
-                      <span className="text-[11px] text-amber-800">
-                        الزبون سيوفر {Math.max(0, currentSelectedProduct.price - existingWhiteFridayPrice)} جنيه
-                      </span>
+                  {/* Pricing and Badge Card */}
+                  <div className="bg-slate-50/70 rounded-2xl border border-slate-200/90 p-4 sm:p-5 space-y-4">
+                    <div className="flex items-center gap-2 pb-2 border-b border-slate-200">
+                      <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
+                        <Tag className="w-4 h-4 text-amber-600" />
+                      </div>
+                      <h4 className="text-xs sm:text-sm font-black text-slate-900">
+                        سعر الجمعة البيضاء وشارة العرض
+                      </h4>
                     </div>
-                    <span className="text-sm font-black text-amber-700 font-mono bg-white px-2 py-1 rounded-md border border-amber-200">
-                      خصم {Math.max(0, Math.round(((currentSelectedProduct.price - existingWhiteFridayPrice) / currentSelectedProduct.price) * 100))}%
-                    </span>
-                  </div>
-                )}
 
-                <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-150">
-                  <button
-                    type="button"
-                    onClick={() => setIsAddExistingOpen(false)}
-                    className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
-                  >
-                    إلغاء
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isAddingExisting}
-                    className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs px-5 py-2.5 rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    {isAddingExisting ? 'جاري الإضافة...' : 'تأكيد الإضافة للجمعة البيضاء'}
-                  </button>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                          سعر عرض الجمعة البيضاء المخفض (ج.م) *
+                        </label>
+                        <div className="relative">
+                          <input 
+                            type="number"
+                            min="1"
+                            step="1"
+                            value={existingWhiteFridayPrice || ''}
+                            onChange={(e) => setExistingWhiteFridayPrice(Number(e.target.value))}
+                            placeholder="مثال: 65"
+                            className="w-full text-sm font-black font-mono px-4 py-2.5 rounded-xl border border-amber-300 bg-amber-50/40 text-amber-950 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none"
+                            required
+                          />
+                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-amber-700 pointer-events-none">
+                            ج.م
+                          </span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                          شارة العرض الترويجية (Badge)
+                        </label>
+                        <input 
+                          type="text"
+                          value={existingBadge}
+                          onChange={(e) => setExistingBadge(e.target.value)}
+                          placeholder="مثال: خصم 35% 🔥"
+                          className="w-full text-xs font-medium px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none text-slate-900"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Quick Badge Suggestions */}
+                    <div>
+                      <span className="text-[11px] text-slate-500 font-bold block mb-1.5">شارات جاهزة سريعة:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {['خصم 50% 🔥', 'خصم 40% 🔥', 'عرض حصري ⭐', 'الأكثر طلباً 👑', 'صفقة الجمعة البيضاء'].map(badge => (
+                          <button
+                            type="button"
+                            key={badge}
+                            onClick={() => setExistingBadge(badge)}
+                            className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all cursor-pointer border ${
+                              existingBadge === badge 
+                                ? 'bg-amber-100 text-amber-950 border-amber-300 shadow-2xs' 
+                                : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                            }`}
+                          >
+                            {badge}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Calculation preview */}
+                    {currentSelectedProduct && existingWhiteFridayPrice > 0 && (
+                      <div className="p-3 bg-white border border-amber-200/90 rounded-xl shadow-2xs flex items-center justify-between">
+                        <div>
+                          <span className="text-xs text-slate-800 font-black block">معاينة الخصم:</span>
+                          <span className="text-[11px] text-emerald-700 font-bold">
+                            الزبون سيوفر {Math.max(0, currentSelectedProduct.price - existingWhiteFridayPrice)} جنيه
+                          </span>
+                        </div>
+                        <span className="text-sm font-black text-amber-700 font-mono bg-amber-50 px-3 py-1 rounded-lg border border-amber-200">
+                          خصم {Math.max(0, Math.round(((currentSelectedProduct.price - existingWhiteFridayPrice) / currentSelectedProduct.price) * 100))}%
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Custom White Friday Offer Image */}
+                  <div className="bg-slate-50/70 rounded-2xl border border-slate-200/90 p-4 sm:p-5 space-y-3">
+                    <ImageUploadField
+                      label="صورة مخصصة لعرض الجمعة البيضاء (اختياري)"
+                      value={existingImage}
+                      onChange={setExistingImage}
+                      originalValue={currentSelectedProduct?.image}
+                      onResetToOriginal={() => currentSelectedProduct && setExistingImage(currentSelectedProduct.image)}
+                      helpText="يمكنك ترك الصورة الحالية للمنتج أو رفع صورة ترويجية مخصصة لهذا العرض."
+                    />
+                  </div>
+
+                  {/* Tiered / Volume Pricing Manager */}
+                  <div className="bg-slate-50/70 rounded-2xl border border-slate-200/90 p-4 sm:p-5">
+                    <TieredPricingManager
+                      basePrice={existingWhiteFridayPrice || currentSelectedProduct?.price || 0}
+                      tiers={existingTiers}
+                      onChange={setExistingTiers}
+                    />
+                  </div>
+                </form>
+
+                {/* Sticky Modal Footer */}
+                <div className="px-5 sm:px-7 py-3.5 sm:py-4 border-t border-slate-200 bg-slate-50/95 backdrop-blur flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 z-10">
+                  <div className="flex items-center gap-2 text-xs text-slate-600 font-medium">
+                    <span>السعر المخفض: <strong className="text-slate-900 font-mono">{existingWhiteFridayPrice || 0} ج.م</strong></span>
+                    <span>•</span>
+                    <span>عروض الكميات: <strong className="text-amber-800">{existingTiers.length} باقة</strong></span>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddExistingOpen(false)}
+                      className="flex-1 sm:flex-none px-5 py-2.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all cursor-pointer shadow-2xs"
+                    >
+                      إلغاء
+                    </button>
+                    <button
+                      type="submit"
+                      form="add-existing-wf-form"
+                      disabled={isAddingExisting}
+                      className="flex-1 sm:flex-none bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black text-xs px-6 py-2.5 rounded-xl shadow-md shadow-amber-500/20 transition-all cursor-pointer flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-95 disabled:opacity-50"
+                    >
+                      {isAddingExisting ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                          <span>جاري الإضافة...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4 text-slate-950" />
+                          <span>تأكيد الإضافة للجمعة البيضاء</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </form>
+              </>
             )}
           </div>
         </div>
@@ -892,124 +967,153 @@ export default function AdminWhiteFridayTab({
 
       {/* MODAL 2: CREATE BRAND-NEW WHITE FRIDAY PRODUCT */}
       {isCreateNewOpen && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4" dir="rtl">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-150 mb-4">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-amber-500" />
-                <h3 className="font-extrabold text-sm sm:text-base text-slate-900">
-                  إنشاء منتج جديد خاص بالجمعة البيضاء
-                </h3>
+        <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5 overflow-hidden" dir="rtl">
+          <div className="bg-white rounded-3xl max-w-2xl lg:max-w-3xl w-full shadow-2xl border border-slate-200/90 flex flex-col max-h-[92vh] overflow-hidden">
+            
+            {/* Sticky Header */}
+            <div className="px-5 sm:px-7 py-4 sm:py-5 border-b border-slate-150 bg-white flex items-center justify-between shrink-0 z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-slate-950 flex items-center justify-center shadow-md shadow-amber-500/20 shrink-0">
+                  <Sparkles className="w-5 h-5 text-slate-950" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-black text-sm sm:text-base text-slate-900">
+                      إنشاء منتج جديد خاص بالجمعة البيضاء
+                    </h3>
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200 hidden sm:inline-block">
+                      منتج حصري
+                    </span>
+                  </div>
+                  <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 font-medium">
+                    أضف منتجاً جديداً بخصم حصري لموسم الجمعة البيضاء مع عروض كميات وصور عالية الجودة.
+                  </p>
+                </div>
               </div>
+
               <button 
                 onClick={() => setIsCreateNewOpen(false)}
-                className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
+                className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                title="إغلاق"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateNewProduct} className="space-y-3.5">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  اسم المنتج *
-                </label>
-                <input 
-                  type="text"
-                  value={newProductForm.name}
-                  onChange={(e) => setNewProductForm(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="مثال: مسحوق غسيل جولد كلين فائق التركيز 5 لتر"
-                  className="w-full text-xs font-medium px-4 py-2 rounded-xl border border-slate-200 focus:border-amber-500 outline-none"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+            {/* Scrollable Form Content */}
+            <form 
+              id="create-new-wf-form" 
+              onSubmit={handleCreateNewProduct} 
+              className="flex-1 overflow-y-auto p-5 sm:p-7 space-y-5 custom-scrollbar overscroll-contain"
+            >
+              {/* Product General Info Card */}
+              <div className="bg-slate-50/70 rounded-2xl border border-slate-200/90 p-4 sm:p-5 space-y-3.5">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
-                    القسم / الفئة
-                  </label>
-                  <select
-                    value={newProductForm.category}
-                    onChange={(e) => setNewProductForm(prev => ({ ...prev, category: e.target.value }))}
-                    className="w-full text-xs font-medium px-4 py-2 rounded-xl border border-slate-200 focus:border-amber-500 outline-none"
-                  >
-                    {categories.map(c => (
-                      <option key={c.key} value={c.key}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    حجم العبوة
+                    اسم المنتج *
                   </label>
                   <input 
                     type="text"
-                    value={newProductForm.volume}
-                    onChange={(e) => setNewProductForm(prev => ({ ...prev, volume: e.target.value }))}
-                    placeholder="مثال: 1 لتر / 5 لتر"
-                    className="w-full text-xs font-medium px-4 py-2 rounded-xl border border-slate-200 focus:border-amber-500 outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    السعر الأصلي (قبل الخصم)
-                  </label>
-                  <input 
-                    type="number"
-                    min="1"
-                    value={newProductForm.regularPrice}
-                    onChange={(e) => setNewProductForm(prev => ({ ...prev, regularPrice: Number(e.target.value) }))}
-                    className="w-full text-xs font-mono font-bold px-4 py-2 rounded-xl border border-slate-200 focus:border-amber-500 outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    سعر الجمعة البيضاء *
-                  </label>
-                  <input 
-                    type="number"
-                    min="1"
-                    value={newProductForm.whiteFridayPrice}
-                    onChange={(e) => setNewProductForm(prev => ({ ...prev, whiteFridayPrice: Number(e.target.value) }))}
-                    className="w-full text-xs font-mono font-bold px-4 py-2 rounded-xl border border-amber-300 bg-amber-50/50 text-amber-800 focus:border-amber-500 outline-none"
+                    value={newProductForm.name}
+                    onChange={(e) => setNewProductForm(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="مثال: مسحوق غسيل جولد كلين فائق التركيز 5 لتر"
+                    className="w-full text-xs font-medium px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none"
                     required
                   />
                 </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      القسم / الفئة
+                    </label>
+                    <select
+                      value={newProductForm.category}
+                      onChange={(e) => setNewProductForm(prev => ({ ...prev, category: e.target.value }))}
+                      className="w-full text-xs font-medium px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none"
+                    >
+                      {categories.map(c => (
+                        <option key={c.key} value={c.key}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      حجم العبوة
+                    </label>
+                    <input 
+                      type="text"
+                      value={newProductForm.volume}
+                      onChange={(e) => setNewProductForm(prev => ({ ...prev, volume: e.target.value }))}
+                      placeholder="مثال: 1 لتر / 5 لتر"
+                      className="w-full text-xs font-medium px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div>
+              {/* Pricing Card */}
+              <div className="bg-slate-50/70 rounded-2xl border border-slate-200/90 p-4 sm:p-5 space-y-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      السعر الأصلي (قبل الخصم)
+                    </label>
+                    <input 
+                      type="number"
+                      min="1"
+                      value={newProductForm.regularPrice}
+                      onChange={(e) => setNewProductForm(prev => ({ ...prev, regularPrice: Number(e.target.value) }))}
+                      className="w-full text-xs font-mono font-bold px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      سعر الجمعة البيضاء المخفض *
+                    </label>
+                    <input 
+                      type="number"
+                      min="1"
+                      value={newProductForm.whiteFridayPrice}
+                      onChange={(e) => setNewProductForm(prev => ({ ...prev, whiteFridayPrice: Number(e.target.value) }))}
+                      className="w-full text-xs font-mono font-bold px-4 py-2.5 rounded-xl border border-amber-300 bg-amber-50/50 text-amber-900 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    شارة المنتج الترويجية (Badge)
+                  </label>
+                  <input 
+                    type="text"
+                    value={newProductForm.badge}
+                    onChange={(e) => setNewProductForm(prev => ({ ...prev, badge: e.target.value }))}
+                    placeholder="مثال: خصم 45% 🔥"
+                    className="w-full text-xs font-medium px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Image Upload Card */}
+              <div className="bg-slate-50/70 rounded-2xl border border-slate-200/90 p-4 sm:p-5 space-y-3">
                 <ImageUploadField
                   label="صورة المنتج / العرض"
                   value={newProductForm.image}
                   onChange={(val) => setNewProductForm(prev => ({ ...prev, image: val }))}
                   placeholder="https://..."
-                  helpText="ارفع صورة عالية الجودة من جهازك (JPG/PNG/WebP) أو ضع رابط صورة مباشر لتخزينها في قاعدة البيانات."
+                  helpText="ارفع صورة عالية الجودة من جهازك (JPG/PNG/WebP) أو ضع رابط صورة مباشر."
                   maxWidth={800}
                   maxHeight={800}
                   quality={0.7}
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  شارة المنتج
-                </label>
-                <input 
-                  type="text"
-                  value={newProductForm.badge}
-                  onChange={(e) => setNewProductForm(prev => ({ ...prev, badge: e.target.value }))}
-                  placeholder="مثال: خصم 45% 🔥"
-                  className="w-full text-xs font-medium px-4 py-2 rounded-xl border border-slate-200 focus:border-amber-500 outline-none"
-                />
-              </div>
-
-              <div>
+              {/* Description Card */}
+              <div className="bg-slate-50/70 rounded-2xl border border-slate-200/90 p-4 sm:p-5">
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   وصف المنتج
                 </label>
@@ -1018,126 +1122,277 @@ export default function AdminWhiteFridayTab({
                   value={newProductForm.description}
                   onChange={(e) => setNewProductForm(prev => ({ ...prev, description: e.target.value }))}
                   placeholder="وصف مميزات المنتج وجودته العالية..."
-                  className="w-full text-xs font-medium p-3 rounded-xl border border-slate-200 focus:border-amber-500 outline-none resize-none"
+                  className="w-full text-xs font-medium p-3.5 rounded-xl border border-slate-200 bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none resize-none"
                 />
               </div>
 
               {/* Volume / Tiered Pricing Offers */}
-              <div className="pt-2 border-t border-slate-150">
+              <div className="bg-slate-50/70 rounded-2xl border border-slate-200/90 p-4 sm:p-5">
                 <TieredPricingManager
                   basePrice={newProductForm.whiteFridayPrice || 0}
                   tiers={newProductForm.tieredPricing}
                   onChange={(t) => setNewProductForm(prev => ({ ...prev, tieredPricing: t }))}
                 />
               </div>
+            </form>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-150">
+            {/* Sticky Modal Footer */}
+            <div className="px-5 sm:px-7 py-3.5 sm:py-4 border-t border-slate-200 bg-slate-50/95 backdrop-blur flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 z-10">
+              <div className="flex items-center gap-2 text-xs text-slate-600 font-medium">
+                <span>سعر العرض: <strong className="text-slate-900 font-mono">{newProductForm.whiteFridayPrice || 0} ج.م</strong></span>
+                <span>•</span>
+                <span>عروض الكميات: <strong className="text-amber-800">{newProductForm.tieredPricing?.length || 0} باقة</strong></span>
+              </div>
+
+              <div className="flex items-center gap-2.5 w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={() => setIsCreateNewOpen(false)}
-                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                  className="flex-1 sm:flex-none px-5 py-2.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all cursor-pointer shadow-2xs"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
+                  form="create-new-wf-form"
                   disabled={isCreatingNew}
-                  className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs px-5 py-2.5 rounded-xl shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                  className="flex-1 sm:flex-none bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black text-xs px-6 py-2.5 rounded-xl shadow-md shadow-amber-500/20 transition-all cursor-pointer flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-95 disabled:opacity-50"
                 >
-                  {isCreatingNew ? 'جاري الإنشاء...' : 'إنشاء وحفظ في عروض الجمعة البيضاء'}
+                  {isCreatingNew ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                      <span>جاري الإنشاء...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 text-slate-950" />
+                      <span>إنشاء وحفظ في عروض الجمعة البيضاء</span>
+                    </>
+                  )}
                 </button>
               </div>
-            </form>
+            </div>
+
           </div>
         </div>
       )}
 
-      {/* MODAL 3: EDIT WHITE FRIDAY PRICE / BADGE / IMAGE */}
+      {/* MODAL 3: EDIT WHITE FRIDAY PRICE / BADGE / IMAGE / TIERS */}
       {editingItem && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-50 flex items-center justify-center p-4" dir="rtl">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-150 mb-4">
-              <h3 className="font-extrabold text-sm sm:text-base text-slate-900">
-                تعديل عرض وصورة الجمعة البيضاء
-              </h3>
+        <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-5 overflow-hidden" dir="rtl">
+          <div className="bg-white rounded-3xl max-w-2xl lg:max-w-3xl w-full shadow-2xl border border-slate-200/90 flex flex-col max-h-[92vh] overflow-hidden">
+            
+            {/* 1. STICKY MODAL HEADER */}
+            <div className="px-5 sm:px-7 py-4 sm:py-5 border-b border-slate-150 bg-white flex items-center justify-between shrink-0 z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 text-slate-950 flex items-center justify-center shadow-md shadow-amber-500/20 shrink-0">
+                  <Flame className="w-5 h-5 text-slate-950" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-black text-sm sm:text-base text-slate-900">
+                      عروض الجمعة البيضاء | تعديل العرض والأسعار
+                    </h3>
+                    <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-200 hidden sm:inline-block">
+                      White Friday
+                    </span>
+                  </div>
+                  <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 font-medium">
+                    إدارة سعر التخفيض، شارات الترويج، صورة العرض، وباقات الكميات المخصصة للمنتج.
+                  </p>
+                </div>
+              </div>
+
               <button 
                 onClick={() => setEditingItem(null)}
-                className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
+                className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                title="إغلاق"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveEditProduct} className="space-y-4">
-              <div className="text-xs">
-                <span className="font-bold text-slate-800">{editingItem.name}</span>
-                <p className="text-slate-500 mt-0.5">السعر الأصلي: {editingItem.price} ج.م</p>
+            {/* 2. SCROLLABLE FORM CONTENT */}
+            <form 
+              id="edit-white-friday-form" 
+              onSubmit={handleSaveEditProduct} 
+              className="flex-1 overflow-y-auto p-5 sm:p-7 space-y-5 custom-scrollbar overscroll-contain"
+            >
+              {/* Product Identity Banner */}
+              <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-800 text-white rounded-2xl p-4 border border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-14 h-14 rounded-xl bg-white/10 border border-white/20 p-1 shrink-0 overflow-hidden flex items-center justify-center">
+                    <img 
+                      src={editImage || editingItem.whiteFridayImage || editingItem.image || 'https://images.unsplash.com/photo-1585421514738-01798e348b17?auto=format&fit=crop&q=80&w=600'} 
+                      alt="" 
+                      className="w-full h-full object-contain rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded-md inline-block mb-1 border border-amber-400/20">
+                      المنتج المستهدف
+                    </span>
+                    <h4 className="text-xs sm:text-sm font-black text-white line-clamp-1">
+                      {editingItem.name}
+                    </h4>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      الحجم: <span className="text-slate-300 font-bold">{editingItem.volume || '1 لتر'}</span> • كود: <span className="font-mono text-slate-300 font-bold">{editingItem.code || 'WF'}</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-white/10 rounded-xl px-3.5 py-2 border border-white/10 flex sm:flex-col items-center sm:items-end justify-between sm:justify-center">
+                  <span className="text-[10px] text-slate-300 font-medium">السعر الأصلي في المتجر:</span>
+                  <span className="text-sm font-black text-amber-300 font-mono">
+                    {editingItem.price} ج.م
+                  </span>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  سعر الجمعة البيضاء المخفض (ج.م) *
-                </label>
-                <input 
-                  type="number"
-                  min="1"
-                  value={editPrice}
-                  onChange={(e) => setEditPrice(Number(e.target.value))}
-                  className="w-full text-xs font-bold font-mono px-4 py-2.5 rounded-xl border border-slate-200 focus:border-amber-500 outline-none text-amber-700"
-                  required
-                />
+              {/* CARD 1: Base Discount Pricing & Badge */}
+              <div className="bg-slate-50/70 rounded-2xl border border-slate-200/90 p-4 sm:p-5 space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-200">
+                  <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
+                    <Tag className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <h4 className="text-xs sm:text-sm font-black text-slate-900">
+                    السعر الأساسي المخفض وشارة العرض
+                  </h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      سعر عرض الجمعة البيضاء المخفض (ج.م) *
+                    </label>
+                    <div className="relative">
+                      <input 
+                        type="number"
+                        min="1"
+                        value={editPrice || ''}
+                        onChange={(e) => setEditPrice(Number(e.target.value))}
+                        placeholder="مثال: 65"
+                        className="w-full text-sm font-black font-mono px-4 py-2.5 rounded-xl border border-amber-300 bg-amber-50/40 text-amber-950 focus:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none"
+                        required
+                      />
+                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-amber-700 pointer-events-none">
+                        ج.م
+                      </span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                      شارة العرض الترويجية (Badge)
+                    </label>
+                    <input 
+                      type="text"
+                      value={editBadge}
+                      onChange={(e) => setEditBadge(e.target.value)}
+                      placeholder="مثال: خصم 35% 🔥"
+                      className="w-full text-xs font-medium px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none text-slate-900"
+                    />
+                  </div>
+                </div>
+
+                {/* Quick Badge Chips */}
+                <div>
+                  <span className="text-[11px] text-slate-500 font-bold block mb-1.5">
+                    شارات جاهزة سريعة بضغطة زر:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['خصم 50% 🔥', 'خصم 40% 🔥', 'عرض حصري ⭐', 'الأكثر طلباً 👑', 'صفقة الجمعة البيضاء'].map(badge => (
+                      <button
+                        type="button"
+                        key={badge}
+                        onClick={() => setEditBadge(badge)}
+                        className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all cursor-pointer border ${
+                          editBadge === badge 
+                            ? 'bg-amber-100 text-amber-950 border-amber-300 shadow-2xs' 
+                            : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        {badge}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Live Discount Calculation Preview */}
+                {editPrice > 0 && (
+                  <div className="p-3 bg-white border border-amber-200/90 rounded-xl shadow-2xs flex items-center justify-between">
+                    <div>
+                      <span className="text-xs text-slate-800 font-black block">معاينة التوفير الفعلي للزبون:</span>
+                      <span className="text-[11px] text-emerald-700 font-bold">
+                        العميل سيوفر {Math.max(0, editingItem.price - editPrice)} ج.م (من {editingItem.price} ج.م إلى {editPrice} ج.م)
+                      </span>
+                    </div>
+                    <span className="text-sm font-black text-amber-700 font-mono bg-amber-50 px-3 py-1 rounded-lg border border-amber-200">
+                      خصم {Math.max(0, Math.round(((editingItem.price - editPrice) / editingItem.price) * 100))}%
+                    </span>
+                  </div>
+                )}
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  شارة العرض (Badge)
-                </label>
-                <input 
-                  type="text"
-                  value={editBadge}
-                  onChange={(e) => setEditBadge(e.target.value)}
-                  className="w-full text-xs font-medium px-4 py-2.5 rounded-xl border border-slate-200 focus:border-amber-500 outline-none"
-                />
-              </div>
-
-              {/* Offer Image Upload */}
-              <div className="pt-1">
+              {/* CARD 2: Promotional Offer Image */}
+              <div className="bg-slate-50/70 rounded-2xl border border-slate-200/90 p-4 sm:p-5 space-y-3">
                 <ImageUploadField
-                  label="صورة العرض في الجمعة البيضاء"
+                  label="صورة العرض الترويجية في الجمعة البيضاء"
                   value={editImage}
                   onChange={setEditImage}
                   originalValue={editingItem.originalImage || editingItem.image}
                   onResetToOriginal={() => setEditImage(editingItem.originalImage || editingItem.image)}
-                  helpText="ارفع صورة جديدة من جهازك أو ضع رابط ويب لتخزينها في قاعدة البيانات."
+                  helpText="ارفع بوستر ترويجي أو صورة خاصة بالجمعة البيضاء لتظهر على هذا المنتج في موسم العروض."
                 />
               </div>
 
-              {/* Volume / Tiered Pricing Offers */}
-              <div className="pt-2 border-t border-slate-150">
+              {/* CARD 3: Tiered Quantity Offers */}
+              <div className="bg-slate-50/70 rounded-2xl border border-slate-200/90 p-4 sm:p-5">
                 <TieredPricingManager
                   basePrice={editPrice || editingItem.price || 0}
                   tiers={editTiers}
                   onChange={setEditTiers}
                 />
               </div>
+            </form>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-150">
+            {/* 3. STICKY MODAL FOOTER */}
+            <div className="px-5 sm:px-7 py-3.5 sm:py-4 border-t border-slate-200 bg-slate-50/95 backdrop-blur flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 z-10">
+              <div className="flex items-center gap-2 text-xs text-slate-600 font-medium">
+                <span>السعر الأساسي: <strong className="text-slate-900 font-mono">{editPrice || 0} ج.م</strong></span>
+                <span>•</span>
+                <span>عروض الكميات: <strong className="text-amber-800">{editTiers.length} باقة</strong></span>
+              </div>
+
+              <div className="flex items-center gap-2.5 w-full sm:w-auto">
                 <button
                   type="button"
                   onClick={() => setEditingItem(null)}
-                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                  className="flex-1 sm:flex-none px-5 py-2.5 text-xs font-bold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-all cursor-pointer shadow-2xs"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
+                  form="edit-white-friday-form"
                   disabled={isSavingEdit}
-                  className="bg-slate-900 hover:bg-amber-600 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+                  className="flex-1 sm:flex-none bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black text-xs px-6 py-2.5 rounded-xl shadow-md shadow-amber-500/20 transition-all cursor-pointer flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-95 disabled:opacity-50"
                 >
-                  {isSavingEdit ? 'جاري الحفظ...' : 'حفظ التعديل'}
+                  {isSavingEdit ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                      <span>جاري حفظ التعديلات...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 text-slate-950" />
+                      <span>حفظ التعديلات والتسعير</span>
+                    </>
+                  )}
                 </button>
               </div>
-            </form>
+            </div>
+
           </div>
         </div>
       )}
