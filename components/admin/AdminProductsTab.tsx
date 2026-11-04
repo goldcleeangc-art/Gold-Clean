@@ -1,9 +1,11 @@
 'use client';
 
-import React from 'react';
-import { PlusCircle, Sparkles, Edit, Trash2, Layers } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { PlusCircle, Sparkles, Edit, Trash2, Layers, Flame, Pin, Search, CheckCircle2, Loader2 } from 'lucide-react';
 import { Product, Category, ProductTierOffer } from '../../lib/types/store';
 import TieredPricingManager from './TieredPricingManager';
+import { db } from '../../lib/firebase';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
 export interface ProductFormData {
   name: string;
@@ -18,6 +20,11 @@ export interface ProductFormData {
   seoDescription: string;
   seoKeywords: string;
   tieredPricing?: ProductTierOffer[];
+  isWhiteFriday?: boolean;
+  isWhiteFridayPinned?: boolean;
+  whiteFridayPrice?: number;
+  whiteFridayBadge?: string;
+  whiteFridayImage?: string;
 }
 
 interface AdminProductsTabProps {
@@ -55,12 +62,101 @@ export default function AdminProductsTab({
   productToDelete,
   setProductToDelete
 }: AdminProductsTabProps) {
+  const [updatingWfId, setUpdatingWfId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [filterMode, setFilterMode] = useState<'all' | 'white_friday' | 'regular'>('all');
+
+  // Toggle White Friday enrollment directly from product card
+  const handleToggleWhiteFriday = async (prod: Product, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      setUpdatingWfId(prod.id);
+      const ref = doc(db, 'products', prod.id);
+      const nextWf = !prod.isWhiteFriday;
+      const updateData: any = {
+        isWhiteFriday: nextWf,
+        updatedAt: serverTimestamp()
+      };
+      if (nextWf) {
+        if (!prod.whiteFridayPrice || prod.whiteFridayPrice <= 0) {
+          updateData.whiteFridayPrice = prod.price;
+        }
+        if (!prod.whiteFridayBadge) {
+          updateData.whiteFridayBadge = 'عرض الجمعة البيضاء 🔥';
+        }
+      } else {
+        updateData.isWhiteFridayPinned = false;
+      }
+      await updateDoc(ref, updateData);
+    } catch (err) {
+      console.error('Error toggling White Friday:', err);
+      alert('خطأ أثناء تحديث حالة الجمعة البيضاء للمنتج');
+    } finally {
+      setUpdatingWfId(null);
+    }
+  };
+
+  // Toggle Pinned / Priority within White Friday
+  const handleTogglePinned = async (prod: Product, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      setUpdatingWfId(prod.id);
+      const ref = doc(db, 'products', prod.id);
+      await updateDoc(ref, {
+        isWhiteFridayPinned: !prod.isWhiteFridayPinned,
+        updatedAt: serverTimestamp()
+      });
+    } catch (err) {
+      console.error('Error toggling pin:', err);
+      alert('خطأ أثناء تغيير حالة التثبيت');
+    } finally {
+      setUpdatingWfId(null);
+    }
+  };
+
+  // Filter and sort products: White Friday products appear FIRST!
+  const filteredAndSortedProducts = useMemo(() => {
+    return products
+      .filter((p) => {
+        const matchesQuery = 
+          p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+          (p.code && p.code.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          (p.description && p.description.toLowerCase().includes(searchQuery.toLowerCase()));
+        if (!matchesQuery) return false;
+        if (filterMode === 'white_friday') return Boolean(p.isWhiteFriday);
+        if (filterMode === 'regular') return !p.isWhiteFriday;
+        return true;
+      })
+      .sort((a, b) => {
+        // 1. White Friday products always appear before regular products!
+        const aWf = Boolean(a.isWhiteFriday);
+        const bWf = Boolean(b.isWhiteFriday);
+        if (aWf && !bWf) return -1;
+        if (!aWf && bWf) return 1;
+
+        // 2. If both are White Friday, pinned products come first!
+        const aPinned = Boolean(a.isWhiteFridayPinned);
+        const bPinned = Boolean(b.isWhiteFridayPinned);
+        if (aPinned && !bPinned) return -1;
+        if (!aPinned && bPinned) return 1;
+
+        // 3. Alphabetical secondary sort
+        return (a.name || '').localeCompare(b.name || '', 'ar');
+      });
+  }, [products, searchQuery, filterMode]);
+
+  const whiteFridayCount = useMemo(() => products.filter(p => p.isWhiteFriday).length, [products]);
+  const regularCount = products.length - whiteFridayCount;
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200">
+      {/* Header bar */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-xl border border-slate-200">
         <div>
-          <span className="font-bold text-slate-800 text-sm block">قائمة مستودع المنتجات الحالي</span>
-          <span className="text-[10px] text-slate-400">إضافة وتعديل وحذف منظفات متجر Gold Clean</span>
+          <span className="font-bold text-slate-800 text-sm block">قائمة مستودع المنتجات الحالي ({products.length})</span>
+          <span className="text-[10px] text-slate-400">
+            تحديد منتجات الجمعة البيضاء، وتعديل وحذف منظفات متجر Gold Clean (المنتجات المحددة تظهر تلقائياً في مقدمة المتجر)
+          </span>
         </div>
         <button 
           onClick={() => {
@@ -70,24 +166,83 @@ export default function AdminProductsTab({
               code: '',
               description: '',
               price: 25,
-              category: 'kitchen',
+              category: categories[0]?.key || 'kitchen',
               image: '',
               volume: '750 مل',
               isAvailable: true,
               seoTitle: '',
               seoDescription: '',
-              seoKeywords: ''
+              seoKeywords: '',
+              tieredPricing: [],
+              isWhiteFriday: false,
+              isWhiteFridayPinned: false,
+              whiteFridayPrice: 0,
+              whiteFridayBadge: 'عرض الجمعة البيضاء 🔥',
+              whiteFridayImage: ''
             });
             setIsProductFormOpen(true);
           }}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
         >
           <PlusCircle className="w-4 h-4" />
           <span>إضافة منتج جديد</span>
         </button>
       </div>
 
-      {/* Product adding form */}
+      {/* Filter and quick search toolbar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200">
+        {/* Quick Filter Buttons */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setFilterMode('all')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              filterMode === 'all'
+                ? 'bg-slate-900 text-white shadow-2xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            الكل ({products.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterMode('white_friday')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+              filterMode === 'white_friday'
+                ? 'bg-amber-600 text-white shadow-2xs'
+                : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
+            }`}
+          >
+            <Flame className="w-3.5 h-3.5" />
+            <span>منتجات الجمعة البيضاء ({whiteFridayCount})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setFilterMode('regular')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              filterMode === 'regular'
+                ? 'bg-slate-900 text-white shadow-2xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            منتجات عادية ({regularCount})
+          </button>
+        </div>
+
+        {/* Search Input */}
+        <div className="relative min-w-[220px]">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="بحث بالاسم أو الكود..."
+            className="w-full bg-slate-50 border border-slate-200 pl-3 pr-8 py-1.5 rounded-lg text-xs outline-none focus:ring-1 focus:ring-amber-500"
+          />
+        </div>
+      </div>
+
+      {/* Product adding / editing form */}
       {isProductFormOpen && (
         <form onSubmit={handleSaveProduct} className="p-6 bg-amber-50/40 rounded-2xl border border-amber-200 space-y-4 shadow-xs">
           <h5 className="font-extrabold text-amber-950 text-sm">
@@ -131,7 +286,7 @@ export default function AdminProductsTab({
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-[10px] text-slate-500 mb-1">السعر النهائي بالجنيه المصري *</label>
+              <label className="block text-[10px] text-slate-500 mb-1">السعر الأساسي بالجنيه المصري *</label>
               <input 
                 type="number" required
                 value={productForm.price}
@@ -159,6 +314,71 @@ export default function AdminProductsTab({
                 <option value="false">نفذت الكمية</option>
               </select>
             </div>
+          </div>
+
+          {/* White Friday Checkbox and Settings Section */}
+          <div className="p-4 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border border-amber-300 rounded-xl space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input 
+                  type="checkbox"
+                  checked={Boolean(productForm.isWhiteFriday)}
+                  onChange={(e) => setProductForm({ ...productForm, isWhiteFriday: e.target.checked })}
+                  className="w-4 h-4 rounded text-amber-600 accent-amber-600 cursor-pointer"
+                />
+                <div className="flex items-center gap-1.5">
+                  <Flame className="w-4 h-4 text-amber-600 fill-amber-500" />
+                  <span className="font-extrabold text-xs text-amber-950">
+                    تحديد هذا المنتج ضمن عروض الجمعة البيضاء 🔥 (يظهر أولاً بالمتجر)
+                  </span>
+                </div>
+              </label>
+
+              {productForm.isWhiteFriday && (
+                <label className="inline-flex items-center gap-1.5 cursor-pointer text-xs font-bold text-amber-900 bg-white/80 px-2.5 py-1 rounded-lg border border-amber-200 select-none">
+                  <input 
+                    type="checkbox"
+                    checked={Boolean(productForm.isWhiteFridayPinned)}
+                    onChange={(e) => setProductForm({ ...productForm, isWhiteFridayPinned: e.target.checked })}
+                    className="w-3.5 h-3.5 rounded text-amber-600 accent-amber-600 cursor-pointer"
+                  />
+                  <Pin className="w-3 h-3 text-amber-600" />
+                  <span>تثبيت في بداية الترتيب (أولوية قصوى)</span>
+                </label>
+              )}
+            </div>
+
+            {productForm.isWhiteFriday && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-amber-200/60">
+                <div>
+                  <label className="block text-[10px] text-amber-900 font-bold mb-1">
+                    سعر عرض الجمعة البيضاء (ج.م) *
+                  </label>
+                  <input 
+                    type="number"
+                    value={productForm.whiteFridayPrice || productForm.price}
+                    onChange={(e) => setProductForm({ ...productForm, whiteFridayPrice: Number(e.target.value) })}
+                    placeholder={String(productForm.price)}
+                    className="w-full bg-white border border-amber-300 p-2.5 rounded-lg text-xs font-mono font-bold text-amber-900 outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                  <span className="text-[9px] text-slate-500 mt-0.5 block">
+                    السعر الأساسي: {productForm.price} ج.م (يظهر مشطوباً عند تحديد سعر أقل للتخفيض)
+                  </span>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-amber-900 font-bold mb-1">
+                    شارة العرض (Badge Text)
+                  </label>
+                  <input 
+                    type="text"
+                    value={productForm.whiteFridayBadge || ''}
+                    onChange={(e) => setProductForm({ ...productForm, whiteFridayBadge: e.target.value })}
+                    placeholder="عرض الجمعة البيضاء 🔥"
+                    className="w-full bg-white border border-amber-300 p-2.5 rounded-lg text-xs outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Tiered / Volume Quantity Offers */}
@@ -291,13 +511,13 @@ export default function AdminProductsTab({
             <button 
               type="button" 
               onClick={() => { setIsProductFormOpen(false); setEditingProduct(null); }}
-              className="px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-xl font-bold cursor-pointer transition-colors"
+              className="px-4 py-2 bg-slate-200 hover:bg-slate-300 rounded-xl font-bold cursor-pointer transition-colors text-xs"
             >
               إلغاء التعديل
             </button>
             <button 
               type="submit" 
-              className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl cursor-pointer transition-colors"
+              className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl cursor-pointer transition-colors text-xs"
             >
               {editingProduct ? 'تحديث المنتج' : 'نشر المنتج'}
             </button>
@@ -306,72 +526,151 @@ export default function AdminProductsTab({
       )}
 
       {/* Display Products Shelf */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {products.map((p) => (
-          <div key={p.id} className="p-4 bg-white border border-slate-200/60 rounded-2xl flex gap-3 justify-between items-center hover:shadow-xs transition-shadow">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-lg bg-slate-50 overflow-hidden shrink-0 border border-slate-100">
-                <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
-              </div>
-              <div>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <h6 className="font-bold text-slate-800 text-xs">{p.name}</h6>
-                  {p.code && (
-                    <span className="font-mono text-[9px] bg-blue-50 text-blue-700 px-1.5 py-0.2 rounded border border-blue-200 font-bold">
-                      كود: {p.code}
-                    </span>
+      {filteredAndSortedProducts.length === 0 ? (
+        <div className="bg-white p-8 rounded-2xl border border-slate-200 text-center">
+          <p className="text-slate-500 text-xs font-bold">لا توجد منتجات مطابقة لخيارات الفلترة الحالية.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {filteredAndSortedProducts.map((p) => {
+            const isWf = Boolean(p.isWhiteFriday);
+            const isPinned = Boolean(p.isWhiteFridayPinned);
+            const isUpdating = updatingWfId === p.id;
+
+            return (
+              <div 
+                key={p.id} 
+                className={`p-4 bg-white rounded-2xl flex flex-col justify-between transition-all relative ${
+                  isWf 
+                    ? 'border-2 border-amber-400 bg-gradient-to-b from-amber-50/30 to-white shadow-xs' 
+                    : 'border border-slate-200/80 hover:shadow-xs'
+                }`}
+              >
+                <div>
+                  {/* Top Header / Info */}
+                  <div className="flex gap-3 justify-between items-start mb-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-14 h-14 rounded-xl bg-slate-50 overflow-hidden shrink-0 border border-slate-100 relative">
+                        <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
+                        {isWf && (
+                          <div className="absolute top-0.5 right-0.5 bg-amber-500 text-slate-950 p-0.5 rounded-full shadow-2xs">
+                            <Flame className="w-2.5 h-2.5 fill-slate-950" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h6 className="font-bold text-slate-900 text-xs truncate max-w-[180px]">{p.name}</h6>
+                          {p.code && (
+                            <span className="font-mono text-[9px] bg-blue-50 text-blue-700 px-1.5 py-0.2 rounded border border-blue-200 font-bold shrink-0">
+                              كود: {p.code}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-500 block mt-0.5">
+                          السعر الأساسي: <strong className="text-slate-800">{p.price} ج.م</strong> • متوفر: {p.isAvailable ? 'نعم' : 'لا'}
+                        </span>
+                        {p.tieredPricing && p.tieredPricing.length > 0 && (
+                          <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded mt-1">
+                            <Layers className="w-2.5 h-2.5 text-amber-600" />
+                            <span>عروض كمية ({p.tieredPricing.length})</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Actions: Edit & Delete */}
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button 
+                        onClick={() => handleEditProduct(p)}
+                        className="p-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200/50 cursor-pointer transition-colors"
+                        title="تعديل تفاصيل المنظف"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                      </button>
+                      {productToDelete === p.id ? (
+                        <div className="flex items-center gap-1 bg-rose-50 border border-rose-200 p-1 rounded-lg">
+                          <button 
+                            onClick={async () => {
+                              await handleDeleteProduct(p.id);
+                              setProductToDelete(null);
+                            }}
+                            className="px-2 py-1 bg-rose-600 text-white rounded text-[8px] font-bold cursor-pointer"
+                          >
+                            تأكيد
+                          </button>
+                          <button 
+                            onClick={() => setProductToDelete(null)}
+                            className="px-2 py-1 bg-slate-200 text-slate-700 rounded text-[8px] font-bold cursor-pointer"
+                          >
+                            إلغاء
+                          </button>
+                        </div>
+                      ) : (
+                        <button 
+                          onClick={() => setProductToDelete(p.id)}
+                          className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg border border-rose-200 cursor-pointer transition-colors"
+                          title="مسح من كشوف المتجر"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* White Friday Checkbox & Pin Controls Bar */}
+                <div className="pt-2.5 mt-2 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+                  <label 
+                    className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs border cursor-pointer transition-all select-none ${
+                      isWf 
+                        ? 'bg-amber-500/15 border-amber-400 text-amber-950 font-black shadow-2xs ring-1 ring-amber-300/40' 
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 font-medium'
+                    }`}
+                    title="تحديد الخانة لإدراج المنتج ضمن عروض الجمعة البيضاء وظهوره في مقدمة المتجر"
+                  >
+                    {isUpdating ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
+                    ) : (
+                      <input 
+                        type="checkbox"
+                        checked={isWf}
+                        onChange={() => handleToggleWhiteFriday(p)}
+                        className="w-4 h-4 rounded text-amber-600 accent-amber-600 cursor-pointer"
+                      />
+                    )}
+                    <Flame className={`w-3.5 h-3.5 ${isWf ? 'text-amber-600 fill-amber-500' : 'text-slate-400'}`} />
+                    <span>الجمعة البيضاء</span>
+                    {isWf && p.whiteFridayPrice && p.whiteFridayPrice < p.price && (
+                      <span className="text-[10px] text-amber-900 font-mono bg-white px-1.5 py-0.2 rounded border border-amber-200">
+                        {p.whiteFridayPrice} ج.م
+                      </span>
+                    )}
+                  </label>
+
+                  {/* Pin to Top priority */}
+                  {isWf && (
+                    <button
+                      type="button"
+                      onClick={() => handleTogglePinned(p)}
+                      disabled={isUpdating}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-bold border flex items-center gap-1 transition-all cursor-pointer ${
+                        isPinned
+                          ? 'bg-rose-50 text-rose-700 border-rose-300 shadow-2xs font-black'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-amber-50 hover:border-amber-200'
+                      }`}
+                      title={isPinned ? 'مثبت في أول الترتيب - اضغط لإلغاء التثبيت' : 'تثبيت في بداية الترتيب قبل المنتجات الأخرى'}
+                    >
+                      <Pin className={`w-3 h-3 ${isPinned ? 'rotate-45 fill-rose-600 text-rose-600' : 'text-slate-400'}`} />
+                      <span>{isPinned ? 'مثبت أولاً 📌' : 'تثبيت'}</span>
+                    </button>
                   )}
                 </div>
-                <span className="text-[10px] text-slate-400 block mt-0.5">
-                  السعر: {p.price} جنيه • متوفر: {p.isAvailable ? 'نعم' : 'لا'}
-                </span>
-                {p.tieredPricing && p.tieredPricing.length > 0 && (
-                  <span className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded mt-1">
-                    <Layers className="w-2.5 h-2.5 text-amber-600" />
-                    <span>عروض كمية ({p.tieredPricing.length})</span>
-                  </span>
-                )}
               </div>
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <button 
-                onClick={() => handleEditProduct(p)}
-                className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-lg border border-slate-200/50 cursor-pointer"
-                title="تعديل تفاصيل المنظف"
-              >
-                <Edit className="w-3.5 h-3.5" />
-              </button>
-              {productToDelete === p.id ? (
-                <div className="flex items-center gap-1 bg-rose-50 border border-rose-200 p-1 rounded-lg">
-                  <button 
-                    onClick={async () => {
-                      await handleDeleteProduct(p.id);
-                      setProductToDelete(null);
-                    }}
-                    className="px-2 py-1 bg-rose-600 text-white rounded text-[8px] font-bold cursor-pointer"
-                  >
-                    تأكيد
-                  </button>
-                  <button 
-                    onClick={() => setProductToDelete(null)}
-                    className="px-2 py-1 bg-slate-200 text-slate-700 rounded text-[8px] font-bold cursor-pointer"
-                  >
-                    إلغاء
-                  </button>
-                </div>
-              ) : (
-                <button 
-                  onClick={() => setProductToDelete(p.id)}
-                  className="p-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg border border-rose-200 cursor-pointer"
-                  title="مسح من كشوف المتجر"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

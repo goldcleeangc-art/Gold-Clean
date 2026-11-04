@@ -28,7 +28,8 @@ import {
   CheckCircle2,
   Award,
   Banknote,
-  Sliders
+  Sliders,
+  Flame
 } from 'lucide-react';
 import { Product, Category } from '../../lib/types/store';
 
@@ -130,20 +131,57 @@ export default function ProductsView({
     setPriceRange(0);
   };
 
-  // Sort products
+  // Sort products: White Friday products ALWAYS appear before regular products!
   const sortedProducts = useMemo(() => {
     const list = [...filteredProducts];
+
+    const sortByWf = (a: Product, b: Product) => {
+      // 1. Primary sort: Checked White Friday products appear before unchecked products
+      const aWf = Boolean(a.isWhiteFriday);
+      const bWf = Boolean(b.isWhiteFriday);
+      if (aWf && !bWf) return -1;
+      if (!aWf && bWf) return 1;
+
+      // 2. If both are White Friday, pinned products come first
+      const aPinned = Boolean(a.isWhiteFridayPinned);
+      const bPinned = Boolean(b.isWhiteFridayPinned);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+
+      return 0;
+    };
+
     switch (sortBy) {
       case 'price-asc':
-        return list.sort((a, b) => a.price - b.price);
+        return list.sort((a, b) => {
+          const wfDiff = sortByWf(a, b);
+          if (wfDiff !== 0) return wfDiff;
+          const priceA = (a.isWhiteFriday && typeof a.whiteFridayPrice === 'number' && a.whiteFridayPrice > 0) ? a.whiteFridayPrice : a.price;
+          const priceB = (b.isWhiteFriday && typeof b.whiteFridayPrice === 'number' && b.whiteFridayPrice > 0) ? b.whiteFridayPrice : b.price;
+          return priceA - priceB;
+        });
       case 'price-desc':
-        return list.sort((a, b) => b.price - a.price);
+        return list.sort((a, b) => {
+          const wfDiff = sortByWf(a, b);
+          if (wfDiff !== 0) return wfDiff;
+          const priceA = (a.isWhiteFriday && typeof a.whiteFridayPrice === 'number' && a.whiteFridayPrice > 0) ? a.whiteFridayPrice : a.price;
+          const priceB = (b.isWhiteFriday && typeof b.whiteFridayPrice === 'number' && b.whiteFridayPrice > 0) ? b.whiteFridayPrice : b.price;
+          return priceB - priceA;
+        });
       case 'rating-desc':
-        return list.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+        return list.sort((a, b) => {
+          const wfDiff = sortByWf(a, b);
+          if (wfDiff !== 0) return wfDiff;
+          return (b.rating || 0) - (a.rating || 0);
+        });
       case 'name-asc':
-        return list.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
+        return list.sort((a, b) => {
+          const wfDiff = sortByWf(a, b);
+          if (wfDiff !== 0) return wfDiff;
+          return (a.name || '').localeCompare(b.name || '', 'ar');
+        });
       default:
-        return list;
+        return list.sort(sortByWf);
     }
   }, [filteredProducts, sortBy]);
 
@@ -590,7 +628,11 @@ export default function ProductsView({
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3 }}
-                    className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/80 hover:border-amber-300 shadow-2xs hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 flex flex-col justify-between group relative"
+                    className={`bg-white rounded-3xl p-4 sm:p-5 shadow-2xs hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 flex flex-col justify-between group relative ${
+                      product.isWhiteFriday
+                        ? 'border-2 border-amber-400 bg-gradient-to-b from-amber-50/25 via-white to-white ring-1 ring-amber-300/40'
+                        : 'border border-slate-200/80 hover:border-amber-300'
+                    }`}
                   >
                     <div>
                       {/* Product Image Area */}
@@ -600,6 +642,13 @@ export default function ProductsView({
                       >
                         {/* Status Badges */}
                         <div className="absolute top-2.5 right-2.5 z-10 flex flex-col gap-1 items-start">
+                          {product.isWhiteFriday && (
+                            <span className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 text-[10px] px-2.5 py-1 rounded-lg font-black border border-amber-400/60 shadow-2xs flex items-center gap-1">
+                              <Flame className="w-3 h-3 text-slate-950 fill-slate-950" />
+                              <span>{product.whiteFridayBadge || 'عرض الجمعة البيضاء 🔥'}</span>
+                            </span>
+                          )}
+
                           {isOut ? (
                             <span className="bg-rose-100 text-rose-700 text-[10px] px-2.5 py-1 rounded-lg font-bold border border-rose-200 shadow-2xs">
                               نفد من المخزون
@@ -680,9 +729,20 @@ export default function ProductsView({
                     <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 mt-auto">
                       <div>
                         <span className="text-[10px] text-slate-400 font-bold block">السعر</span>
-                        <span className="text-base sm:text-lg font-black text-slate-900 font-mono">
-                          {product.price.toFixed(2)} <span className="text-xs font-sans text-amber-600 font-bold">جنيه</span>
-                        </span>
+                        {product.isWhiteFriday && typeof product.whiteFridayPrice === 'number' && product.whiteFridayPrice > 0 && product.whiteFridayPrice < product.price ? (
+                          <div className="flex items-baseline gap-1.5 flex-wrap">
+                            <span className="text-base sm:text-lg font-black text-amber-600 font-mono">
+                              {product.whiteFridayPrice.toFixed(2)} <span className="text-xs font-sans font-bold">ج.م</span>
+                            </span>
+                            <span className="text-xs text-slate-400 line-through font-mono">
+                              {product.price.toFixed(2)}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-base sm:text-lg font-black text-slate-900 font-mono">
+                            {product.price.toFixed(2)} <span className="text-xs font-sans text-amber-600 font-bold">جنيه</span>
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-1.5">
@@ -731,7 +791,11 @@ export default function ProductsView({
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3 }}
-                    className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/80 hover:border-amber-300 shadow-2xs hover:shadow-lg transition-all duration-300 flex flex-col sm:flex-row items-center gap-5 group"
+                    className={`bg-white rounded-3xl p-4 sm:p-5 shadow-2xs hover:shadow-lg transition-all duration-300 flex flex-col sm:flex-row items-center gap-5 group ${
+                      product.isWhiteFriday
+                        ? 'border-2 border-amber-400 bg-gradient-to-r from-amber-50/25 via-white to-white ring-1 ring-amber-300/40'
+                        : 'border border-slate-200/80 hover:border-amber-300'
+                    }`}
                   >
                     {/* List Image Box */}
                     <div 
@@ -755,7 +819,14 @@ export default function ProductsView({
                     {/* List Content */}
                     <div className="flex-1 flex flex-col justify-between w-full">
                       <div>
-                        <div className="flex items-center gap-2 mb-1.5">
+                        <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                          {product.isWhiteFriday && (
+                            <span className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 text-[10px] font-black px-2.5 py-0.5 rounded-md flex items-center gap-1 shadow-2xs">
+                              <Flame className="w-3 h-3 text-slate-950 fill-slate-950" />
+                              <span>{product.whiteFridayBadge || 'عروض الجمعة البيضاء 🔥'}</span>
+                            </span>
+                          )}
+
                           {categoryObj && (
                             <span className="bg-amber-50 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded-md border border-amber-200/60">
                               {categoryObj.name}
@@ -784,9 +855,20 @@ export default function ProductsView({
                       <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
                         <div>
                           <span className="text-[10px] text-slate-400 font-bold block">السعر</span>
-                          <span className="text-lg font-black text-slate-900 font-mono">
-                            {product.price.toFixed(2)} <span className="text-xs font-sans text-amber-600 font-bold">جنيه</span>
-                          </span>
+                          {product.isWhiteFriday && typeof product.whiteFridayPrice === 'number' && product.whiteFridayPrice > 0 && product.whiteFridayPrice < product.price ? (
+                            <div className="flex items-baseline gap-1.5 flex-wrap">
+                              <span className="text-lg font-black text-amber-600 font-mono">
+                                {product.whiteFridayPrice.toFixed(2)} <span className="text-xs font-sans font-bold">ج.م</span>
+                              </span>
+                              <span className="text-xs text-slate-400 line-through font-mono">
+                                {product.price.toFixed(2)}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-lg font-black text-slate-900 font-mono">
+                              {product.price.toFixed(2)} <span className="text-xs font-sans text-amber-600 font-bold">جنيه</span>
+                            </span>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-2">

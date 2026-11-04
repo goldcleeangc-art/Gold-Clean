@@ -130,7 +130,6 @@ export default async function ProductPage({ params }: PageProps) {
         const relatedSnap = await getDocs(relatedQuery);
         relatedProducts = relatedSnap.docs
           .filter(d => d.id !== id)
-          .slice(0, 4)
           .map(d => ({
             id: d.id,
             name: d.data().name || '',
@@ -144,10 +143,19 @@ export default async function ProductPage({ params }: PageProps) {
             rating: Number(d.data().rating) || 5,
             reviewsCount: Number(d.data().reviewsCount) || 0,
             isWhiteFriday: Boolean(d.data().isWhiteFriday),
+            isWhiteFridayPinned: Boolean(d.data().isWhiteFridayPinned),
             whiteFridayPrice: typeof d.data().whiteFridayPrice === 'number' ? d.data().whiteFridayPrice : undefined,
             whiteFridayBadge: d.data().whiteFridayBadge || '',
             whiteFridayImage: d.data().whiteFridayImage || ''
-          }));
+          }))
+          .sort((a, b) => {
+            const aWf = Boolean(a.isWhiteFriday);
+            const bWf = Boolean(b.isWhiteFriday);
+            if (aWf && !bWf) return -1;
+            if (!aWf && bWf) return 1;
+            return 0;
+          })
+          .slice(0, 4);
       } catch (relErr) {
         console.warn('Could not fetch related products:', relErr);
       }

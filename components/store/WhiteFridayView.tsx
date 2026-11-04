@@ -51,8 +51,18 @@ export default function WhiteFridayView({
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  // Filter White Friday products
-  const whiteFridayProducts = products.filter(p => p.isWhiteFriday === true && p.isAvailable !== false);
+  // Filter White Friday products and sort so pinned products appear first!
+  const whiteFridayProducts = React.useMemo(() => {
+    return products
+      .filter(p => p.isWhiteFriday === true && p.isAvailable !== false)
+      .sort((a, b) => {
+        const aPinned = Boolean(a.isWhiteFridayPinned);
+        const bPinned = Boolean(b.isWhiteFridayPinned);
+        if (aPinned && !bPinned) return -1;
+        if (!aPinned && bPinned) return 1;
+        return 0;
+      });
+  }, [products]);
 
   // Decompose every tiered product into standalone individual offer cards!
   const allWhiteFridayOffers = React.useMemo(() => {

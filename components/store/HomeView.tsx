@@ -113,8 +113,24 @@ export default function HomeView({
     return () => clearInterval(interval);
   }, [whiteFridaySettings?.endDate]);
 
-  // Featured products subset
-  const featuredProducts = products.slice(0, 8);
+  // Featured products subset: White Friday products appear first before regular products!
+  const featuredProducts = React.useMemo(() => {
+    return [...products]
+      .sort((a, b) => {
+        const aWf = Boolean(a.isWhiteFriday);
+        const bWf = Boolean(b.isWhiteFriday);
+        if (aWf && !bWf) return -1;
+        if (!aWf && bWf) return 1;
+
+        const aPinned = Boolean(a.isWhiteFridayPinned);
+        const bPinned = Boolean(b.isWhiteFridayPinned);
+        if (aPinned && !bPinned) return -1;
+        if (!aPinned && bPinned) return 1;
+
+        return 0;
+      })
+      .slice(0, 8);
+  }, [products]);
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#F8FAFC] relative pb-20 md:pb-12 w-full min-w-0" dir="rtl" id="home-view">
@@ -801,19 +817,32 @@ export default function HomeView({
                 <div 
                   key={`featured-${product.id}`} 
                   onClick={() => onSelectProduct ? onSelectProduct(product) : setCurrentTab('products')}
-                  className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/80 hover:border-amber-300 shadow-2xs hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 flex flex-col justify-between group cursor-pointer relative"
+                  className={`bg-white rounded-3xl p-4 sm:p-5 shadow-2xs hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 flex flex-col justify-between group cursor-pointer relative ${
+                    product.isWhiteFriday
+                      ? 'border-2 border-amber-400 bg-gradient-to-b from-amber-50/25 via-white to-white ring-1 ring-amber-300/40'
+                      : 'border border-slate-200/80 hover:border-amber-300'
+                  }`}
                 >
                   <div>
                     {/* Image Box */}
                     <div className="h-48 sm:h-52 bg-slate-50 rounded-2xl mb-4 flex items-center justify-center overflow-hidden border border-slate-100 p-3 relative group-hover:bg-amber-50/20 transition-colors">
-                      {/* Availability Tag */}
-                      <span className={`absolute top-2.5 right-2.5 z-10 text-[10px] font-bold px-2 py-0.5 rounded-lg shadow-2xs ${
-                        product.isAvailable 
-                          ? 'bg-emerald-600 text-white' 
-                          : 'bg-rose-100 text-rose-700 border border-rose-200'
-                      }`}>
-                        {product.isAvailable ? 'متوفر' : 'غير متوفر'}
-                      </span>
+                      {/* Availability & White Friday Tag */}
+                      <div className="absolute top-2.5 right-2.5 z-10 flex flex-col gap-1 items-start">
+                        {product.isWhiteFriday && (
+                          <span className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 text-[10px] px-2 py-0.5 rounded-lg font-black border border-amber-400/60 shadow-2xs flex items-center gap-1">
+                            <Flame className="w-3 h-3 text-slate-950 fill-slate-950" />
+                            <span>{product.whiteFridayBadge || 'عروض الجمعة البيضاء 🔥'}</span>
+                          </span>
+                        )}
+
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg shadow-2xs ${
+                          product.isAvailable 
+                            ? 'bg-emerald-600 text-white' 
+                            : 'bg-rose-100 text-rose-700 border border-rose-200'
+                        }`}>
+                          {product.isAvailable ? 'متوفر' : 'غير متوفر'}
+                        </span>
+                      </div>
 
                       {/* Category tag */}
                       {categoryObj && (
@@ -868,9 +897,20 @@ export default function HomeView({
                   <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2 mt-auto">
                     <div>
                       <span className="text-[10px] text-slate-400 font-bold block">السعر</span>
-                      <span className="text-base sm:text-lg font-black text-slate-900 font-mono">
-                        {product.price.toFixed(2)} <span className="text-xs font-sans text-amber-600 font-bold">جنيه</span>
-                      </span>
+                      {product.isWhiteFriday && typeof product.whiteFridayPrice === 'number' && product.whiteFridayPrice > 0 && product.whiteFridayPrice < product.price ? (
+                        <div className="flex items-baseline gap-1.5 flex-wrap">
+                          <span className="text-base sm:text-lg font-black text-amber-600 font-mono">
+                            {product.whiteFridayPrice.toFixed(2)} <span className="text-xs font-sans font-bold">ج.م</span>
+                          </span>
+                          <span className="text-xs text-slate-400 line-through font-mono">
+                            {product.price.toFixed(2)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-base sm:text-lg font-black text-slate-900 font-mono">
+                          {product.price.toFixed(2)} <span className="text-xs font-sans text-amber-600 font-bold">جنيه</span>
+                        </span>
+                      )}
                     </div>
 
                     <button

@@ -41,6 +41,7 @@ export interface Product {
   seoKeywords?: string;
   // White Friday attributes
   isWhiteFriday?: boolean;
+  isWhiteFridayPinned?: boolean;
   whiteFridayPrice?: number;
   whiteFridayBadge?: string;
   originalPrice?: number;

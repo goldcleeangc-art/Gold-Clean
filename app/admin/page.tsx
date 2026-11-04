@@ -140,7 +140,12 @@ export default function AdminPage() {
     seoTitle: '',
     seoDescription: '',
     seoKeywords: '',
-    tieredPricing: [] as ProductTierOffer[]
+    tieredPricing: [] as ProductTierOffer[],
+    isWhiteFriday: false,
+    isWhiteFridayPinned: false,
+    whiteFridayPrice: 0,
+    whiteFridayBadge: 'عرض الجمعة البيضاء 🔥',
+    whiteFridayImage: ''
   });
 
   // Offers Tab State
@@ -499,11 +504,19 @@ export default function AdminPage() {
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const payload = {
+      const isWf = Boolean(productForm.isWhiteFriday);
+      const payload: any = {
         ...productForm,
         code: productForm.code?.trim() || '',
         price: Number(productForm.price),
         isAvailable: Boolean(productForm.isAvailable),
+        isWhiteFriday: isWf,
+        isWhiteFridayPinned: isWf ? Boolean(productForm.isWhiteFridayPinned) : false,
+        whiteFridayPrice: isWf
+          ? (Number(productForm.whiteFridayPrice) > 0 ? Number(productForm.whiteFridayPrice) : Number(productForm.price))
+          : null,
+        whiteFridayBadge: productForm.whiteFridayBadge?.trim() || 'عرض الجمعة البيضاء 🔥',
+        whiteFridayImage: productForm.whiteFridayImage?.trim() || productForm.image || '',
         tieredPricing: (productForm.tieredPricing || []).filter(t => Number(t.quantity) > 1 && Number(t.price) > 0),
         rating: editingProduct ? editingProduct.rating : 0,
         reviewsCount: editingProduct ? editingProduct.reviewsCount : 0,
@@ -531,7 +544,12 @@ export default function AdminPage() {
         seoTitle: '',
         seoDescription: '',
         seoKeywords: '',
-        tieredPricing: []
+        tieredPricing: [],
+        isWhiteFriday: false,
+        isWhiteFridayPinned: false,
+        whiteFridayPrice: 0,
+        whiteFridayBadge: 'عرض الجمعة البيضاء 🔥',
+        whiteFridayImage: ''
       });
     } catch (e) {
       console.error(e);
@@ -553,7 +571,12 @@ export default function AdminPage() {
       seoTitle: prod.seoTitle || '',
       seoDescription: prod.seoDescription || '',
       seoKeywords: prod.seoKeywords || '',
-      tieredPricing: prod.tieredPricing || []
+      tieredPricing: prod.tieredPricing || [],
+      isWhiteFriday: Boolean(prod.isWhiteFriday),
+      isWhiteFridayPinned: Boolean(prod.isWhiteFridayPinned),
+      whiteFridayPrice: prod.whiteFridayPrice || prod.price,
+      whiteFridayBadge: prod.whiteFridayBadge || 'عرض الجمعة البيضاء 🔥',
+      whiteFridayImage: prod.whiteFridayImage || prod.image || ''
     });
     setIsProductFormOpen(true);
   };

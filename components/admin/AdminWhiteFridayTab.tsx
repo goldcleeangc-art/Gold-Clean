@@ -26,7 +26,8 @@ import {
   Gift,
   Boxes,
   Plus,
-  Minus
+  Minus,
+  Pin
 } from 'lucide-react';
 import { Product, Category, WhiteFridaySettings, ProductTierOffer, BundleProductItem } from '../../lib/types/store';
 import { db } from '../../lib/firebase';
@@ -110,8 +111,36 @@ export default function AdminWhiteFridayTab({
   const [comboSelectedProdId, setComboSelectedProdId] = useState<string>('');
   const [comboSelectedProdQty, setComboSelectedProdQty] = useState<number>(1);
 
-  // Filter products
-  const whiteFridayProducts = products.filter(p => p.isWhiteFriday === true);
+  // Filter and sort products (pinned products appear first)
+  const [pinningProdId, setPinningProdId] = useState<string | null>(null);
+
+  const whiteFridayProducts = products
+    .filter(p => p.isWhiteFriday === true)
+    .sort((a, b) => {
+      const aPinned = Boolean(a.isWhiteFridayPinned);
+      const bPinned = Boolean(b.isWhiteFridayPinned);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      return 0;
+    });
+
+  const handleTogglePinProduct = async (prod: Product, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      setPinningProdId(prod.id);
+      const ref = doc(db, 'products', prod.id);
+      await updateDoc(ref, {
+        isWhiteFridayPinned: !prod.isWhiteFridayPinned,
+        updatedAt: serverTimestamp()
+      });
+    } catch (err) {
+      console.error('Error toggling pin:', err);
+      alert('خطأ أثناء تحديث حالة التثبيت');
+    } finally {
+      setPinningProdId(null);
+    }
+  };
+
   const nonWhiteFridayProducts = products.filter(p => !p.isWhiteFriday);
   // Available catalog products for combo bundling (excluding combo bundles themselves to prevent nesting)
   const regularCatalogProducts = products.filter(p => !p.isBundle);
@@ -867,17 +896,26 @@ export default function AdminWhiteFridayTab({
                 >
                   {/* Top Badges */}
                   <div className="flex items-start justify-between gap-2 mb-3">
-                    {prod.isBundle ? (
-                      <span className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black text-[10px] px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
-                        <Gift className="w-3 h-3 text-slate-950" />
-                        <span>باقة مجمعة ({prod.bundleItems?.length || 2} أصناف)</span>
-                      </span>
-                    ) : (
-                      <span className="bg-rose-500 text-white font-black text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
-                        <Flame className="w-3 h-3" />
-                        <span>{discountPct > 0 ? `خصم ${discountPct}%` : 'عرض خاص'}</span>
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {prod.isBundle ? (
+                        <span className="bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black text-[10px] px-2.5 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                          <Gift className="w-3 h-3 text-slate-950" />
+                          <span>باقة مجمعة ({prod.bundleItems?.length || 2} أصناف)</span>
+                        </span>
+                      ) : (
+                        <span className="bg-rose-500 text-white font-black text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                          <Flame className="w-3 h-3" />
+                          <span>{discountPct > 0 ? `خصم ${discountPct}%` : 'عرض خاص'}</span>
+                        </span>
+                      )}
+
+                      {prod.isWhiteFridayPinned && (
+                        <span className="bg-rose-50 text-rose-700 border border-rose-300 font-black text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 shadow-2xs">
+                          <Pin className="w-2.5 h-2.5 rotate-45 fill-rose-600 text-rose-600" />
+                          <span>مثبت بالبداية</span>
+                        </span>
+                      )}
+                    </div>
 
                     <span className="bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-md truncate max-w-[140px]">
                       {prod.whiteFridayBadge || (prod.isBundle ? 'باقة مجمعة 🎁' : 'الجمعة البيضاء')}
@@ -945,8 +983,33 @@ export default function AdminWhiteFridayTab({
                     </div>
                   </div>
 
+                  {/* Priority Pinning Checkbox Bar */}
+                  <div className="pt-2.5 pb-1 border-t border-slate-100 flex items-center justify-between">
+                    <label 
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold border cursor-pointer select-none transition-all ${
+                        prod.isWhiteFridayPinned
+                          ? 'bg-rose-50 text-rose-700 border-rose-300 shadow-2xs font-black ring-1 ring-rose-200'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                      title="تحديد الخانة لتثبيت هذا المنتج في أول الترتيب ليظهر للزبائن قبل المنتجات الأخرى"
+                    >
+                      {pinningProdId === prod.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                      ) : (
+                        <input 
+                          type="checkbox"
+                          checked={Boolean(prod.isWhiteFridayPinned)}
+                          onChange={() => handleTogglePinProduct(prod)}
+                          className="w-3.5 h-3.5 rounded text-rose-600 accent-rose-600 cursor-pointer"
+                        />
+                      )}
+                      <Pin className={`w-3.5 h-3.5 ${prod.isWhiteFridayPinned ? 'rotate-45 fill-rose-600 text-rose-600' : 'text-slate-400'}`} />
+                      <span>{prod.isWhiteFridayPinned ? 'مثبت أولاً بالترتيب ⭐' : 'تثبيت في بداية العروض'}</span>
+                    </label>
+                  </div>
+
                   {/* Actions */}
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
                     <button
                       onClick={() => {
                         if (prod.isBundle) {
