@@ -64,9 +64,16 @@ export default function WhiteFridayView({
       });
   }, [products]);
 
-  // Decompose every tiered product into standalone individual offer cards!
+  // Decompose every tiered product into standalone individual offer cards (pinned offers first!)
   const allWhiteFridayOffers = React.useMemo(() => {
-    return getDecomposedProductOffers(whiteFridayProducts);
+    const decomposed = getDecomposedProductOffers(whiteFridayProducts);
+    return decomposed.sort((a, b) => {
+      const aPinned = Boolean(a.product.isWhiteFridayPinned);
+      const bPinned = Boolean(b.product.isWhiteFridayPinned);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      return 0;
+    });
   }, [whiteFridayProducts]);
 
   const filteredOffers = React.useMemo(() => {
@@ -325,17 +332,28 @@ export default function WhiteFridayView({
               return (
                 <div
                   key={offer.id}
-                  className="bg-gradient-to-b from-slate-900 to-slate-950 rounded-3xl border border-amber-500/30 hover:border-amber-400 p-3 sm:p-4 shadow-xl hover:shadow-2xl hover:shadow-amber-500/10 transition-all duration-300 flex flex-col justify-between group relative overflow-hidden"
+                  className={`bg-gradient-to-b from-slate-900 to-slate-950 rounded-3xl p-3 sm:p-4 shadow-xl hover:shadow-2xl hover:shadow-amber-500/10 transition-all duration-300 flex flex-col justify-between group relative overflow-hidden ${
+                    offer.product.isWhiteFridayPinned
+                      ? 'border-2 border-amber-400 ring-1 ring-amber-400/50'
+                      : 'border border-amber-500/30 hover:border-amber-400'
+                  }`}
                 >
                   {/* Decorative glowing corner */}
                   <div className="absolute -top-12 -right-12 w-24 h-24 bg-amber-500/10 rounded-full blur-xl pointer-events-none group-hover:bg-amber-500/20 transition-all" />
 
                   {/* Top Badges */}
                   <div className="flex items-start justify-between gap-1.5 mb-2.5 relative z-10">
-                    <span className="bg-gradient-to-r from-rose-600 to-rose-700 text-white text-[10px] sm:text-xs font-black px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-xl shadow-md flex items-center gap-1">
-                      <Flame className="w-3 h-3 text-amber-300 animate-bounce" />
-                      <span>{offer.discountPct > 0 ? `-${offer.discountPct}%` : 'عرض حصري'}</span>
-                    </span>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <span className="bg-gradient-to-r from-rose-600 to-rose-700 text-white text-[10px] sm:text-xs font-black px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-xl shadow-md flex items-center gap-1">
+                        <Flame className="w-3 h-3 text-amber-300 animate-bounce" />
+                        <span>{offer.discountPct > 0 ? `-${offer.discountPct}%` : 'عرض حصري'}</span>
+                      </span>
+                      {offer.product.isWhiteFridayPinned && (
+                        <span className="bg-amber-400 text-slate-950 font-black text-[9px] px-1.5 py-0.5 rounded-lg shadow-xs flex items-center gap-0.5">
+                          <span>⭐ مميز</span>
+                        </span>
+                      )}
+                    </div>
 
                     <button
                       onClick={() => onCopyLink(offer.productId)}

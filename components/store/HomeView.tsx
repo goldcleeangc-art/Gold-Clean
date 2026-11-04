@@ -82,10 +82,28 @@ export default function HomeView({
 }: HomeViewProps) {
   const [heroImgSrc, setHeroImgSrc] = useState(HERO_IMAGE_URL);
 
-  // White Friday products & standalone decomposed bundle offers
-  const whiteFridayProducts = products.filter(p => p.isWhiteFriday === true && p.isAvailable !== false);
+  // White Friday products & standalone decomposed bundle offers (pinned products appear first!)
+  const whiteFridayProducts = React.useMemo(() => {
+    return products
+      .filter(p => p.isWhiteFriday === true && p.isAvailable !== false)
+      .sort((a, b) => {
+        const aPinned = Boolean(a.isWhiteFridayPinned);
+        const bPinned = Boolean(b.isWhiteFridayPinned);
+        if (aPinned && !bPinned) return -1;
+        if (!aPinned && bPinned) return 1;
+        return 0;
+      });
+  }, [products]);
+
   const whiteFridayDecomposedOffers = React.useMemo(() => {
-    return getDecomposedProductOffers(whiteFridayProducts);
+    const decomposed = getDecomposedProductOffers(whiteFridayProducts);
+    return decomposed.sort((a, b) => {
+      const aPinned = Boolean(a.product.isWhiteFridayPinned);
+      const bPinned = Boolean(b.product.isWhiteFridayPinned);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      return 0;
+    });
   }, [whiteFridayProducts]);
 
   // Countdown timer for announcement banner
@@ -491,13 +509,24 @@ export default function HomeView({
                 return (
                   <div
                     key={offer.id}
-                    className="bg-slate-900/90 rounded-3xl border border-amber-500/30 hover:border-amber-400 p-3 sm:p-4 shadow-xl hover:shadow-2xl transition-all duration-300 flex flex-col justify-between group relative overflow-hidden"
+                    className={`rounded-3xl p-3 sm:p-4 shadow-xl hover:shadow-2xl transition-all duration-300 flex flex-col justify-between group relative overflow-hidden ${
+                      offer.product.isWhiteFridayPinned
+                        ? 'bg-slate-900 border-2 border-amber-400 ring-1 ring-amber-400/50'
+                        : 'bg-slate-900/90 border border-amber-500/30 hover:border-amber-400'
+                    }`}
                   >
                     <div className="flex items-start justify-between gap-1.5 mb-2 relative z-10">
-                      <span className="bg-rose-600 text-white text-[10px] sm:text-xs font-black px-2 py-0.5 rounded-xl shadow-xs flex items-center gap-1">
-                        <Flame className="w-3 h-3 text-amber-300 animate-bounce" />
-                        <span>{offer.discountPct > 0 ? `-${offer.discountPct}%` : 'تخفيض'}</span>
-                      </span>
+                      <div className="flex items-center gap-1 flex-wrap">
+                        <span className="bg-rose-600 text-white text-[10px] sm:text-xs font-black px-2 py-0.5 rounded-xl shadow-xs flex items-center gap-1">
+                          <Flame className="w-3 h-3 text-amber-300 animate-bounce" />
+                          <span>{offer.discountPct > 0 ? `-${offer.discountPct}%` : 'تخفيض'}</span>
+                        </span>
+                        {offer.product.isWhiteFridayPinned && (
+                          <span className="bg-amber-400 text-slate-950 font-black text-[9px] px-1.5 py-0.5 rounded-lg shadow-xs flex items-center gap-0.5">
+                            <span>⭐ مميز</span>
+                          </span>
+                        )}
+                      </div>
                       {offer.badge && (
                         <span className="bg-amber-500/20 text-amber-300 border border-amber-400/30 text-[9px] font-bold px-2 py-0.5 rounded-md truncate max-w-[120px]">
                           {offer.badge}
