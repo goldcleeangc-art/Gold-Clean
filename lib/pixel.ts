@@ -44,7 +44,7 @@ export const trackPurchasePixel = (verifiedOrder: Order) => {
   }
 
   if ((window as any).ttq) {
-    (window as any).ttq.track('CompletePayment', {
+    const payload = {
       content_type: 'product',
       contents: (verifiedOrder.items || []).map(it => ({
         content_id: it.productId,
@@ -54,6 +54,10 @@ export const trackPurchasePixel = (verifiedOrder: Order) => {
       })),
       value: verifiedOrder.totalPrice,
       currency: 'EGP'
-    });
+    };
+
+    // إرسال Purchase (المعيار الحديث في TikTok) و CompletePayment (للتوافق مع الإعدادات القديمة)
+    (window as any).ttq.track('Purchase', payload);
+    (window as any).ttq.track('CompletePayment', payload);
   }
 };
